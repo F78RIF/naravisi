@@ -1,0 +1,17 @@
+# Layanan AI NaraVisi — Python 3.12
+fastapi==0.115.*
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pillow>=10.3
+
+# Model gratis yang berjalan lokal (CPU cukup).
+# Untuk CPU saja, pasang torch dari indeks CPU agar unduhan lebih kecil:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.3
+transformers>=4.44,<5
+sentencepiece>=0.2   # tokenizer MarianMT (terjemahan en→id)
+sacremoses>=0.1      # menghilangkan peringatan tokenizer Marian
+
+# Pengujian
+pytest>=8
+httpx>=0.27          # dibutuhkan fastapi.testclient

@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "NaraVisi",
+  "short_name": "NaraVisi",
+  "version": "0.1.0",
+  "description": "Deskripsi gambar berbasis AI yang dibacakan dengan suara, untuk pengguna tunanetra.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "NaraVisi — pindai gambar (Alt+Shift+N)",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "scan-page": {
+      "suggested_key": {
+        "default": "Alt+Shift+N",
+        "mac": "Alt+Shift+N"
+      },
+      "description": "Pindai gambar pada halaman ini"
+    }
+  }
+}

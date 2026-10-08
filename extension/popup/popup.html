@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <title>NaraVisi</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>NaraVisi</h1>
+    <p class="lead">Deskripsi gambar dengan suara untuk halaman yang sedang dibuka.</p>
+
+    <button id="scan" type="button" class="primary">Pindai gambar di halaman ini</button>
+    <p class="hint">Pintasan: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></p>
+
+    <p id="message" role="status" aria-live="polite"></p>
+
+    <details>
+      <summary>Status server</summary>
+      <p id="health">Memeriksa…</p>
+      <form id="api-form">
+        <label for="api-base">Alamat API</label>
+        <input id="api-base" type="url" required spellcheck="false">
+        <label for="lang">Bahasa deskripsi</label>
+        <select id="lang">
+          <option value="id">Bahasa Indonesia</option>
+          <option value="en">English</option>
+        </select>
+        <button type="submit">Simpan</button>
+      </form>
+    </details>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

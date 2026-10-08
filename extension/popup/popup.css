@@ -1,0 +1,36 @@
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 320px;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color: #111;
+  background: #fff;
+}
+main { padding: 16px; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+.lead { margin: 0 0 14px; color: #333; }
+button, input, select { font: inherit; }
+button {
+  padding: 8px 14px;
+  border: 2px solid #111;
+  border-radius: 8px;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+}
+button.primary { width: 100%; background: #0b57d0; border-color: #0b57d0; color: #fff; font-weight: 600; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+  outline: 3px solid #f2a900;
+  outline-offset: 2px;
+}
+.hint { margin: 6px 0 0; font-size: 13px; color: #444; text-align: center; }
+kbd { font: 12px ui-monospace, monospace; border: 1px solid #999; border-radius: 4px; padding: 0 4px; }
+#message { min-height: 1.5em; margin: 10px 0; }
+#message[data-tone="error"] { color: #8a1c13; }
+details { border-top: 1px solid #ddd; padding-top: 8px; }
+summary { cursor: pointer; font-weight: 600; }
+#health[data-ok="true"] { color: #146c2e; }
+#health[data-ok="false"] { color: #8a1c13; }
+form { display: grid; gap: 6px; }
+input, select { width: 100%; padding: 6px 8px; border: 2px solid #555; border-radius: 6px; }
