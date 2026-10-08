@@ -7,7 +7,7 @@ Format: JSON. Error selalu berbentuk:
 { "error": { "code": "IMAGE_INVALID", "message": "Pesan berbahasa Indonesia yang aman dibacakan." } }
 ```
 
-## Sudah diimplementasikan (Fase 1)
+## Deskripsi gambar (Fase 1)
 
 ### `GET /health`
 ```json
@@ -57,20 +57,32 @@ Kode error:
 `POST /caption` `{ "image_base64": "...", "lang": "id" }` → `{ "text", "text_en", "lang", "model", "latency_ms" }`
 `GET /health` → `{ "status": "ok" | "loading", "provider", "model" }`
 
-## Rencana (Fase 2–5)
+## Endpoint lain (Fase 2–5, sudah diimplementasikan)
 
-| Modul | Method & Path | Auth | RF |
-|---|---|---|---|
-| Auth | `POST /auth/register` · `POST /auth/login` | – | RF-01, RF-05 |
-| Profil | `GET /me` · `PATCH /me` · `DELETE /me` | user | RF-02..04 |
-| Kuota | `GET /me/quota` | user | RF-09 |
-| Riwayat | `GET /history` · `GET /history/:id` · `DELETE /history/:id` | user | RF-14..16 |
-| Pengaturan | `GET /settings` · `PUT /settings` | user | RF-17..19 |
-| Laporan | `POST /reports` | user | RF-20 |
-| Paket | `GET /plans` | user | RF-23 |
-| Pembayaran | `POST /payments` · `POST /payments/notification` (webhook Midtrans) | user / – | RF-24, RF-25 |
-| Langganan | `GET /me/subscription` | user | RF-26 |
-| Admin | `GET/POST /admin/users` · `PATCH/DELETE /admin/users/:id` | admin | RF-27..30 |
-| Admin | `GET /admin/reports` · `PATCH /admin/reports/:id` | admin | RF-21, RF-22 |
+Semua endpoint bertanda **user** wajib `Authorization: Bearer <JWT>` (didapat dari register/login, berlaku 7 hari). **admin** = peran Admin.
 
-Mulai Fase 2, `POST /descriptions` wajib `Authorization: Bearer <JWT>` dan mencatat kuota + riwayat.
+| Modul | Method & Path | Auth | RF | Catatan |
+|---|---|---|---|---|
+| Auth | `POST /auth/register` `{nama, email, kata_sandi}` | – | RF-01 | → `201 {token, user}` |
+| Auth | `POST /auth/login` `{email, kata_sandi}` | – | RF-05 | `401 INVALID_CREDENTIALS`, `403 ACCOUNT_DISABLED` |
+| Profil | `GET /me` | user | RF-02 | termasuk `jenis_pengguna`, `langganan`, `kuota` |
+| Profil | `PATCH /me` `{nama?, kata_sandi_lama?, kata_sandi_baru?}` | user | RF-03 | ganti sandi wajib sandi lama |
+| Profil | `DELETE /me` `{kata_sandi}` | user | RF-04 | data terkait terhapus, transaksi dianonimkan |
+| Kuota | `GET /me/quota` | user | RF-09 | `{tanggal, terpakai, batas, sisa}` (`batas` null = tanpa batas) |
+| Deskripsi | `POST /descriptions` | user | RF-09..11, 13 | + `riwayat_id`, `kuota`; `429 QUOTA_EXCEEDED` |
+| Riwayat | `GET /history?page&limit` | user | RF-14 | `{items, total, batas_hari, tersembunyi}` |
+| Riwayat | `GET /history/:id` · `DELETE /history/:id` | user | RF-15, RF-16 | |
+| Pengaturan | `GET /settings` · `PUT /settings` | user | RF-17..19 | `403 PREMIUM_REQUIRED`, `409 SHORTCUT_CONFLICT` |
+| Laporan | `POST /reports` `{riwayat_id, alasan}` | user | RF-20 | |
+| Paket | `GET /plans` | – | RF-23 | `{items, mode_pembayaran}` |
+| Pembayaran | `POST /payments` `{paket_id}` | user | RF-24, RF-25 | → `{order_id, redirect_url, snap_token, mode_pembayaran}` |
+| Pembayaran | `GET /payments/:orderId` | user | RF-25 | bila masih menunggu, status dicek langsung ke Midtrans |
+| Pembayaran | `POST /payments/notification` | tanda tangan SHA-512 | RF-25 | webhook Midtrans |
+| Langganan | `GET /me/subscription` | user | RF-26 | `{premium, berlaku_hingga, riwayat[]}` |
+| Admin | `GET /admin/users?q&page` · `POST /admin/users` | admin | RF-27, RF-28 | |
+| Admin | `GET/PATCH/DELETE /admin/users/:id` | admin | RF-29, RF-30 | tidak bisa menonaktifkan/menghapus diri sendiri |
+| Admin | `GET /admin/reports?status` · `PATCH /admin/reports/:id` | admin | RF-21, RF-22 | `ditinjau` wajib `tindak_lanjut` |
+
+Halaman HTML: `GET /admin/` (dashboard), `GET /pay/finish`, `GET|POST /pay/simulate/:orderId` (hanya mode simulasi).
+
+Kode error tambahan: `UNAUTHORIZED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `EMAIL_TAKEN`, `VALIDATION_ERROR` (+`details.field`), `NOT_FOUND`, `QUOTA_EXCEEDED`, `PREMIUM_REQUIRED`, `SHORTCUT_CONFLICT`, `PAYMENT_GATEWAY_ERROR`, `INVALID_SIGNATURE`.

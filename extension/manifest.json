@@ -2,11 +2,12 @@
   "manifest_version": 3,
   "name": "NaraVisi",
   "short_name": "NaraVisi",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "Deskripsi gambar berbasis AI yang dibacakan dengan suara, untuk pengguna tunanetra.",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["<all_urls>"],
+  "options_page": "pages/pengaturan.html",
   "background": {
     "service_worker": "background.js",
     "type": "module"

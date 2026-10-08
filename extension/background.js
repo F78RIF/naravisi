@@ -1,7 +1,7 @@
 // Service worker NaraVisi (Manifest V3).
 // Tugas: menyuntik panel ke halaman, mengambil byte gambar, memanggil REST API.
 
-import { getSettings, MAX_IMAGE_BYTES } from './shared/config.js';
+import { ApiError, apiFetch, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession } from './shared/config.js';
 
 const CONTENT_FILE = 'content/content.js';
 const DIRECT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -109,45 +109,51 @@ async function imageToBase64({ src, dataUrl }) {
 }
 
 // ---------------------------------------------------------------------------
-// Memanggil REST API (RF-09, RF-10, RF-11)
+// Memanggil REST API (RF-09, RF-10, RF-11, RF-13)
 // ---------------------------------------------------------------------------
 async function requestDescription({ src, dataUrl, pageUrl }) {
-  const settings = await getSettings();
-  const imageBase64 = await imageToBase64({ src, dataUrl });
-
-  let response;
-  try {
-    response = await fetch(`${settings.apiBase}/descriptions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        image_base64: imageBase64,
-        image_url: src && !src.startsWith('data:') ? src : null,
-        page_url: pageUrl,
-        lang: settings.lang,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
-  } catch (err) {
-    if (err?.name === 'TimeoutError') {
-      throw new NvError('TIMEOUT', 'Server terlalu lama merespons. Coba lagi.');
-    }
+  const session = await getSession();
+  if (!session?.token) {
     throw new NvError(
-      'BACKEND_UNREACHABLE',
-      'Tidak dapat terhubung ke server NaraVisi. Periksa koneksi internet atau pastikan server berjalan.',
+      'NOT_LOGGED_IN',
+      'Anda belum masuk. Klik ikon NaraVisi di toolbar browser, lalu masuk atau daftar akun.',
     );
   }
+  const tts = await getTts();
+  const imageBase64 = await imageToBase64({ src, dataUrl });
 
-  let body = null;
+  let data;
   try {
-    body = await response.json();
-  } catch {
-    // bukan JSON
+    data = await apiFetch('/descriptions', {
+      method: 'POST',
+      timeoutMs: 30000,
+      body: {
+        image_base64: imageBase64,
+        image_url: src && !src.startsWith('data:') && !src.startsWith('blob:') ? src : null,
+        page_url: pageUrl,
+        lang: tts.bahasa_deskripsi,
+      },
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      throw new NvError(err.code, `${err.message} Klik ikon NaraVisi di toolbar untuk masuk.`);
+    }
+    throw new NvError(err.code || 'SERVER_ERROR', err.message);
   }
-  if (!response.ok) {
-    throw new NvError(body?.error?.code || 'SERVER_ERROR', body?.error?.message || 'Server gagal memproses gambar.');
+
+  // Simpan sisa kuota terbaru ke sesi agar popup langsung akurat.
+  if (data.kuota && session.user) {
+    await setSession({ ...session, user: { ...session.user, kuota: data.kuota } });
   }
-  return body;
+  return data;
+}
+
+async function sendReport({ riwayatId, alasan }) {
+  try {
+    return await apiFetch('/reports', { method: 'POST', body: { riwayat_id: riwayatId, alasan } });
+  } catch (err) {
+    throw new NvError(err.code || 'SERVER_ERROR', err.message);
+  }
 }
 
 async function backendHealth() {
@@ -159,6 +165,20 @@ async function backendHealth() {
   } catch {
     return { ok: false, apiBase };
   }
+}
+
+const PAGES = {
+  riwayat: 'pages/riwayat.html',
+  pengaturan: 'pages/pengaturan.html',
+  premium: 'pages/premium.html',
+  profil: 'pages/profil.html',
+};
+
+async function openPage(name) {
+  const path = PAGES[name];
+  if (!path) return { ok: false };
+  await chrome.tabs.create({ url: chrome.runtime.getURL(path) });
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +193,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return toggleActiveTab();
       case 'NV_HEALTH':
         return backendHealth();
+      case 'NV_REPORT':
+        return { ok: true, data: await sendReport(message) };
+      case 'NV_GET_TTS':
+        return { ok: true, data: await getTts(), loggedIn: Boolean((await getSession())?.token) };
+      case 'NV_OPEN_PAGE':
+        return openPage(message.page);
+      case 'NV_REFRESH_PROFILE':
+        return { ok: true, data: await refreshProfile() };
       default:
         return { ok: false, message: 'Pesan tidak dikenal.' };
     }
@@ -187,4 +215,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Dipakai pengujian otomatis (Playwright) untuk memicu panel tanpa shortcut.
-globalThis.naraVisi = { togglePanel, toggleActiveTab };
+globalThis.naraVisi = { togglePanel, toggleActiveTab, openPage };

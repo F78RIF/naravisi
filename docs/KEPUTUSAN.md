@@ -13,9 +13,14 @@ Setiap keputusan yang mengubah atau melengkapi SRS/SDD v1.0 dicatat di sini, lal
 | ADR-07 | 2026-10-08 | **Kuota Gratis: 10 deskripsi/hari**, reset pukul 00.00 WITA. | Final | SRS 1.3 no. 6, 2.5 no. 7. |
 | ADR-08 | 2026-10-08 | **Fitur Admin "kelola paket" & "pantau penggunaan" dihapus dari SRS/SDD** (tidak ada RF/UC-nya). Paket diisi lewat seed database. | Final | SRS 1.1 no. 5, 2.1, 2.2 no. 5; SDD 2.1. |
 | ADR-09 | 2026-10-08 | **Status Premium diturunkan dari tabel `langganan`** (aktif bila `tanggal_berakhir ≥ hari ini`), `users.peran` menjadi `ENUM('pengguna','admin')`. | Final | ERD SDD 4.1. |
-| ADR-10 | 2026-10-08 | **TTS Premium = semua suara di perangkat + pengaturan nada & kecepatan** (Web Speech API). Pengguna Gratis memakai 1 suara default. | Final | SRS 2.3, UC-AKS-03. |
+| ADR-10 | 2026-10-08 | **TTS Premium = semua suara di perangkat + pengaturan nada** (Web Speech API). Pengguna Gratis memakai suara default. *Penyesuaian 9 Okt:* kecepatan suara tetap bisa diatur Pengguna Gratis — pengguna pembaca layar sangat bergantung pada kecepatan bicara, sehingga membatasinya merugikan aksesibilitas. | Final | SRS 2.3, UC-AKS-03. |
 | ADR-11 | 2026-10-08 | **Paket Premium: satu paket Bulanan, Rp15.000 / 30 hari.** Premium boleh membeli lagi; masa aktif ditambah 30 hari dari `tanggal_berakhir`. | Final | UC-PRM-01..03, seed `paket_premium`. |
 | ADR-12 | 2026-10-08 | **Riwayat Gratis > 7 hari disembunyikan**, tidak dihapus; terlihat lagi setelah upgrade. | Final | UC-RWY-02. |
 | ADR-13 | 2026-10-08 | **Hapus akun**: profil, pengaturan, kuota, riwayat, dan laporan ikut terhapus; transaksi disimpan dengan `user_id` = NULL. Hapus riwayat → laporannya ikut terhapus. | Final | UC-AKUN-04, UC-ADM-04, ERD (`ON DELETE`). |
 | ADR-14 | 2026-10-08 | **Privasi (RNF-13 baru)**: file gambar tidak disimpan di server; yang disimpan hanya URL gambar, URL halaman, dan teks deskripsi. | Final | SRS bab 5. |
 | ADR-15 | 2026-10-08 | **Admin memakai dashboard web** yang disajikan backend, bukan popup extension. | Final | UC-AKUN-05. |
+| ADR-16 | 2026-10-09 | **Token login disimpan di `chrome.storage.local`** milik extension (tidak bisa dibaca situs web), berlaku 7 hari, dihapus saat keluar atau saat server menolak. Menggantikan rencana `storage.session` (W8) agar pengguna tunanetra tidak harus login ulang setiap membuka browser. | Final | SDD keamanan. |
+| ADR-17 | 2026-10-09 | **Kuota dipesan sebelum memanggil AI dan dikembalikan bila AI gagal**; penambahan kuota atomik (`UPDATE … WHERE jumlah < batas`). | Final | Sequence UC-GBR-04. |
+| ADR-18 | 2026-10-09 | **Mode simulasi pembayaran** bila `MIDTRANS_SERVER_KEY` kosong; status pembayaran juga dicek langsung ke Midtrans saat pengguna membuka halaman Premium (webhook tidak bisa menjangkau localhost). | Final | UC-PRM-03. |
+| ADR-19 | 2026-10-09 | **Hapus akun mewajibkan kata sandi** sebagai konfirmasi (UC-AKUN-04 langkah 2–3). | Final | UC-AKUN-04. |
+| ADR-20 | 2026-10-09 | **Kolom `langganan.status_langganan` dihapus** dari ERD karena status dihitung dari tanggal (ADR-09); `paket_premium.aktif` ditambahkan untuk menyembunyikan paket tanpa menghapusnya. | Final | ERD. |

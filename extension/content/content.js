@@ -24,6 +24,8 @@
     root: null,
     markStyle: null,
     lastFocus: null,
+    tts: null, // pengaturan suara dari server (UC-AKS-03)
+    loggedIn: true,
   };
 
   // -------------------------------------------------------------------------
@@ -132,6 +134,12 @@
     button:hover { background: #f0f0f0; }
     button:focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
     .close { padding: 2px 10px; font-size: 18px; line-height: 1; }
+    .action { margin: 0 14px 8px; }
+    .action[hidden], .report[hidden] { display: none; }
+    .report { display: grid; gap: 6px; margin-top: 10px; }
+    .report label { font-weight: 600; font-size: 14px; }
+    .report textarea { font: inherit; font-size: 14px; padding: 6px 8px; border: 2px solid #555; border-radius: 8px; resize: vertical; }
+    .report textarea:focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
     .help { margin: 0; padding: 8px 14px; font-size: 12.5px; color: #333; border-top: 1px solid #d0d0d0; }
     kbd { font: 12px ui-monospace, monospace; border: 1px solid #999; border-radius: 4px; padding: 0 4px; }
     @media (forced-colors: active) {
@@ -153,6 +161,7 @@
           <button type="button" class="close" data-act="close" aria-label="Tutup NaraVisi">×</button>
         </header>
         <p class="status" id="nv-status" role="status" aria-live="polite"></p>
+        <button type="button" class="action" id="nv-action" hidden></button>
         <ul id="nv-list" role="listbox" tabindex="0" aria-label="Daftar gambar pada halaman"></ul>
         <section class="result" id="nv-result" aria-labelledby="nv-result-title" hidden>
           <h3 id="nv-result-title">Deskripsi gambar</h3>
@@ -162,16 +171,26 @@
             <button type="button" data-act="pause">Jeda</button>
             <button type="button" data-act="repeat">Ulang</button>
             <button type="button" data-act="stop">Berhenti</button>
+            <button type="button" data-act="report">Laporkan</button>
           </div>
+          <form class="report" id="nv-report" hidden>
+            <label for="nv-reason">Apa yang tidak akurat dari deskripsi ini?</label>
+            <textarea id="nv-reason" rows="3" maxlength="1000"></textarea>
+            <div class="controls">
+              <button type="submit">Kirim laporan</button>
+              <button type="button" data-act="report-cancel">Batal</button>
+            </div>
+          </form>
         </section>
         <p class="help">
           <kbd>↑</kbd>/<kbd>↓</kbd> pilih · <kbd>Enter</kbd> deskripsikan · <kbd>Spasi</kbd> jeda/lanjut ·
-          <kbd>R</kbd> ulang · <kbd>S</kbd> berhenti · <kbd>Esc</kbd> tutup
+          <kbd>R</kbd> ulang · <kbd>S</kbd> berhenti · <kbd>L</kbd> laporkan · <kbd>Esc</kbd> tutup
         </p>
       </div>`;
 
     root.addEventListener('keydown', onKeyDown);
     root.addEventListener('click', onClick);
+    root.addEventListener('submit', onReportSubmit);
     return { host, root };
   }
 
@@ -185,6 +204,19 @@
     requestAnimationFrame(() => {
       el.textContent = message;
     });
+  }
+
+  // Tombol tindakan kontekstual di bawah status (mis. "Masuk", "Lihat Premium").
+  function setAction(label, page) {
+    const btn = $('#nv-action');
+    if (!label) {
+      btn.hidden = true;
+      btn.dataset.page = '';
+      return;
+    }
+    btn.textContent = label;
+    btn.dataset.page = page;
+    btn.hidden = false;
   }
 
   function describeItemLabel(item, i) {
@@ -238,6 +270,7 @@
 
     renderList();
     markImages();
+    loadTts();
 
     const n = state.images.length;
     if (n === 0) {
@@ -254,6 +287,20 @@
     );
   }
 
+  async function loadTts() {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'NV_GET_TTS' });
+      if (res?.ok) {
+        state.tts = res.data;
+        state.lang = res.data.bahasa_deskripsi || state.lang;
+        state.loggedIn = res.loggedIn;
+        if (!res.loggedIn && state.open) setAction('Masuk atau daftar NaraVisi', 'profil');
+      }
+    } catch {
+      // extension diperbarui — ditangani saat mendeskripsikan
+    }
+  }
+
   function closePanel() {
     stopSpeech();
     unmarkImages();
@@ -263,6 +310,7 @@
     state.open = false;
     state.images = [];
     state.lastText = '';
+    state.current = null;
     if (state.lastFocus && typeof state.lastFocus.focus === 'function' && state.lastFocus.isConnected) {
       state.lastFocus.focus();
     }
@@ -301,9 +349,10 @@
 
     const cached = state.cache.get(item.src);
     if (cached) {
-      showResult(cached);
+      state.current = cached;
+      showResult(cached.text);
       setStatus(`Deskripsi gambar ${number}.`);
-      speak(cached);
+      speak(cached.text);
       return;
     }
 
@@ -320,21 +369,30 @@
         dataUrl,
         pageUrl: location.href,
       });
-      if (!res?.ok) throw new Error(res?.message || 'Server gagal memproses gambar.');
+      if (!res?.ok) {
+        const e = new Error(res?.message || 'Server gagal memproses gambar.');
+        e.code = res?.code;
+        throw e;
+      }
       if (!state.open) return; // panel ditutup saat menunggu
 
-      const text = res.data.text;
+      const { text, riwayat_id: riwayatId, kuota } = res.data;
       state.lang = res.data.lang || state.lang;
-      state.cache.set(item.src, text);
+      state.current = { text, riwayatId };
+      state.cache.set(item.src, state.current);
       showResult(text);
       state.host.dataset.state = 'done';
-      setStatus(`Deskripsi gambar ${number} siap.`);
+      setAction(null);
+      const sisa = kuota && kuota.batas != null ? ` Sisa kuota hari ini: ${kuota.sisa}.` : '';
+      setStatus(`Deskripsi gambar ${number} siap.${sisa}`);
       speak(text);
     } catch (err) {
       if (!state.open) return;
       const message = friendlyError(err);
       state.host.dataset.state = 'error';
       setStatus(message, 'error');
+      if (err.code === 'QUOTA_EXCEEDED') setAction('Lihat paket Premium', 'premium');
+      else if (['NOT_LOGGED_IN', 'UNAUTHORIZED', 'SESSION_EXPIRED'].includes(err.code)) setAction('Masuk atau daftar NaraVisi', 'profil');
       speak(message);
     } finally {
       state.busy = false;
@@ -370,10 +428,13 @@
     synth.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = state.lang === 'en' ? 'en-US' : 'id-ID';
-    const voice = pickVoice(utter.lang);
+    const chosen = state.tts?.jenis_suara
+      ? synth.getVoices().find((v) => v.name === state.tts.jenis_suara)
+      : null;
+    const voice = chosen || pickVoice(utter.lang);
     if (voice) utter.voice = voice;
-    utter.rate = 1;
-    utter.pitch = 1;
+    utter.rate = Number(state.tts?.kecepatan_suara) || 1;
+    utter.pitch = Number(state.tts?.nada_suara) || 1;
     utter.onstart = () => setTts('speaking');
     utter.onend = () => setTts('idle');
     utter.onerror = (e) => {
@@ -413,6 +474,43 @@
   // -------------------------------------------------------------------------
   // Interaksi keyboard & mouse (RNF-03)
   // -------------------------------------------------------------------------
+  // UC-LAP-01 Menambahkan laporan deskripsi tidak akurat
+  function openReport() {
+    if (!state.current?.riwayatId) {
+      setStatus('Deskripsikan sebuah gambar terlebih dahulu sebelum melaporkan.', 'error');
+      return;
+    }
+    const form = $('#nv-report');
+    form.hidden = false;
+    $('#nv-reason').value = '';
+    $('#nv-reason').focus();
+  }
+
+  function closeReport() {
+    $('#nv-report').hidden = true;
+    $('#nv-list').focus();
+  }
+
+  async function onReportSubmit(event) {
+    if (event.target.id !== 'nv-report') return;
+    event.preventDefault();
+    const alasan = $('#nv-reason').value.trim();
+    if (!alasan) {
+      setStatus('Alasan pelaporan wajib diisi sebelum laporan dikirim.', 'error');
+      $('#nv-reason').focus();
+      return;
+    }
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'NV_REPORT', riwayatId: state.current.riwayatId, alasan });
+      if (!res?.ok) throw new Error(res?.message || 'Laporan gagal dikirim.');
+      $('#nv-report').hidden = true;
+      setStatus('Terima kasih. Laporan Anda sudah dikirim dan akan ditinjau Admin.');
+      $('#nv-list').focus();
+    } catch (err) {
+      setStatus(friendlyError(err), 'error');
+    }
+  }
+
   function runAction(action) {
     switch (action) {
       case 'close': return closePanel();
@@ -420,11 +518,18 @@
       case 'pause': return togglePause();
       case 'repeat': return state.lastText && speak(state.lastText);
       case 'stop': return stopSpeech();
+      case 'report': return openReport();
+      case 'report-cancel': return closeReport();
       default: return undefined;
     }
   }
 
   function onClick(event) {
+    const actionBtn = event.target.closest('#nv-action');
+    if (actionBtn) {
+      chrome.runtime.sendMessage({ type: 'NV_OPEN_PAGE', page: actionBtn.dataset.page });
+      return;
+    }
     const button = event.target.closest('button[data-act]');
     if (button) {
       runAction(button.dataset.act);
@@ -439,7 +544,17 @@
 
   function onKeyDown(event) {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
-    const onButton = event.target?.tagName === 'BUTTON';
+    const tag = event.target?.tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT') {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeReport();
+      }
+      event.stopPropagation(); // jangan biarkan pintasan situs menangkap ketikan
+      return;
+    }
+    const onButton = tag === 'BUTTON';
     let handled = true;
 
     switch (event.key) {
@@ -457,6 +572,7 @@
         break;
       case 'r': case 'R': runAction('repeat'); break;
       case 's': case 'S': runAction('stop'); break;
+      case 'l': case 'L': runAction('report'); break;
       case 'Escape': closePanel(); break;
       default: handled = false;
     }

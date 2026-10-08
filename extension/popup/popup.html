@@ -8,10 +8,48 @@
 <body>
   <main>
     <h1>NaraVisi</h1>
-    <p class="lead">Deskripsi gambar dengan suara untuk halaman yang sedang dibuka.</p>
 
-    <button id="scan" type="button" class="primary">Pindai gambar di halaman ini</button>
-    <p class="hint">Pintasan: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></p>
+    <!-- Belum masuk: UC-AKUN-05 Login & UC-AKUN-01 Registrasi -->
+    <section id="guest" hidden aria-labelledby="guest-title">
+      <p class="lead" id="guest-title">Masuk untuk mulai mendeskripsikan gambar.</p>
+      <form id="login-form" novalidate>
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" autocomplete="username" required>
+        <label for="login-password">Kata sandi</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+        <button type="submit" class="primary">Masuk</button>
+      </form>
+      <button type="button" id="show-register" class="link">Belum punya akun? Daftar</button>
+
+      <form id="register-form" novalidate hidden>
+        <h2>Daftar akun baru</h2>
+        <label for="reg-name">Nama</label>
+        <input id="reg-name" autocomplete="name" required minlength="2" maxlength="100">
+        <label for="reg-email">Email</label>
+        <input id="reg-email" type="email" autocomplete="email" required>
+        <label for="reg-password">Kata sandi (minimal 8 karakter)</label>
+        <input id="reg-password" type="password" autocomplete="new-password" required minlength="8">
+        <button type="submit" class="primary">Daftar</button>
+        <button type="button" id="show-login" class="link">Sudah punya akun? Masuk</button>
+      </form>
+    </section>
+
+    <!-- Sudah masuk -->
+    <section id="member" hidden aria-labelledby="hello">
+      <p class="lead" id="hello"></p>
+      <p id="plan" class="plan"></p>
+
+      <button id="scan" type="button" class="primary">Pindai gambar di halaman ini</button>
+      <p class="hint">Pintasan: <kbd id="shortcut">Alt+Shift+N</kbd></p>
+
+      <nav aria-label="Menu NaraVisi" class="menu">
+        <button type="button" data-page="riwayat">Riwayat</button>
+        <button type="button" data-page="pengaturan">Pengaturan</button>
+        <button type="button" data-page="premium" id="premium-btn">Premium</button>
+        <button type="button" data-page="profil">Profil</button>
+      </nav>
+      <button type="button" id="logout" class="link">Keluar</button>
+    </section>
 
     <p id="message" role="status" aria-live="polite"></p>
 
@@ -21,11 +59,6 @@
       <form id="api-form">
         <label for="api-base">Alamat API</label>
         <input id="api-base" type="url" required spellcheck="false">
-        <label for="lang">Bahasa deskripsi</label>
-        <select id="lang">
-          <option value="id">Bahasa Indonesia</option>
-          <option value="en">English</option>
-        </select>
         <button type="submit">Simpan</button>
       </form>
     </details>
