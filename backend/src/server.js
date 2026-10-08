@@ -1,12 +1,22 @@
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
+import { createServices } from './container.js';
+import { createDb } from './db/index.js';
+import { seedPlans } from './db/seed.js';
 import { createAiClient } from './services/aiClient.js';
 
 const config = loadConfig();
+const db = await createDb(config.db);
+await seedPlans(db);
+
 const aiClient = createAiClient({ baseUrl: config.aiServiceUrl, timeoutMs: config.aiTimeoutMs });
-const app = createApp({ aiClient, maxImageBytes: config.maxImageBytes });
+const services = createServices({ db, config, aiClient });
+const app = createApp(services);
 
 app.listen(config.port, () => {
-  console.log(`NaraVisi API berjalan di http://localhost:${config.port}/api/v1`);
-  console.log(`Layanan AI: ${config.aiServiceUrl}`);
+  console.log(`NaraVisi API      : ${config.publicUrl}/api/v1`);
+  console.log(`Dashboard Admin   : ${config.publicUrl}/admin/`);
+  console.log(`Basis data        : ${config.db.driver === 'mysql' ? `MySQL ${config.db.host}:${config.db.port}/${config.db.database}` : `SQLite ${config.db.sqlitePath}`}`);
+  console.log(`Layanan AI        : ${config.aiServiceUrl}`);
+  console.log(`Pembayaran        : ${services.payments.mode}`);
 });

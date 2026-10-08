@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Admin — NaraVisi</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <a class="skip" href="#main">Lewati ke konten utama</a>
+
+  <header class="topbar">
+    <h1>Dashboard Admin NaraVisi</h1>
+    <div id="session" hidden>
+      <span id="admin-name"></span>
+      <button type="button" id="logout">Keluar</button>
+    </div>
+  </header>
+
+  <p id="toast" role="status" aria-live="polite"></p>
+
+  <main id="main" tabindex="-1">
+    <!-- UC-AKUN-05: Login Admin -->
+    <section id="login-view" aria-labelledby="login-title">
+      <form id="login-form" class="card narrow" novalidate>
+        <h2 id="login-title">Masuk sebagai Admin</h2>
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" autocomplete="username" required>
+        <label for="login-password">Kata sandi</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+        <p class="error" id="login-error" role="alert"></p>
+        <button type="submit" class="primary">Masuk</button>
+      </form>
+    </section>
+
+    <section id="app-view" hidden>
+      <div role="tablist" aria-label="Menu Admin" class="tabs">
+        <button role="tab" id="tab-users" aria-controls="panel-users" aria-selected="true">Pengguna</button>
+        <button role="tab" id="tab-reports" aria-controls="panel-reports" aria-selected="false" tabindex="-1">Laporan deskripsi</button>
+      </div>
+
+      <!-- UC-ADM-01..04 -->
+      <section role="tabpanel" id="panel-users" aria-labelledby="tab-users" class="card">
+        <div class="toolbar">
+          <form id="search-form" role="search">
+            <label for="search" class="sr-only">Cari nama atau email</label>
+            <input id="search" type="search" placeholder="Cari nama atau email">
+            <button type="submit">Cari</button>
+          </form>
+          <button type="button" id="add-user" class="primary">Tambah pengguna</button>
+        </div>
+        <table>
+          <caption id="users-caption">Daftar pengguna</caption>
+          <thead>
+            <tr><th scope="col">Nama</th><th scope="col">Email</th><th scope="col">Jenis</th><th scope="col">Status</th><th scope="col">Terdaftar</th><th scope="col"><span class="sr-only">Aksi</span></th></tr>
+          </thead>
+          <tbody id="users-body"></tbody>
+        </table>
+        <nav class="pager" aria-label="Halaman daftar pengguna">
+          <button type="button" id="users-prev">Sebelumnya</button>
+          <span id="users-page"></span>
+          <button type="button" id="users-next">Berikutnya</button>
+        </nav>
+      </section>
+
+      <!-- UC-LAP-02..03 -->
+      <section role="tabpanel" id="panel-reports" aria-labelledby="tab-reports" class="card" hidden>
+        <div class="toolbar">
+          <label for="report-filter">Status</label>
+          <select id="report-filter">
+            <option value="">Semua</option>
+            <option value="baru" selected>Baru</option>
+            <option value="ditinjau">Sudah ditinjau</option>
+          </select>
+        </div>
+        <p id="reports-empty" hidden>Belum ada laporan.</p>
+        <ul id="reports-list" class="reports"></ul>
+        <nav class="pager" aria-label="Halaman daftar laporan">
+          <button type="button" id="reports-prev">Sebelumnya</button>
+          <span id="reports-page"></span>
+          <button type="button" id="reports-next">Berikutnya</button>
+        </nav>
+      </section>
+    </section>
+  </main>
+
+  <!-- Formulir tambah / ubah pengguna -->
+  <dialog id="user-dialog" aria-labelledby="user-dialog-title">
+    <form id="user-form" method="dialog" novalidate>
+      <h2 id="user-dialog-title">Tambah pengguna</h2>
+      <label for="u-nama">Nama</label>
+      <input id="u-nama" name="nama" required minlength="2" maxlength="100">
+      <label for="u-email">Email</label>
+      <input id="u-email" name="email" type="email" required maxlength="100">
+      <label for="u-sandi" id="u-sandi-label">Kata sandi</label>
+      <input id="u-sandi" name="kata_sandi" type="password" minlength="8" maxlength="72" autocomplete="new-password">
+      <label for="u-peran">Peran</label>
+      <select id="u-peran" name="peran">
+        <option value="pengguna">Pengguna</option>
+        <option value="admin">Admin</option>
+      </select>
+      <div id="u-status-row">
+        <label for="u-status">Status akun</label>
+        <select id="u-status" name="status_akun">
+          <option value="aktif">Aktif</option>
+          <option value="nonaktif">Nonaktif</option>
+        </select>
+      </div>
+      <p class="error" id="user-error" role="alert"></p>
+      <div class="actions">
+        <button type="button" value="cancel" data-close>Batal</button>
+        <button type="submit" class="primary">Simpan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Konfirmasi hapus -->
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+    <form method="dialog">
+      <h2 id="confirm-title">Hapus pengguna?</h2>
+      <p id="confirm-text"></p>
+      <div class="actions">
+        <button value="cancel" autofocus>Batal</button>
+        <button value="ok" class="danger">Hapus permanen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Tinjau laporan -->
+  <dialog id="review-dialog" aria-labelledby="review-title">
+    <form id="review-form" method="dialog" novalidate>
+      <h2 id="review-title">Tinjau laporan</h2>
+      <label for="r-status">Status</label>
+      <select id="r-status">
+        <option value="ditinjau">Sudah ditinjau</option>
+        <option value="baru">Baru</option>
+      </select>
+      <label for="r-tindak">Tindak lanjut</label>
+      <textarea id="r-tindak" rows="4" maxlength="2000"></textarea>
+      <p class="error" id="review-error" role="alert"></p>
+      <div class="actions">
+        <button type="button" data-close>Batal</button>
+        <button type="submit" class="primary">Simpan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

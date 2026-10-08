@@ -4,14 +4,13 @@ import { decodeImagePayload } from '../lib/image.js';
 export const SUPPORTED_LANGS = ['id', 'en'];
 
 /**
- * UC-GBR-04 Mengirim Gambar ke AI + UC-GBR-05 Menghasilkan Deskripsi Gambar.
- * Fungsi murni (tanpa Express) agar mudah diuji.
- *
- * Fase 2 akan menambahkan: cek kuota harian (Pengguna Gratis) dan
- * penyimpanan ke riwayat_deskripsi (UC-RWY-01).
+ * UC-GBR-04 Mengirim Gambar ke AI + UC-GBR-05 Menghasilkan Deskripsi + UC-RWY-01 Menyimpan Riwayat.
+ * Urutan: validasi gambar → cek & pesan kuota → AI → simpan riwayat.
+ * Bila AI gagal, kuota dikembalikan.
+ * File gambar TIDAK disimpan (RNF-13 / ADR-14).
  */
-export function createDescriptionService({ aiClient, maxImageBytes }) {
-  async function describe(body) {
+export function createDescriptionService({ aiClient, maxImageBytes, quota, history, subscriptions }) {
+  async function describe(body, user) {
     if (!body || typeof body !== 'object') {
       throw Errors.invalidRequest('Badan permintaan harus berupa JSON.');
     }
@@ -23,12 +22,26 @@ export function createDescriptionService({ aiClient, maxImageBytes }) {
 
     const pageUrl = typeof body.page_url === 'string' ? body.page_url.slice(0, 2048) : null;
     const imageUrl = typeof body.image_url === 'string' ? body.image_url.slice(0, 2048) : null;
-
     const image = decodeImagePayload(body.image_base64, { maxBytes: maxImageBytes });
+
+    const unlimited = user ? user.peran === 'admin' || (await subscriptions.isPremium(user.id)) : true;
+    const reservation = user ? await quota.reserve(user.id, unlimited) : null;
+
     const started = performance.now();
-    const result = await aiClient.caption({ imageBase64: image.base64, lang });
+    let result;
+    try {
+      result = await aiClient.caption({ imageBase64: image.base64, lang });
+    } catch (err) {
+      await reservation?.release();
+      throw err;
+    }
+
+    const riwayatId = user
+      ? await history.save(user.id, { urlHalaman: pageUrl, urlGambar: imageUrl, teks: result.text })
+      : null;
 
     return {
+      riwayat_id: riwayatId,
       text: result.text,
       text_en: result.textEn,
       lang: result.lang,
@@ -38,6 +51,7 @@ export function createDescriptionService({ aiClient, maxImageBytes }) {
       page_url: pageUrl,
       image_url: imageUrl,
       latency_ms: Math.round(performance.now() - started),
+      kuota: user ? await quota.summary(user.id, unlimited) : null,
     };
   }
 
