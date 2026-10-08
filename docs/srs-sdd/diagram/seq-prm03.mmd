@@ -1,0 +1,36 @@
+sequenceDiagram
+  autonumber
+  actor U as Pengguna
+  participant EXT as Halaman Premium
+  participant API as Backend API
+  participant DB as Database
+  participant PG as Midtrans Snap
+  U->>EXT: Pilih "Beli Premium Bulanan"
+  EXT->>API: POST /payments {paket_id}
+  API->>DB: INSERT transaksi (menunggu)
+  alt mode Midtrans (server key diisi)
+    API->>PG: Snap: buat transaksi (order_id, Rp15.000)
+    PG-->>API: token + redirect_url
+  else mode simulasi (demo)
+    API->>API: redirect_url = /pay/simulate/{order_id}
+  end
+  API-->>EXT: redirect_url
+  EXT->>U: buka halaman pembayaran di tab baru
+  U->>PG: bayar (QRIS / e-wallet / VA)
+  par notifikasi webhook
+    PG->>API: POST /payments/notification (signature SHA-512)
+    API->>API: verifikasi signature
+  and pengecekan oleh pengguna
+    EXT->>API: GET /payments/{order_id} (tiap 5 detik / tombol cek)
+    API->>PG: Status API (bila masih menunggu)
+    PG-->>API: transaction_status
+  end
+  alt settlement / capture
+    API->>DB: transaksi → berhasil (sekali saja) + INSERT langganan 30 hari
+    API-->>EXT: berhasil, Premium hingga tanggal X
+    EXT-->>U: "Pembayaran berhasil" (diumumkan)
+  else expire / deny / cancel / failure
+    API->>DB: transaksi → kedaluwarsa / gagal
+    API-->>EXT: status gagal
+    EXT-->>U: status akun tetap Gratis
+  end

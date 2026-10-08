@@ -1,0 +1,31 @@
+flowchart TD
+  subgraph P[Pengguna]
+    a0((Mulai)) --> a1[Memilih gambar & menekan Enter]
+  end
+  subgraph S[Sistem]
+    s1{Sudah login?}
+    s2[Mengunduh & menormalkan gambar]
+    s3{Format & ukuran valid?}
+    s4{Kuota tersedia\natau Premium?}
+    s5[Memesan kuota]
+    s9[Menyimpan riwayat\nURL + teks]
+    s10[Menampilkan & membacakan\ndeskripsi + sisa kuota]
+    e1[Pesan: silakan masuk]
+    e2[Pesan: gambar tidak didukung]
+    e3[Pesan: kuota habis +\ntawaran Premium]
+    e4[Mengembalikan kuota,\npesan: layanan AI gagal]
+    f((Selesai))
+  end
+  subgraph AI[Layanan AI]
+    ai1[Menganalisis gambar\nBLIP + terjemahan]
+    ai2{Berhasil?}
+  end
+  a1 --> s1
+  s1 -- tidak --> e1 --> f
+  s1 -- ya --> s2 --> s3
+  s3 -- tidak --> e2 --> f
+  s3 -- ya --> s4
+  s4 -- tidak --> e3 --> f
+  s4 -- ya --> s5 --> ai1 --> ai2
+  ai2 -- tidak --> e4 --> f
+  ai2 -- ya --> s9 --> s10 --> f

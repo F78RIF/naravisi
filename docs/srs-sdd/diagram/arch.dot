@@ -1,0 +1,29 @@
+digraph A {
+  graph [rankdir=LR, fontname="DejaVu Sans", pad=0.3, nodesep=0.5, ranksep=0.9, compound=true];
+  node [fontname="DejaVu Sans", fontsize=12, shape=box, style="rounded,filled", fillcolor="#eef3fb", color="#0b57d0", penwidth=1.6];
+  edge [fontname="DejaVu Sans", fontsize=10, color="#333333"];
+  subgraph cluster_client { label="Perangkat Pengguna (Chrome, Manifest V3)"; style="rounded,dashed"; color="#555555"; fontsize=12;
+    page [label="Halaman Web\n(situs yang dikunjungi)", fillcolor="#ffffff", color="#777777"];
+    cs [label="Content Script\nPanel NaraVisi (Shadow DOM)\n• pindai & tandai gambar\n• Web Speech API (TTS)"];
+    sw [label="Service Worker\n• ambil & normalisasi gambar\n• token JWT\n• panggil REST API"];
+    ui [label="Popup & Halaman Extension\nLogin · Riwayat · Pengaturan\nPremium · Profil"];
+  }
+  subgraph cluster_server { label="Server (Ubuntu 22.04 LTS)"; style="rounded,dashed"; color="#555555"; fontsize=12;
+    api [label="Backend REST API\nNode.js 22 + Express 5\n/api/v1 · /admin · /pay"];
+    db [label="MySQL 8.4 LTS\n8 tabel", shape=cylinder];
+    ai [label="Layanan AI\nPython 3.12 + FastAPI\nBLIP + MarianMT (en→id)"];
+  }
+  admin [label="Dashboard Admin\n(browser)", fillcolor="#fff4d6", color="#b07800"];
+  mt [label="Midtrans Snap\n(QRIS, e-wallet, VA)", fillcolor="#fff4d6", color="#b07800"];
+  page -> cs [label="DOM gambar", dir=both];
+  cs -> sw [label="pesan runtime"];
+  ui -> sw [label="pesan runtime"];
+  sw -> page [label="unduh byte gambar\n(cookie situs)", style=dashed];
+  sw -> api [label="HTTPS + JSON\nBearer JWT"];
+  ui -> api [label="HTTPS + JSON"];
+  admin -> api [label="HTTPS + JSON"];
+  api -> db [label="SQL (mysql2)"];
+  api -> ai [label="POST /caption\n(jaringan internal)"];
+  api -> mt [label="Snap API · Status API"];
+  mt -> api [label="webhook notifikasi\n(SHA-512)", style=dashed];
+}

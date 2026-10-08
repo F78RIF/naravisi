@@ -49,7 +49,7 @@ Human (pemilik produk) → Requirement/Design agent → Coding agent → Testing
 | Langkah | Pelaku | Keluaran |
 |---|---|---|
 | Design | Agent | Skema MySQL v1.1 (+ padanan SQLite untuk uji), tabel rute tunggal untuk Express & node:http, keputusan ADR-16..20. |
-| Coding | Agent | Backend: 9 service, 34 rute, JWT HS256 & scrypt (modul bawaan Node), klien Midtrans Snap + webhook + mode simulasi, dashboard Admin. Extension: popup akun, halaman Riwayat/Pengaturan/Premium/Profil, tombol Laporkan, pengaturan suara diterapkan ke TTS. |
+| Coding | Agent | Backend: 9 service, 29 rute, JWT HS256 & scrypt (modul bawaan Node), klien Midtrans Snap + webhook + mode simulasi, dashboard Admin. Extension: popup akun, halaman Riwayat/Pengaturan/Premium/Profil, tombol Laporkan, pengaturan suara diterapkan ke TTS. |
 | Testing | Agent | Backend 76/76 · E2E 48/48 (lihat `docs/PENGUJIAN.md`). |
 | Review | Agent | Diperbaiki: normalisasi pintasan (C-01), kotak pesan menutupi formulir (C-02), kuota tidak dikembalikan saat AI gagal (C-04), balapan kuota (C-05). Penyesuaian ADR-10 (kecepatan suara untuk Gratis) diajukan ke human. |
 | Human approval | Rifat | ☐ Setujui penyesuaian ADR-10 & ADR-16 · ☐ jalankan uji manual M-01..M-06. |

@@ -1,0 +1,39 @@
+sequenceDiagram
+  autonumber
+  actor U as Pengguna
+  participant CS as Panel NaraVisi
+  participant SW as Service Worker
+  participant API as Backend API
+  participant DB as Database
+  participant AI as Layanan AI
+  U->>CS: Pilih gambar, tekan Enter
+  CS->>SW: NV_DESCRIBE(src, pageUrl)
+  alt belum login
+    SW-->>CS: NOT_LOGGED_IN
+    CS-->>U: "Anda belum masuk" (dibacakan) + tombol Masuk
+  else sudah login
+    SW->>SW: unduh gambar, konversi ke JPEG bila perlu (maks 1280 px)
+    SW->>API: POST /descriptions (Bearer JWT, image_base64)
+    API->>API: validasi format & ukuran (≤ 5 MB)
+    API->>DB: cek & pesan kuota (UPDATE … WHERE jumlah < 10)
+    alt kuota habis (Gratis)
+      API-->>SW: 429 QUOTA_EXCEEDED
+      SW-->>CS: pesan kuota habis
+      CS-->>U: dibacakan + tombol "Lihat paket Premium"
+    else kuota tersedia / Premium
+      API->>AI: POST /caption (image_base64, lang)
+      alt AI gagal / timeout
+        AI-->>API: error
+        API->>DB: kembalikan kuota
+        API-->>SW: 503/504 + pesan
+        SW-->>CS: pesan error
+        CS-->>U: dibacakan
+      else berhasil
+        AI-->>API: teks deskripsi
+        API->>DB: simpan riwayat_deskripsi (URL + teks, tanpa file gambar)
+        API-->>SW: 201 {text, riwayat_id, kuota}
+        SW-->>CS: hasil
+        CS-->>U: teks tampil + dibacakan (TTS) + sisa kuota
+      end
+    end
+  end
