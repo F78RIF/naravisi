@@ -59,7 +59,7 @@ def create_app(settings: Settings | None = None, service: CaptionService | None 
             log.info("Layanan AI siap: %s", state["service"].model_name)
         yield
 
-    app = FastAPI(title="NaraVisi AI Service", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="NaraVisi AI Service", version="1.0.0", lifespan=lifespan)
 
     @app.get("/health")
     def health():

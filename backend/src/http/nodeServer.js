@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dispatch } from './dispatch.js';
-import { buildRoutes } from './routes.js';
+import { buildRoutes, HTML_SECURITY_HEADERS, LARGE_BODY_PATHS, SMALL_BODY_LIMIT } from './routes.js';
 
 /**
  * Adaptor node:http untuk tabel rute yang sama dengan Express.
@@ -57,7 +57,9 @@ export function createNodeServer(services) {
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const write = (status, payload, type = 'application/json; charset=utf-8') => {
-      res.writeHead(status, { 'content-type': type, 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff' });
+      const headers = { 'content-type': type, 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff' };
+      if (type.startsWith('text/html')) Object.assign(headers, HTML_SECURITY_HEADERS);
+      res.writeHead(status, headers);
       res.end(type.startsWith('application/json') ? JSON.stringify(payload) : payload);
     };
 
@@ -89,19 +91,21 @@ export function createNodeServer(services) {
       if (route.method !== req.method) continue;
       const m = route.re.exec(url.pathname);
       if (!m) continue;
+      const large = LARGE_BODY_PATHS.has(route.path);
       let body;
       try {
-        body = await readBody(req, limit);
+        body = await readBody(req, large ? limit : SMALL_BODY_LIMIT);
       } catch (err) {
         if (err.type === 'entity.too.large') {
-          return write(413, { error: { code: 'IMAGE_TOO_LARGE', message: 'Ukuran permintaan terlalu besar.' } });
+          const code = large ? 'IMAGE_TOO_LARGE' : 'PAYLOAD_TOO_LARGE';
+          return write(413, { error: { code, message: 'Ukuran permintaan terlalu besar.' } });
         }
         return write(400, { error: { code: 'INVALID_REQUEST', message: 'Badan permintaan bukan JSON yang valid.' } });
       }
       const params = Object.fromEntries(route.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
       const out = await dispatch(
         route,
-        { params, query: Object.fromEntries(url.searchParams), body, headers: req.headers },
+        { params, query: Object.fromEntries(url.searchParams), body, headers: req.headers, ip: req.socket.remoteAddress },
         services,
       );
       return out.html !== undefined

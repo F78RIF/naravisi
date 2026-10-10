@@ -16,13 +16,21 @@ function say(text, tone = 'info') {
   el.textContent = text;
 }
 
-function planText(user) {
+/** Ringkasan status akun — dibangun dengan DOM (tanpa innerHTML). */
+function renderPlan(el, user) {
+  const strong = document.createElement('strong');
+  let rest;
   if (user.jenis_pengguna === 'Premium') {
-    return `<strong>Premium</strong> · berlaku hingga ${user.langganan.berlaku_hingga} · kuota tanpa batas`;
+    strong.textContent = 'Premium';
+    rest = ` · berlaku hingga ${user.langganan.berlaku_hingga} · kuota tanpa batas`;
+  } else if (user.jenis_pengguna === 'Admin') {
+    strong.textContent = 'Admin';
+    rest = ' · kuota tanpa batas';
+  } else {
+    strong.textContent = 'Gratis';
+    rest = ` · sisa kuota hari ini ${user.kuota.sisa} dari ${user.kuota.batas}`;
   }
-  if (user.jenis_pengguna === 'Admin') return '<strong>Admin</strong> · kuota tanpa batas';
-  const k = user.kuota;
-  return `<strong>Gratis</strong> · sisa kuota hari ini ${k.sisa} dari ${k.batas}`;
+  el.replaceChildren(strong, document.createTextNode(rest));
 }
 
 async function showShortcut() {
@@ -35,7 +43,7 @@ function render(user) {
   $('member').hidden = !user;
   if (user) {
     $('hello').textContent = `Halo, ${user.nama}.`;
-    $('plan').innerHTML = planText(user); // isi berasal dari data numerik/tanggal server
+    renderPlan($('plan'), user);
     $('premium-btn').textContent = user.jenis_pengguna === 'Premium' ? 'Langganan' : 'Upgrade Premium';
     $('scan').focus();
   } else {

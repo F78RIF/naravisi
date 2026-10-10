@@ -6,6 +6,9 @@ import { seedPlans } from './db/seed.js';
 import { createAiClient } from './services/aiClient.js';
 
 const config = loadConfig();
+if (!process.env.JWT_SECRET) {
+  console.warn('PERINGATAN: JWT_SECRET kosong — memakai kunci pengembangan. Isi JWT_SECRET di .env sebelum dipakai orang lain.');
+}
 const db = await createDb(config.db);
 await seedPlans(db);
 

@@ -1,11 +1,15 @@
 import { Errors } from '../lib/errors.js';
 import { signJwt, verifyJwt } from '../lib/jwt.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from '../lib/password.js';
+import { createFailureLimiter } from '../lib/rateLimit.js';
 import { sqlToIso, toSqlDateTime } from '../lib/time.js';
 import * as v from '../lib/validate.js';
 
 /** Akun & profil: RF-01..RF-05 (UC-AKUN-01..05), autentikasi JWT (RNF-09). */
 export function createAccountService({ db, config, clock, subscriptions, quota }) {
+  // Maksimal 10 login gagal per (email, alamat IP) dalam 15 menit.
+  const loginLimiter = createFailureLimiter({ max: 10, windowMs: 15 * 60 * 1000, clock });
+
   function issueToken(user) {
     return signJwt({ sub: user.user_id, role: user.peran }, config.jwtSecret, {
       expiresInSeconds: config.jwtExpiresDays * 24 * 3600,
@@ -61,14 +65,22 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
   }
 
   // UC-AKUN-05
-  async function login(body) {
+  async function login(body, { ip = '-' } = {}) {
     const email = v.email(body);
     const kataSandi = typeof body?.kata_sandi === 'string' ? body.kata_sandi : '';
     if (!kataSandi) throw Errors.validation('kata_sandi', 'Kata sandi wajib diisi.');
 
+    const key = `${email}|${ip}`;
+    const wait = loginLimiter.blockedFor(key);
+    if (wait > 0) throw Errors.tooManyAttempts(Math.ceil(wait / 60000));
+
     const user = await db.get('SELECT user_id, peran, status_akun, kata_sandi FROM users WHERE email = ?', [email]);
     const ok = await verifyPassword(kataSandi, user?.kata_sandi ?? DUMMY_HASH);
-    if (!user || !ok) throw Errors.invalidCredentials();
+    if (!user || !ok) {
+      loginLimiter.fail(key);
+      throw Errors.invalidCredentials();
+    }
+    loginLimiter.reset(key);
     if (user.status_akun !== 'aktif') throw Errors.accountDisabled();
     return { token: issueToken(user), user: await profile(user.user_id) };
   }

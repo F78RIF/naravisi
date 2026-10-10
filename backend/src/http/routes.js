@@ -7,6 +7,17 @@ import { finishPage, simulatePage, simulateResultPage } from './pages.js';
  * auth: undefined = publik, 'user' = wajib login, 'admin' = wajib Admin.
  * handler(ctx) → { status, body } | { status, html }
  */
+/** Rute yang menerima gambar base64 berukuran besar; rute lain dibatasi 32 KB. */
+export const LARGE_BODY_PATHS = new Set(['/api/v1/descriptions']);
+export const SMALL_BODY_LIMIT = 32 * 1024;
+
+/** Kebijakan keamanan konten untuk halaman HTML (Dashboard Admin & halaman pembayaran). */
+export const HTML_SECURITY_HEADERS = {
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+  'X-Frame-Options': 'DENY',
+};
+
 export function buildRoutes(s) {
   const unlimited = async (user) => user.peran === 'admin' || (await s.subscriptions.isPremium(user.id));
   const ok = (body, status = 200) => ({ status, body });
@@ -17,7 +28,7 @@ export function buildRoutes(s) {
 
     // --- Akun (RF-01..05) -------------------------------------------------
     { method: 'POST', path: '/api/v1/auth/register', handler: async ({ body }) => ok(await s.accounts.register(body), 201) },
-    { method: 'POST', path: '/api/v1/auth/login', handler: async ({ body }) => ok(await s.accounts.login(body)) },
+    { method: 'POST', path: '/api/v1/auth/login', handler: async ({ body, ip }) => ok(await s.accounts.login(body, { ip })) },
     { method: 'GET', path: '/api/v1/me', auth: 'user', handler: async ({ user }) => ok(await s.accounts.profile(user.id)) },
     { method: 'PATCH', path: '/api/v1/me', auth: 'user', handler: async ({ user, body }) => ok(await s.accounts.updateProfile(user.id, body)) },
     { method: 'DELETE', path: '/api/v1/me', auth: 'user', handler: async ({ user, body }) => ok(await s.accounts.deleteAccount(user.id, body)) },

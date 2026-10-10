@@ -26,6 +26,13 @@ export const Errors = {
   accountDisabled: () =>
     new AppError(403, 'ACCOUNT_DISABLED', 'Akun Anda dinonaktifkan. Hubungi admin NaraVisi.'),
   forbidden: () => new AppError(403, 'FORBIDDEN', 'Anda tidak memiliki akses ke fitur ini.'),
+  tooManyAttempts: (minutes) =>
+    new AppError(
+      429,
+      'TOO_MANY_ATTEMPTS',
+      `Terlalu banyak percobaan masuk yang gagal. Coba lagi dalam ${minutes} menit.`,
+    ),
+  payloadTooLarge: () => new AppError(413, 'PAYLOAD_TOO_LARGE', 'Ukuran permintaan terlalu besar.'),
   emailTaken: () =>
     new AppError(409, 'EMAIL_TAKEN', 'Email sudah terdaftar. Gunakan email lain.'),
 
