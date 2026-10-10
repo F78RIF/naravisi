@@ -90,9 +90,11 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 ## Pengujian
 
 ```bash
-cd backend && npm test                         # 76 tes unit + integrasi API (SQLite di memori)
+cd backend && npm test                         # 80 tes unit + integrasi API (SQLite di memori)
 cd ai-service && python -m pytest              # 14 tes
 cd e2e && npm install && npm test              # 48 skenario: extension + backend + Admin di Chromium
+cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
+cd backend && node --no-warnings scripts/bench.js   # ukur waktu respons (RNF-05)
 ```
 
 Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`.
@@ -106,6 +108,7 @@ Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`.
 - [x] Fase 4 — Premium + Midtrans (RF-23..26)
 - [x] Fase 5 — Dashboard Admin (RF-21, 22, 27..30)
 - [x] Fase 6 — Pengujian otomatis lengkap; uji manual M-01..M-06 menunggu dijalankan
+- [x] Fase 7 — Evaluasi (`docs/EVALUASI.md`), perbaikan keamanan, video demo, naskah demo & checklist gladi (`docs/NASKAH_DEMO.md`), laporan akhir & slide
 
 ## Batasan yang diketahui
 

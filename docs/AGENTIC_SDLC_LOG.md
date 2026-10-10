@@ -60,3 +60,15 @@ Human (pemilik produk) → Requirement/Design agent → Coding agent → Testing
 |---|---|---|
 | Testing | Agent | Matriks traceability 30 RF + 13 RNF, audit aksesibilitas otomatis di 6 halaman, 6 skenario uji manual dengan formulir isian. |
 | Human approval | Rifat | ☐ Isi hasil M-01..M-06 di `docs/PENGUJIAN.md`. |
+
+## Fase 7 — Evaluasi & Final (2026-10-10)
+
+| Langkah | Pelaku | Keluaran |
+|---|---|---|
+| Requirement | Human | "Lanjutkan sampai Fase 7." |
+| Testing / Evaluasi | Agent | Cakupan tes backend 94,9% baris; benchmark RNF-05 (p95 ≤ 3,5 ms non-login); audit aksesibilitas 0 temuan; review keamanan 5 temuan (E-01..E-05). |
+| Coding | Agent | Perbaikan E-01..E-05, versi 1.0.0; skrip `bench.js` dan `demo.mjs`. |
+| Testing | Agent | Backend 80/80 · E2E 48/48 setelah perbaikan. |
+| Review | Agent | Video demo diperiksa per frame: diperbaiki rekaman terpotong (C-09) dan urutan deskripsi tiruan yang tidak cocok dengan gambar; kartu pembuka menyatakan bahwa model AI disimulasikan. |
+| Dokumentasi | Agent | `EVALUASI.md`, `NASKAH_DEMO.md`, laporan akhir, slide presentasi. |
+| Human approval | Rifat | ☐ Jalankan M-01..M-06 dan isi `EVALUASI.md` bagian 7 · ☐ gladi dengan `NASKAH_DEMO.md`. |

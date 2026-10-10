@@ -1,12 +1,12 @@
 # Laporan & Rencana Pengujian NaraVisi (Fase 6)
 
-Versi kode: 0.5.0 · Tanggal: 9 Oktober 2026
+Versi kode: 1.0.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7)
 
 ## 1. Ringkasan hasil uji otomatis
 
 | Suite | Lokasi | Jumlah | Hasil | Cara menjalankan |
 |---|---|---|---|---|
-| Unit + integrasi API (backend) | `backend/test/` | 76 tes | **76 lulus** | `cd backend && npm test` |
+| Unit + integrasi API (backend) | `backend/test/` | 80 tes | **80 lulus** | `cd backend && npm test` |
 | Layanan AI (logika) | `ai-service/tests/test_service.py` | 10 tes | **10 lulus** | `cd ai-service && python -m pytest` |
 | Layanan AI (endpoint FastAPI) | `ai-service/tests/test_api.py` | 4 tes | butuh `pip install` | idem |
 | End-to-end extension + backend + Admin | `e2e/run.mjs` | 48 skenario | **48 lulus** | `cd e2e && npm install && npm test` |
@@ -135,3 +135,9 @@ Pertanyaan penutup (skala 1–5): kemudahan, kejelasan deskripsi, kenyamanan sua
 | C-03 | Service worker belum siap saat extension pertama dimuat (uji) | Uji menunggu API `chrome.*` siap |
 | C-04 | Deskripsi gagal tetap mengurangi kuota (risiko desain) | Kuota dipesan lalu dikembalikan bila AI gagal; diuji |
 | C-05 | Permintaan serentak berpotensi melewati batas kuota | `UPDATE … WHERE jumlah < batas` atomik; diuji 15 permintaan serentak |
+| C-06 | (Fase 7) Login tanpa batas percobaan gagal | Dikunci 15 menit setelah 10 gagal per (email, IP) — E-01 |
+| C-07 | (Fase 7) Semua rute menerima body JSON hingga ±7 MB | Batas 32 KB kecuali `/descriptions` — E-02 |
+| C-08 | (Fase 7) Halaman HTML tanpa CSP | CSP & X-Frame-Options — E-03 |
+| C-09 | (Fase 7) Video demo: rekaman terpotong saat extension aktif | `viewport: null` + tinggi jendela 860 di `e2e/demo.mjs` |
+
+Evaluasi lengkap (cakupan, performa, keamanan, aksesibilitas): `docs/EVALUASI.md`.

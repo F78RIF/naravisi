@@ -6,3 +6,4 @@ __pycache__/
 .pytest_cache/
 e2e/screenshots/
 *.zip
+e2e/demo/raw/
