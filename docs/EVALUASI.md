@@ -12,7 +12,7 @@ Dokumen ini menilai hasil implementasi terhadap SRS v1.1. Angka di bawah diukur 
 | Kebutuhan non-fungsional | 10/13 RNF terbukti otomatis; RNF-01, RNF-04 menunggu uji manual; RNF-07 berlaku saat deploy HTTPS | ⏳ sebagian |
 | Tes otomatis | Backend 80/80 · AI service 10/10 (+4 endpoint setelah `pip install`) · E2E 48/48 | ✅ |
 | Cakupan kode backend | 94,9% baris · 88,5% cabang · 95,7% fungsi (termasuk berkas uji); adaptor MySQL tidak tercakup karena butuh server MySQL | ✅ |
-| Waktu respons non-AI (RNF-05) | p95 ≤ 3,5 ms untuk semua endpoint baca/tulis biasa; login p95 61 ms | ✅ |
+| Waktu respons non-AI (RNF-05) | p95 ≤ 3,5 ms untuk enam endpoint baca/tulis biasa; login p95 61 ms | ✅ |
 | Kecepatan & mutu model AI (RNF-04) | Belum diukur — model BLIP tidak dapat diunduh di lingkungan agen | ⏳ M-01 |
 | Uji pengguna difabel | Belum dilaksanakan | ⏳ M-05 |
 
@@ -75,7 +75,7 @@ Login sengaja lebih lambat karena hash scrypt (perlindungan terhadap penebakan s
 
 ### 3.4 Aksesibilitas (RNF-02, RNF-03)
 
-Audit otomatis di E2E memeriksa 6 tampilan (popup, panel, Riwayat, Pengaturan, Premium, Profil, Dashboard Admin): setiap kontrol berlabel, setiap tombol/tautan bernama, setiap gambar ber-`alt`, satu `h1`, atribut `lang`. Hasil: **0 temuan**.
+Audit otomatis di E2E memeriksa 7 tampilan (popup, panel, Riwayat, Pengaturan, Premium, Profil, Dashboard Admin): setiap kontrol berlabel, setiap tombol/tautan bernama, setiap gambar ber-`alt`, satu `h1`, atribut `lang`. Hasil: **0 temuan**.
 
 Tinjauan manual terhadap kriteria WCAG 2.1 yang relevan:
 

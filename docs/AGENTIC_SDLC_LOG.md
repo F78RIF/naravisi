@@ -58,7 +58,7 @@ Human (pemilik produk) → Requirement/Design agent → Coding agent → Testing
 
 | Langkah | Pelaku | Keluaran |
 |---|---|---|
-| Testing | Agent | Matriks traceability 30 RF + 13 RNF, audit aksesibilitas otomatis di 6 halaman, 6 skenario uji manual dengan formulir isian. |
+| Testing | Agent | Matriks traceability 30 RF + 13 RNF, audit aksesibilitas otomatis di 7 tampilan, 6 skenario uji manual dengan formulir isian. |
 | Human approval | Rifat | ☐ Isi hasil M-01..M-06 di `docs/PENGUJIAN.md`. |
 
 ## Fase 7 — Evaluasi & Final (2026-10-10)
