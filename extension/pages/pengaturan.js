@@ -1,5 +1,5 @@
 // Pengaturan aksesibilitas & TTS: RF-17..RF-19 (UC-AKS-01..03)
-import { apiFetch, setTts } from '../shared/config.js';
+import { apiFetch, getSettings, setTts } from '../shared/config.js';
 import { $, el, requireSession, say, shell, speak } from './common.js';
 
 shell('pengaturan', 'Pengaturan aksesibilitas');
@@ -42,6 +42,13 @@ async function render(settings) {
   bahasa.value = settings.bahasa_deskripsi;
   const pintasan = el('input', { id: 'pintasan', value: settings.pintasan_keyboard, 'aria-describedby': 'pintasan-hint', spellcheck: 'false' });
 
+  // Pengumuman jumlah gambar: disimpan di perangkat ini (chrome.storage.sync), langsung berlaku.
+  const umumkan = el('input', { id: 'umumkan', type: 'checkbox', checked: (await getSettings()).announceImages, 'aria-describedby': 'umumkan-hint' });
+  umumkan.addEventListener('change', async () => {
+    await chrome.storage.sync.set({ announceImages: umumkan.checked });
+    say(umumkan.checked ? 'Pengumuman jumlah gambar diaktifkan.' : 'Pengumuman jumlah gambar dimatikan.', 'ok');
+  });
+
   // --- Suara (UC-AKS-03)
   const rateOut = el('output', { for: 'kecepatan', id: 'kecepatan-out' }, `${settings.kecepatan_suara}×`);
   const kecepatan = el('input', { id: 'kecepatan', type: 'range', min: '0.5', max: '2', step: '0.1', value: settings.kecepatan_suara });
@@ -79,6 +86,12 @@ async function render(settings) {
         `Pintasan aktif saat ini: ${activeShortcut}. Chrome hanya mengizinkan pintasan diubah dari halaman pintasan Chrome — simpan pilihan Anda di sini, lalu terapkan di sana.`,
       ),
       el('div', { class: 'row' }, el('button', { type: 'button', id: 'open-shortcuts', onclick: () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }) }, 'Buka halaman pintasan Chrome')),
+      el(
+        'div',
+        { class: 'stack' },
+        el('label', { for: 'umumkan', class: 'check' }, umumkan, 'Umumkan jumlah gambar saat halaman dibuka'),
+        el('p', { class: 'hint', id: 'umumkan-hint' }, 'Contoh: "Ada 5 gambar." Gambar tidak dideskripsikan otomatis, jadi kuota tidak terpakai. Tersimpan langsung.'),
+      ),
     ),
     el(
       'section',

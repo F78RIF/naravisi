@@ -1,11 +1,10 @@
+import { mountAuthForms } from '../shared/auth-forms.js';
 import {
-  apiFetch,
   DEFAULTS,
   getSession,
   getSettings,
   logout,
   refreshProfile,
-  startSession,
 } from '../shared/config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -48,10 +47,7 @@ function render(user) {
     $('scan').focus();
   } else {
     // Selalu kembali ke form Masuk (mis. setelah keluar dari akun yang baru didaftarkan).
-    $('register-form').hidden = true;
-    $('login-form').hidden = false;
-    $('show-register').hidden = false;
-    $('login-email').focus();
+    auth.showLogin({ announce: false });
   }
 }
 
@@ -64,54 +60,8 @@ async function checkHealth() {
   else el.textContent = `Server dan layanan AI siap (${health.ai.model ?? health.ai.provider}).`;
 }
 
-// UC-AKUN-05
-$('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  say('Memeriksa…');
-  try {
-    const res = await apiFetch('/auth/login', {
-      method: 'POST',
-      auth: false,
-      body: { email: $('login-email').value, kata_sandi: $('login-password').value },
-    });
-    $('login-password').value = '';
-    render(await startSession(res));
-    say('Berhasil masuk.');
-  } catch (err) {
-    say(err.message, 'error');
-  }
-});
-
-// UC-AKUN-01
-$('register-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  say('Mendaftarkan akun…');
-  try {
-    const res = await apiFetch('/auth/register', {
-      method: 'POST',
-      auth: false,
-      body: { nama: $('reg-name').value, email: $('reg-email').value, kata_sandi: $('reg-password').value },
-    });
-    $('reg-password').value = '';
-    render(await startSession(res));
-    say('Akun berhasil dibuat. Selamat datang di NaraVisi!');
-  } catch (err) {
-    say(err.message, 'error');
-  }
-});
-
-$('show-register').addEventListener('click', () => {
-  $('login-form').hidden = true;
-  $('show-register').hidden = true;
-  $('register-form').hidden = false;
-  $('reg-name').focus();
-});
-$('show-login').addEventListener('click', () => {
-  $('register-form').hidden = true;
-  $('login-form').hidden = false;
-  $('show-register').hidden = false;
-  $('login-email').focus();
-});
+// UC-AKUN-05 & UC-AKUN-01: setelah daftar langsung masuk, tanpa login ulang.
+const auth = mountAuthForms($('auth'), { say, onSuccess: (user) => render(user) });
 
 $('logout').addEventListener('click', async () => {
   await logout();

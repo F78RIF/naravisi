@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Selamat datang — NaraVisi</title>
+  <link rel="stylesheet" href="pages.css">
+</head>
+<body>
+  <!-- Tab sambutan: dibuka saat extension dipasang, saat Alt+Shift+N ditekan sebelum masuk, dan saat sesi berakhir. -->
+  <main id="main">
+    <h1 id="title" tabindex="-1">Selamat datang di NaraVisi</h1>
+    <p>NaraVisi mendeskripsikan gambar di halaman web dengan AI lalu membacakannya dengan suara.</p>
+    <p id="msg" role="status" aria-live="polite"></p>
+
+    <section id="guest" class="card auth" aria-labelledby="guest-title">
+      <h2 id="guest-title">Masuk atau daftar</h2>
+      <div id="auth"></div>
+    </section>
+
+    <section id="member" class="card" aria-labelledby="member-title" hidden>
+      <h2 id="member-title" tabindex="-1">Anda sudah masuk</h2>
+      <p id="member-text"></p>
+      <p>Buka halaman web mana pun, lalu tekan <kbd id="shortcut">Alt+Shift+N</kbd> untuk memilih gambar dan mendengar deskripsinya. Tab ini boleh ditutup.</p>
+      <p class="row"><a class="btn" href="pengaturan.html">Pengaturan</a> <a class="btn" href="riwayat.html">Riwayat</a></p>
+    </section>
+  </main>
+  <script type="module" src="selamat-datang.js"></script>
+</body>
+</html>

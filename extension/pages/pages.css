@@ -35,7 +35,7 @@ form.stack, .stack { display: grid; gap: 8px; }
 label { font-weight: 600; }
 .hint { font-size: 15px; color: var(--muted); margin: 0; }
 input, select, textarea, button { font: inherit; }
-input:not([type="range"]), select, textarea { width: 100%; padding: 8px 10px; border: 2px solid #6b6f76; border-radius: 8px; background: #fff; }
+input:not([type="range"]):not([type="checkbox"]), select, textarea { width: 100%; padding: 8px 10px; border: 2px solid #6b6f76; border-radius: 8px; background: #fff; }
 input[type="range"] { width: 100%; }
 button, .btn { display: inline-block; padding: 8px 16px; border: 2px solid var(--ink); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; text-decoration: none; }
 button:hover, .btn:hover { background: #eef1f6; }
@@ -68,3 +68,17 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 .badge.premium { color: #7a4b00; background: #fff4d6; }
 .badge.gratis { color: var(--muted); background: #eef1f6; }
 .premium-only[aria-disabled="true"] { opacity: .65; }
+
+/* Target sentuh ≥ 44×44 px */
+input:not([type="range"]):not([type="checkbox"]), select, button, .btn { min-height: 44px; }
+input[type="checkbox"] { width: 24px; height: 24px; margin: 0; flex: none; }
+label.check { display: flex; gap: 12px; align-items: center; min-height: 44px; cursor: pointer; }
+
+/* Form Masuk/Daftar di tab sambutan (shared/auth-forms.js) */
+.auth form { display: grid; gap: 8px; }
+.auth button.link { border: none; background: none; padding: 10px 0; color: var(--accent); text-decoration: underline; font-weight: 600; }
+.auth button.reveal { justify-self: start; font-size: 15px; padding: 6px 14px; }
+.auth button.reveal[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.field-error { margin: 0; color: var(--danger); font-size: 15px; font-weight: 600; }
+input[aria-invalid="true"] { border-color: var(--danger); }
+kbd { font: 15px ui-monospace, monospace; border: 1px solid #6b6f76; border-radius: 4px; padding: 0 4px; }

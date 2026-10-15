@@ -12,26 +12,8 @@
     <!-- Belum masuk: UC-AKUN-05 Login & UC-AKUN-01 Registrasi -->
     <section id="guest" hidden aria-labelledby="guest-title">
       <p class="lead" id="guest-title">Masuk untuk mulai mendeskripsikan gambar.</p>
-      <form id="login-form" novalidate>
-        <label for="login-email">Email</label>
-        <input id="login-email" type="email" autocomplete="username" required>
-        <label for="login-password">Kata sandi</label>
-        <input id="login-password" type="password" autocomplete="current-password" required>
-        <button type="submit" class="primary">Masuk</button>
-      </form>
-      <button type="button" id="show-register" class="link">Belum punya akun? Daftar</button>
-
-      <form id="register-form" novalidate hidden>
-        <h2>Daftar akun baru</h2>
-        <label for="reg-name">Nama</label>
-        <input id="reg-name" autocomplete="name" required minlength="2" maxlength="100">
-        <label for="reg-email">Email</label>
-        <input id="reg-email" type="email" autocomplete="email" required>
-        <label for="reg-password">Kata sandi (minimal 8 karakter)</label>
-        <input id="reg-password" type="password" autocomplete="new-password" required minlength="8">
-        <button type="submit" class="primary">Daftar</button>
-        <button type="button" id="show-login" class="link">Sudah punya akun? Masuk</button>
-      </form>
+      <!-- Form Masuk & Daftar dibangun oleh shared/auth-forms.js (dipakai juga di tab sambutan) -->
+      <div id="auth"></div>
     </section>
 
     <!-- Sudah masuk -->

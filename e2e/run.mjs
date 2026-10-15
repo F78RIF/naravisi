@@ -145,6 +145,24 @@ try {
 
   const pageErrors = [];
   const watch = (p) => p.on('pageerror', (e) => pageErrors.push(`${p.url()}: ${e}`));
+  const spoken = () => sw.evaluate(() => globalThis.naraVisi.spokenLog.map((s) => s.text));
+  const announcements = async () => (await spoken()).filter((t) => /^Ada \d+ gambar\./.test(t));
+
+  // =========================================================================
+  section('Pemandu suara saat pertama dipasang');
+  await step('tab sambutan terbuka, fokus di judul, sambutan dibacakan; Tab → kolom Email', async () => {
+    const welcome =
+      context.pages().find((p) => p.url().includes('selamat-datang.html')) ??
+      (await context.waitForEvent('page', { predicate: (p) => p.url().includes('selamat-datang.html'), timeout: 10000 }));
+    watch(welcome);
+    await welcome.waitForFunction(() => document.activeElement?.id === 'title');
+    assert.match((await spoken())[0], /^Selamat datang di NaraVisi\. Tekan Tab untuk masuk atau mendaftar\. Setelah masuk, /);
+    assert.deepEqual(await a11yAudit(welcome), []);
+    assert.equal(await welcome.locator('#register-form').isVisible(), false);
+    await welcome.keyboard.press('Tab');
+    assert.equal(await welcome.evaluate(() => document.activeElement.id), 'login-email');
+    await welcome.close();
+  });
 
   // =========================================================================
   section('Akun lewat popup (UC-AKUN-01, UC-AKUN-05)');
@@ -171,6 +189,26 @@ try {
     assert.equal(await popup.evaluate(() => document.activeElement.id), 'reg-name');
   });
 
+  await step('Daftar dengan kolom kosong → error per kolom, aria-invalid, fokus ke Nama', async () => {
+    await popup.getByRole('button', { name: 'Daftar', exact: true }).click();
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'reg-name');
+    assert.equal(await popup.locator('#reg-name').getAttribute('aria-invalid'), 'true');
+    assert.equal(await popup.locator('#reg-name').getAttribute('aria-describedby'), 'reg-name-error');
+    assert.equal(await popup.locator('#reg-name-error').innerText(), 'Nama wajib diisi.');
+    assert.equal(await popup.locator('#reg-password-error').isVisible(), true);
+    assert.equal(await popup.locator('#message').innerText(), 'Nama wajib diisi.');
+  });
+
+  await step('tombol "Tampilkan kata sandi" (aria-pressed) menampilkan & menyembunyikan sandi', async () => {
+    const btn = popup.locator('#register-form').getByRole('button', { name: 'Tampilkan kata sandi' });
+    await btn.click();
+    assert.equal(await btn.getAttribute('aria-pressed'), 'true');
+    assert.equal(await popup.locator('#reg-password').getAttribute('type'), 'text');
+    await btn.click();
+    assert.equal(await btn.getAttribute('aria-pressed'), 'false');
+    assert.equal(await popup.locator('#reg-password').getAttribute('type'), 'password');
+  });
+
   await step('registrasi dari popup → langsung masuk sebagai Gratis, kuota 10', async () => {
     await popup.getByLabel('Nama').fill('Rifat Uji');
     await popup.getByLabel('Email').last().fill('rifat@uji.id');
@@ -178,6 +216,7 @@ try {
     await popup.getByRole('button', { name: 'Daftar', exact: true }).click();
     await popup.locator('#member:not([hidden])').waitFor();
     assert.match(await popup.locator('#plan').innerText(), /Gratis · sisa kuota hari ini 10 dari 10/);
+    assert.match((await spoken()).at(-1), /^Berhasil masuk sebagai Rifat Uji\. Jatah gratis hari ini 10 gambar\. (Tekan .+|Klik ikon NaraVisi di toolbar) untuk memindai gambar\.$/);
   });
 
   await step('login dengan sandi salah → pesan jelas', async () => {
@@ -197,6 +236,42 @@ try {
   await step('popup lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(popup), []));
   await popup.screenshot({ path: path.join(shotsDir, '01-popup.png') });
   await popup.close();
+
+  // =========================================================================
+  section('Pengumuman jumlah gambar saat halaman dibuka');
+  const ann = await context.newPage();
+  watch(ann);
+
+  await step('halaman dengan gambar → "Ada 5 gambar" diumumkan sekali saja', async () => {
+    const before = (await announcements()).length;
+    await ann.goto(`${SITE}/berita.html`);
+    await ann.bringToFront();
+    for (let i = 0; i < 50 && (await announcements()).length === before; i++) await new Promise((r) => setTimeout(r, 100));
+    const list = await announcements();
+    assert.equal(list.length, before + 1);
+    assert.match(list.at(-1), /^Ada 5 gambar\. (Tekan .+|Klik ikon NaraVisi di toolbar) untuk mendengar deskripsinya\.$/);
+    await ann.evaluate(() => { location.hash = 'bagian-2'; }); // dokumen sama → tidak diumumkan lagi
+    await new Promise((r) => setTimeout(r, 2500));
+    assert.equal((await announcements()).length, before + 1);
+    assert.equal(await ann.locator('[data-naravisi-mark]').count(), 0); // hanya menghitung, tidak menandai
+    assert.equal(backend.ai.calls, 0); // tidak ada deskripsi otomatis
+  });
+
+  await step('sakelar pengumuman dimatikan di Pengaturan → tidak ada pengumuman', async () => {
+    const opt = await context.newPage();
+    await opt.goto(extPage('pages/pengaturan.html'));
+    const toggle = opt.getByLabel('Umumkan jumlah gambar saat halaman dibuka');
+    assert.equal(await toggle.isChecked(), true); // bawaan aktif
+    await toggle.uncheck();
+    await opt.locator('#msg', { hasText: 'Pengumuman jumlah gambar dimatikan.' }).waitFor();
+    await opt.close();
+    const before = (await announcements()).length;
+    await ann.reload();
+    await ann.bringToFront();
+    await new Promise((r) => setTimeout(r, 3000));
+    assert.equal((await announcements()).length, before);
+  });
+  await ann.close();
 
   // =========================================================================
   section('Panel deskripsi gambar (UC-GBR-01..07, UC-LAP-01)');
@@ -523,9 +598,21 @@ try {
     assert.equal(await page.getByRole('button', { name: 'Masuk atau daftar NaraVisi' }).isVisible(), true);
   });
 
+  await step('Alt+Shift+N saat belum masuk → dibacakan & tab masuk terbuka, fokus di Email', async () => {
+    const [tab] = await Promise.all([
+      context.waitForEvent('page'),
+      sw.evaluate(() => globalThis.naraVisi.handleScanCommand()),
+    ]);
+    await tab.waitForURL(/selamat-datang\.html#masuk$/);
+    await tab.waitForFunction(() => document.activeElement?.id === 'login-email');
+    assert.equal((await spoken()).at(-1), 'Anda belum masuk. Halaman masuk dibuka.');
+    await tab.close();
+  });
+
   await step('server mati → pesan koneksi dibacakan', async () => {
     await sw.evaluate(() => chrome.storage.local.set({ nvSession: { token: 'x', user: null } }));
     await sw.evaluate(() => chrome.storage.sync.set({ apiBase: 'http://127.0.0.1:9/api/v1' }));
+    await page.bringToFront();
     await page.keyboard.press('Escape');
     await toggleOn(`${SITE}/berita.html`);
     await page.locator('#nv-list').focus();

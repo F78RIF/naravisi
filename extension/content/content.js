@@ -36,6 +36,9 @@
       if (state.open) closePanel();
       else openPanel();
       sendResponse({ open: state.open, count: state.images.length });
+    } else if (message?.type === 'NV_COUNT') {
+      // Pengumuman saat halaman dibuka: hanya menghitung, tidak menandai atau mengirim apa pun.
+      sendResponse({ count: scanImages().length });
     }
   });
 
@@ -295,7 +298,7 @@
         state.tts = res.data;
         state.lang = res.data.bahasa_deskripsi || state.lang;
         state.loggedIn = res.loggedIn;
-        if (!res.loggedIn && state.open) setAction('Masuk atau daftar NaraVisi', 'profil');
+        if (!res.loggedIn && state.open) setAction('Masuk atau daftar NaraVisi', 'masuk');
       }
     } catch {
       // extension diperbarui — ditangani saat mendeskripsikan
@@ -373,6 +376,7 @@
       if (!res?.ok) {
         const e = new Error(res?.message || 'Server gagal memproses gambar.');
         e.code = res?.code;
+        e.spoken = res?.spoken;
         throw e;
       }
       if (!state.open) return; // panel ditutup saat menunggu
@@ -393,8 +397,8 @@
       state.host.dataset.state = 'error';
       setStatus(message, 'error');
       if (err.code === 'QUOTA_EXCEEDED') setAction('Lihat paket Premium', 'premium');
-      else if (['NOT_LOGGED_IN', 'UNAUTHORIZED', 'SESSION_EXPIRED'].includes(err.code)) setAction('Masuk atau daftar NaraVisi', 'profil');
-      speak(message);
+      else if (['NOT_LOGGED_IN', 'UNAUTHORIZED', 'SESSION_EXPIRED'].includes(err.code)) setAction('Masuk atau daftar NaraVisi', 'masuk');
+      if (!err.spoken) speak(message); // sudah dibacakan service worker → jangan dobel
     } finally {
       state.busy = false;
     }

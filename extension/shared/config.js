@@ -1,6 +1,7 @@
 // Konfigurasi & sesi bersama untuk background, popup, dan halaman extension.
 export const DEFAULTS = Object.freeze({
   apiBase: 'http://localhost:3000/api/v1',
+  announceImages: true, // umumkan jumlah gambar saat halaman dibuka (disimpan lokal, tidak ke server)
 });
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;

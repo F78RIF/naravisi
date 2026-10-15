@@ -1,7 +1,9 @@
 // Service worker NaraVisi (Manifest V3).
-// Tugas: menyuntik panel ke halaman, mengambil byte gambar, memanggil REST API.
+// Tugas: menyuntik panel ke halaman, mengambil byte gambar, memanggil REST API,
+// dan pemandu suara (chrome.tts) yang tetap bekerja tanpa halaman terbuka.
 
 import { ApiError, apiFetch, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession } from './shared/config.js';
+import { imageCountText, spokenShortcut, welcomeText } from './shared/guide.js';
 
 const CONTENT_FILE = 'content/content.js';
 const DIRECT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -9,11 +11,40 @@ const MAX_SIDE = 1280; // gambar lebih besar diperkecil sebelum dikirim
 const REENCODE_ABOVE_BYTES = 1.5 * 1024 * 1024;
 
 class NvError extends Error {
-  constructor(code, message) {
+  constructor(code, message, { spoken = false } = {}) {
     super(message);
     this.code = code;
+    this.spoken = spoken; // sudah dibacakan oleh chrome.tts → panel tidak perlu membacakan ulang
   }
 }
+
+// ---------------------------------------------------------------------------
+// Pemandu suara (chrome.tts) — satu kalimat per kejadian, kalimat baru memotong yang lama
+// ---------------------------------------------------------------------------
+const spokenLog = []; // dipakai uji otomatis
+
+export async function speakGuide(text) {
+  spokenLog.push({ text, at: Date.now() });
+  if (spokenLog.length > 50) spokenLog.shift();
+  const tts = await getTts();
+  chrome.tts.speak(text, { lang: 'id-ID', rate: Number(tts.kecepatan_suara) || 1, enqueue: false }, () => {
+    void chrome.runtime.lastError; // perangkat tanpa mesin suara: abaikan, teks tetap ada di aria-live
+  });
+}
+
+/** Belum/tidak lagi masuk: bacakan alasannya lalu buka tab masuk. */
+async function sendToLogin(message) {
+  await speakGuide(message);
+  await openPage('masuk');
+  return message;
+}
+
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== chrome.runtime.OnInstalledReason.INSTALL) return;
+  // Popup sulit ditemukan pembaca layar; tab biasa langsung mendapat fokus.
+  await chrome.tabs.create({ url: chrome.runtime.getURL(PAGES.selamatDatang) });
+  await speakGuide(welcomeText(await spokenShortcut()));
+});
 
 // ---------------------------------------------------------------------------
 // Membuka / menutup panel (UC-GBR-01)
@@ -39,11 +70,50 @@ async function toggleActiveTab() {
   return togglePanel(tab.id);
 }
 
-chrome.commands.onCommand.addListener(async (command, tab) => {
-  if (command !== 'scan-page') return;
-  if (tab?.id) await togglePanel(tab.id);
-  else await toggleActiveTab();
+export async function handleScanCommand(tab) {
+  if (!(await getSession())?.token) {
+    await sendToLogin('Anda belum masuk. Halaman masuk dibuka.');
+    return { ok: false, code: 'NOT_LOGGED_IN' };
+  }
+  return tab?.id ? togglePanel(tab.id) : toggleActiveTab();
+}
+
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === 'scan-page') handleScanCommand(tab);
 });
+
+// ---------------------------------------------------------------------------
+// Pengumuman jumlah gambar saat halaman dibuka (hanya menghitung, tidak ada yang dikirim ke server;
+// deskripsi tetap hanya setelah pengguna memilih gambar, supaya kuota tidak terpakai tanpa izin).
+// ---------------------------------------------------------------------------
+const ANNOUNCE_DELAY_MS = 1500;
+const isWebPage = (url) => /^https?:/i.test(url || ''); // bukan chrome://, bukan halaman extension
+const announcing = new Set();
+
+chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+  if (info.status !== 'complete' || !isWebPage(tab.url)) return;
+  setTimeout(() => announceImageCount(tabId).catch(() => {}), ANNOUNCE_DELAY_MS);
+});
+
+export async function announceImageCount(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  if (!tab.active || !isWebPage(tab.url)) return;
+  const { announceImages } = await getSettings();
+  if (!announceImages || !(await getSession())?.token) return;
+
+  // Pakai pemindai yang sama dengan panel agar jumlahnya cocok.
+  const [injected] = await chrome.scripting.executeScript({ target: { tabId }, files: [CONTENT_FILE] });
+  const documentId = injected?.documentId;
+  if (!documentId || announcing.has(documentId)) return;
+  announcing.add(documentId);
+  // Sekali per halaman (per dokumen), juga setelah service worker dimulai ulang.
+  const { nvAnnounced = [] } = await chrome.storage.session.get('nvAnnounced');
+  if (nvAnnounced.includes(documentId)) return;
+  await chrome.storage.session.set({ nvAnnounced: [...nvAnnounced.slice(-99), documentId] });
+
+  const res = await chrome.tabs.sendMessage(tabId, { type: 'NV_COUNT' }, { documentId });
+  if (res?.count > 0) await speakGuide(imageCountText(res.count, await spokenShortcut()));
+}
 
 // ---------------------------------------------------------------------------
 // Mengambil gambar → base64 (UC-GBR-04)
@@ -114,10 +184,7 @@ async function imageToBase64({ src, dataUrl }) {
 async function requestDescription({ src, dataUrl, pageUrl }) {
   const session = await getSession();
   if (!session?.token) {
-    throw new NvError(
-      'NOT_LOGGED_IN',
-      'Anda belum masuk. Klik ikon NaraVisi di toolbar browser, lalu masuk atau daftar akun.',
-    );
+    throw new NvError('NOT_LOGGED_IN', await sendToLogin('Anda belum masuk. Halaman masuk dibuka.'), { spoken: true });
   }
   const tts = await getTts();
   const imageBase64 = await imageToBase64({ src, dataUrl });
@@ -136,7 +203,7 @@ async function requestDescription({ src, dataUrl, pageUrl }) {
     });
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      throw new NvError(err.code, `${err.message} Klik ikon NaraVisi di toolbar untuk masuk.`);
+      throw new NvError(err.code, await sendToLogin('Sesi berakhir. Halaman masuk dibuka.'), { spoken: true });
     }
     throw new NvError(err.code || 'SERVER_ERROR', err.message);
   }
@@ -172,6 +239,8 @@ const PAGES = {
   pengaturan: 'pages/pengaturan.html',
   premium: 'pages/premium.html',
   profil: 'pages/profil.html',
+  masuk: 'pages/selamat-datang.html#masuk',
+  selamatDatang: 'pages/selamat-datang.html',
 };
 
 async function openPage(name) {
@@ -201,6 +270,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return openPage(message.page);
       case 'NV_REFRESH_PROFILE':
         return { ok: true, data: await refreshProfile() };
+      case 'NV_SPEAK':
+        if (typeof message.text !== 'string' || !message.text.trim()) return { ok: false };
+        await speakGuide(message.text.slice(0, 500));
+        return { ok: true };
       default:
         return { ok: false, message: 'Pesan tidak dikenal.' };
     }
@@ -209,10 +282,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handle()
     .then(sendResponse)
     .catch((err) =>
-      sendResponse({ ok: false, code: err.code || 'UNKNOWN', message: err.message || 'Terjadi kesalahan.' }),
+      sendResponse({
+        ok: false,
+        code: err.code || 'UNKNOWN',
+        message: err.message || 'Terjadi kesalahan.',
+        spoken: Boolean(err.spoken),
+      }),
     );
   return true; // respons asinkron
 });
 
 // Dipakai pengujian otomatis (Playwright) untuk memicu panel tanpa shortcut.
-globalThis.naraVisi = { togglePanel, toggleActiveTab, openPage };
+globalThis.naraVisi = { togglePanel, toggleActiveTab, openPage, handleScanCommand, announceImageCount, spokenLog };

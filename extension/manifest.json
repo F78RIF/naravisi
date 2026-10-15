@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "Deskripsi gambar berbasis AI yang dibacakan dengan suara, untuk pengguna tunanetra.",
   "minimum_chrome_version": "116",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "tts"],
   "host_permissions": ["<all_urls>"],
   "options_page": "pages/pengaturan.html",
   "background": {

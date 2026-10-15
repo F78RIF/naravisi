@@ -42,3 +42,11 @@ details { border-top: 1px solid #ddd; padding-top: 8px; }
 summary { cursor: pointer; font-weight: 600; }
 #health[data-ok="true"] { color: #146c2e; }
 #health[data-ok="false"] { color: #8a1c13; }
+
+/* Form Masuk/Daftar (shared/auth-forms.js): target sentuh ≥ 44×44 px, error per kolom */
+input, select, button, summary { min-height: 44px; }
+button.link { min-height: 44px; padding: 10px 0; }
+button.reveal { justify-self: start; padding: 6px 12px; font-size: 14px; }
+button.reveal[aria-pressed="true"] { background: #111; color: #fff; }
+.field-error { margin: 0; color: #8a1c13; font-size: 14px; font-weight: 600; }
+input[aria-invalid="true"] { border-color: #8a1c13; }

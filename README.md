@@ -63,10 +63,25 @@ Log menampilkan alamat API, dashboard Admin, dan mode pembayaran.
 
 1. Buka `chrome://extensions`, aktifkan **Developer mode**.
 2. **Load unpacked** → pilih folder `extension/`.
-3. Klik ikon NaraVisi → **Daftar** akun.
+3. Tab **Selamat datang** terbuka otomatis dan sambutan dibacakan. Tekan **Tab** untuk masuk atau daftar (bisa juga lewat ikon NaraVisi di toolbar).
 4. Buka situs berita, tekan **Alt+Shift+N**.
 
 Kontrol panel: **↑/↓** pilih · **Enter** deskripsikan · **Spasi** jeda/lanjut · **R** ulang · **S** berhenti · **L** laporkan · **Esc** tutup.
+
+**Pemandu suara** (bisa dipakai tanpa melihat layar):
+- Saat dipasang: tab sambutan + sambutan suara.
+- Setelah masuk/daftar: "Berhasil masuk sebagai … Jatah gratis hari ini … gambar." Sesi tersimpan sampai token kedaluwarsa.
+- **Alt+Shift+N** saat belum masuk: "Anda belum masuk. Halaman masuk dibuka." Begitu juga saat sesi berakhir.
+- Saat halaman dibuka: "Ada *n* gambar. Tekan Alt Shift N …", sekali per halaman. Ini hanya menghitung, tidak mendeskripsikan, dan tidak mengirim apa pun ke server. Bisa dimatikan di Pengaturan.
+
+**Izin extension (manifest):**
+
+| Izin | Alasan |
+|---|---|
+| `activeTab`, `scripting` | menyuntik panel dan penghitung gambar ke halaman |
+| `storage` | sesi login (`chrome.storage.local`, tidak bisa dibaca situs web) dan pengaturan |
+| `tts` | pemandu suara dari service worker (`chrome.tts`): tetap berbicara walau popup tertutup atau belum ada halaman yang terbuka, misalnya sambutan saat dipasang dan pengumuman jumlah gambar |
+| `<all_urls>` (host) | mengambil byte gambar dari halaman mana pun untuk dideskripsikan |
 
 ### 4. Dashboard Admin
 
@@ -92,7 +107,7 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 ```bash
 cd backend && npm test                         # 80 tes unit + integrasi API (SQLite di memori)
 cd ai-service && python -m pytest              # 14 tes
-cd e2e && npm install && npm test              # 48 skenario: extension + backend + Admin di Chromium
+cd e2e && npm install && npm test              # 56 skenario: extension + backend + Admin di Chromium
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur waktu respons (RNF-05)
 ```
