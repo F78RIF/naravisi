@@ -7,3 +7,10 @@ __pycache__/
 e2e/screenshots/
 *.zip
 e2e/demo/raw/
+
+# Data lokal & cache model (jangan masuk repo)
+backend/data/
+.cache/
+huggingface/
+*.safetensors
+*.webm

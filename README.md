@@ -22,6 +22,46 @@ Halaman web ──Alt+Shift+N──▶ Extension (scan, pilih, panel, TTS)
 | `e2e/` | Uji end-to-end di Chromium | Playwright |
 | `docs/` | API, keputusan desain, pengujian, log Agentic SDLC | – |
 
+## Progres Prototype (tahap 30%)
+
+Fokus presentasi tahap ini: **10 dari 30 RF esensial** + kuota Gratis 10 gambar/hari. RF lain (profil, riwayat lengkap, pengaturan, laporan, Premium, Admin) juga sudah ada di kode dan ikut diuji otomatis, tetapi **tidak** menjadi fokus presentasi tahap ini.
+
+| RF | Fitur | Status | File & fungsi utama | Cara uji |
+|---|---|---|---|---|
+| RF-01 | Registrasi | ✅ | `extension/shared/auth-forms.js` (`mountAuthForms`) → `backend/src/services/accountService.js` (`register`) | popup/tab sambutan → "Daftar" · e2e "registrasi dari popup" |
+| RF-05 | Login | ✅ | `auth-forms.js` → `accountService.js` (`login`, batas gagal di `lib/rateLimit.js`) | popup → Masuk · `test/auth.test.js`, `security.test.js` |
+| RF-06 | Pindai gambar | ✅ | `extension/content/content.js` (`scanImages`), `background.js` (`handleScanCommand`, `togglePanel`) | Alt+Shift+N di halaman berita · e2e "5 gambar ditemukan" |
+| RF-07 | Daftar gambar | ✅ | `content.js` (`renderList`, `markImages`) | panel menyebut "Gambar 1 dari 5", teks alternatif |
+| RF-08 | Pilih gambar | ✅ | `content.js` (`select`, `onKeyDown`) | panah ↑/↓, Home/End, klik |
+| RF-09 | Kirim ke AI | ✅ | `background.js` (`requestDescription`, `imageToBase64`) → `descriptionService.js` (`describe`) → `aiClient.js` → `ai-service/app/main.py` (`/caption`) | Enter pada gambar · `descriptionService.test.js` |
+| RF-10 | Terima & simpan deskripsi | ✅ | `descriptionService.js` (`describe`) + `historyService.js` | `describeQuotaHistory.test.js` |
+| RF-11 | Tampilkan teks | ✅ | `content.js` (`showResult`, area `aria-live`) | teks muncul di panel |
+| RF-12 | Bacakan + kontrol | ✅ otomatis · ⏳ dengar manual | `content.js` (`speak`, `togglePause`, `play`, `stopSpeech`) | tombol Putar/Jeda/Ulang/Berhenti, tombol Spasi/R/S |
+| RF-13 | Simpan riwayat | ✅ | `historyService.js` (dipanggil dari `describe`) | halaman Riwayat · `describeQuotaHistory.test.js` |
+| Kuota | Gratis 10/hari, reset 00.00 WITA | ✅ | `quotaService.js` (`increment`: `UPDATE … WHERE jumlah_permintaan < batas`) | gambar ke-11 ditolak · e2e "setelah 10 deskripsi" |
+
+Rencana uji manual lengkap: `docs/PENGUJIAN.md`.
+
+### Keamanan yang sudah diterapkan
+
+| # | Poin | Status |
+|---|---|---|
+| a | Kata sandi di-hash **scrypt + salt acak**; tidak ada log kata sandi/token | ✅ `lib/password.js` |
+| b | `JWT_SECRET` dari env; server **menolak start** di produksi bila memakai nilai bawaan | ✅ `config.js` |
+| c | Pesan login gagal seragam; **10 gagal / 15 menit → 429** | ✅ `accountService.js`, `lib/rateLimit.js` |
+| d | Semua query SQL berparameter (`?`) | ✅ |
+| e | Batas body **32 KB**, kecuali `/api/v1/descriptions` | ✅ `app.js`, `http/routes.js` |
+| f | Format gambar dikenali dari **magic bytes**; SVG ditolak; backend **tidak pernah mengunduh URL** dari klien (anti-SSRF); file gambar **tidak disimpan** | ✅ `lib/image.js` |
+| g | Kuota **atomik** (`UPDATE … WHERE jumlah < batas`) | ✅ `quotaService.js` |
+| h | Error ke klien tanpa stack trace | ✅ `http/dispatch.js` |
+| i | Teks ke DOM memakai `textContent` (`innerHTML` hanya untuk kerangka statis panel, tanpa data) | ✅ |
+| j | Token hanya di `chrome.storage.local`, tidak pernah dikirim ke halaman web/content script | ✅ |
+| k | ai-service hanya listen di `127.0.0.1` | ✅ (lihat perintah `uvicorn` di bawah) |
+| + | **CORS** dibatasi ke `ALLOWED_ORIGINS` (bukan `*`) | ✅ `http/cors.js` |
+| + | Service worker menolak pesan dari pengirim asing & tipe pesan tak dikenal | ✅ `extension/background.js` (`rejectReason`) |
+
+Audit dependensi (15 Oktober 2026): `npm audit` backend **0 kerentanan**. `pip-audit` ai-service: **23 temuan** di `starlette` 0.46 (lewat `fastapi==0.115.*`) dan `transformers` 4.57 (dibatasi `<5`). Risiko diperkecil karena ai-service hanya listen di `127.0.0.1` dan hanya menerima gambar dari backend. Upgrade ke FastAPI/transformers versi baru dijadwalkan di tahap berikutnya karena perlu uji ulang model BLIP.
+
 ## Menjalankan di laptop
 
 Butuh: **Node.js 22.9+**, **Python 3.12**, **MySQL 8.4** (mis. lewat XAMPP/Laragon/MySQL Installer), **Google Chrome**, ±3 GB ruang kosong untuk model AI.
@@ -62,7 +102,7 @@ Log menampilkan alamat API, dashboard Admin, dan mode pembayaran.
 ### 3. Extension
 
 1. Buka `chrome://extensions`, aktifkan **Developer mode**.
-2. **Load unpacked** → pilih folder `extension/`.
+2. **Load unpacked** → pilih folder `extension/`. Salin **ID** extension ke `backend/.env`: `ALLOWED_ORIGINS=chrome-extension://<ID>`, lalu restart backend.
 3. Tab **Selamat datang** terbuka otomatis dan sambutan dibacakan. Tekan **Tab** untuk masuk atau daftar (bisa juga lewat ikon NaraVisi di toolbar).
 4. Buka situs berita, tekan **Alt+Shift+N**.
 
@@ -105,9 +145,9 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 ## Pengujian
 
 ```bash
-cd backend && npm test                         # 80 tes unit + integrasi API (SQLite di memori)
+cd backend && npm test                         # 85 tes unit + integrasi API (SQLite di memori)
 cd ai-service && python -m pytest              # 14 tes
-cd e2e && npm install && npm test              # 56 skenario: extension + backend + Admin di Chromium
+cd e2e && npm install && npm test              # 57 skenario: extension + backend + Admin di Chromium
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur waktu respons (RNF-05)
 ```
