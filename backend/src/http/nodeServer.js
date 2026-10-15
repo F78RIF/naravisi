@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { corsHeaders } from './cors.js';
 import { dispatch } from './dispatch.js';
 import { buildRoutes, HTML_SECURITY_HEADERS, LARGE_BODY_PATHS, SMALL_BODY_LIMIT } from './routes.js';
 
@@ -56,19 +57,16 @@ export function createNodeServer(services) {
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    const cors = url.pathname.startsWith('/api/') ? corsHeaders(req.headers.origin, services.config.allowedOrigins) : {};
     const write = (status, payload, type = 'application/json; charset=utf-8') => {
-      const headers = { 'content-type': type, 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff' };
+      const headers = { 'content-type': type, 'x-content-type-options': 'nosniff', ...cors };
       if (type.startsWith('text/html')) Object.assign(headers, HTML_SECURITY_HEADERS);
       res.writeHead(status, headers);
       res.end(type.startsWith('application/json') ? JSON.stringify(payload) : payload);
     };
 
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, {
-        'access-control-allow-origin': '*',
-        'access-control-allow-headers': 'content-type, authorization',
-        'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      });
+      res.writeHead(204, cors);
       return res.end();
     }
 

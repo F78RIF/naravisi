@@ -1,3 +1,5 @@
+import { parseAllowedOrigins } from './http/cors.js';
+
 function intFromEnv(name, fallback) {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -18,6 +20,8 @@ export function loadConfig(env = process.env) {
 
   return {
     port: intFromEnv('PORT', 3000),
+    // Origin yang boleh memanggil API dari browser (mis. chrome-extension://<ID>); kosong = localhost saja.
+    allowedOrigins: parseAllowedOrigins(env.ALLOWED_ORIGINS),
     publicUrl: (env.PUBLIC_URL || `http://localhost:${env.PORT || 3000}`).replace(/\/+$/, ''),
     aiServiceUrl: (env.AI_SERVICE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, ''),
     aiTimeoutMs: intFromEnv('AI_TIMEOUT_MS', 15000),

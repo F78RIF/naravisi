@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
+import { corsHeaders } from './http/cors.js';
 import { dispatch, errorResult } from './http/dispatch.js';
 import { buildRoutes, HTML_SECURITY_HEADERS, LARGE_BODY_PATHS, SMALL_BODY_LIMIT } from './http/routes.js';
 
@@ -22,10 +23,8 @@ export function createApp(services) {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('Referrer-Policy', 'no-referrer');
     if (req.path.startsWith('/api/')) {
-      // Extension memanggil dari service worker (host_permissions); header ini untuk uji dari web.
-      res.set('Access-Control-Allow-Origin', '*');
-      res.set('Access-Control-Allow-Headers', 'content-type, authorization');
-      res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      // Hanya origin dari ALLOWED_ORIGINS (bukan '*'); lihat http/cors.js.
+      res.set(corsHeaders(req.get('origin'), config.allowedOrigins));
       if (req.method === 'OPTIONS') return res.sendStatus(204);
     }
     next();

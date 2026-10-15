@@ -89,8 +89,8 @@ export async function startTestApp({ midtransKey = '', env = {} } = {}) {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
 
-  async function api(method, path, { token, body, form } = {}) {
-    const headers = {};
+  async function api(method, path, { token, body, form, headers: extra = {} } = {}) {
+    const headers = { ...extra };
     if (token) headers.authorization = `Bearer ${token}`;
     let payload;
     if (form) {
