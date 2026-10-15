@@ -31,7 +31,8 @@
   // -------------------------------------------------------------------------
   // Pesan dari background
   // -------------------------------------------------------------------------
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (sender.id !== chrome.runtime.id) return; // hanya dari service worker NaraVisi sendiri
     if (message?.type === 'NV_TOGGLE') {
       if (state.open) closePanel();
       else openPanel();

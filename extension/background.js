@@ -253,7 +253,34 @@ async function openPage(name) {
 // ---------------------------------------------------------------------------
 // Pesan dari content script & popup
 // ---------------------------------------------------------------------------
+// Tipe pesan yang diterima, per jenis pengirim. Content script berjalan di dalam halaman web
+// (kurang tepercaya), jadi hanya boleh memakai yang dibutuhkan panel; token tidak pernah dikirim balik.
+const CONTENT_SCRIPT_TYPES = new Set(['NV_DESCRIBE', 'NV_REPORT', 'NV_GET_TTS', 'NV_OPEN_PAGE']);
+const EXTENSION_PAGE_TYPES = new Set([
+  ...CONTENT_SCRIPT_TYPES,
+  'NV_TOGGLE_ACTIVE',
+  'NV_HEALTH',
+  'NV_REFRESH_PROFILE',
+  'NV_SPEAK',
+]);
+const EXTENSION_ORIGIN = chrome.runtime.getURL('');
+
+/** 'sender' = pengirim tidak dikenal, 'type' = tipe tidak dikenal/tidak diizinkan, null = boleh. */
+export function rejectReason(message, sender) {
+  if (!sender || sender.id !== chrome.runtime.id) return 'sender';
+  const fromExtensionPage = typeof sender.url === 'string' && sender.url.startsWith(EXTENSION_ORIGIN);
+  const allowed = fromExtensionPage ? EXTENSION_PAGE_TYPES : CONTENT_SCRIPT_TYPES;
+  return allowed.has(message?.type) ? null : 'type';
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const rejected = rejectReason(message, sender);
+  if (rejected === 'sender') return false; // abaikan tanpa jawaban
+  if (rejected === 'type') {
+    sendResponse({ ok: false, code: 'MESSAGE_REJECTED', message: 'Pesan tidak dikenal.' });
+    return false;
+  }
+
   const handle = async () => {
     switch (message?.type) {
       case 'NV_DESCRIBE':
@@ -275,7 +302,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await speakGuide(message.text.slice(0, 500));
         return { ok: true };
       default:
-        return { ok: false, message: 'Pesan tidak dikenal.' };
+        return { ok: false, code: 'MESSAGE_REJECTED', message: 'Pesan tidak dikenal.' };
     }
   };
 
@@ -293,4 +320,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Dipakai pengujian otomatis (Playwright) untuk memicu panel tanpa shortcut.
-globalThis.naraVisi = { togglePanel, toggleActiveTab, openPage, handleScanCommand, announceImageCount, spokenLog };
+globalThis.naraVisi = { togglePanel, toggleActiveTab, openPage, handleScanCommand, announceImageCount, spokenLog, rejectReason };

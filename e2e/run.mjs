@@ -642,6 +642,33 @@ try {
     await p2.close();
   });
 
+  await step('service worker menolak pengirim asing & tipe pesan yang tidak dikenal/tidak diizinkan', async () => {
+    const cases = await sw.evaluate(() => {
+      const own = chrome.runtime.id;
+      const page = { id: own, url: chrome.runtime.getURL('popup/popup.html') };
+      const content = { id: own, url: 'https://contoh.id/berita', tab: { id: 1 } };
+      const check = globalThis.naraVisi.rejectReason;
+      return {
+        asing: check({ type: 'NV_DESCRIBE' }, { id: 'extension-lain', url: 'https://contoh.id/' }),
+        tanpaPengirim: check({ type: 'NV_HEALTH' }, undefined),
+        tipeAsing: check({ type: 'NV_HAPUS_SEMUA' }, page),
+        contentMintaSuara: check({ type: 'NV_SPEAK', text: 'x' }, content),
+        contentDeskripsi: check({ type: 'NV_DESCRIBE' }, content),
+        popupSuara: check({ type: 'NV_SPEAK', text: 'x' }, page),
+      };
+    });
+    assert.deepEqual(cases, {
+      asing: 'sender', tanpaPengirim: 'sender', tipeAsing: 'type',
+      contentMintaSuara: 'type', contentDeskripsi: null, popupSuara: null,
+    });
+    // Jalur nyata dari halaman extension: tipe tidak dikenal dijawab MESSAGE_REJECTED.
+    const opt = await context.newPage();
+    await opt.goto(extPage('pages/selamat-datang.html'));
+    const res = await opt.evaluate(() => chrome.runtime.sendMessage({ type: 'NV_HAPUS_SEMUA' }));
+    assert.equal(res.code, 'MESSAGE_REJECTED');
+    await opt.close();
+  });
+
   await step('tidak ada error JavaScript di semua halaman', async () => assert.deepEqual(pageErrors, []));
 } finally {
   await context.close();
