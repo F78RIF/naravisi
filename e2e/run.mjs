@@ -369,6 +369,7 @@ try {
   await step('UC-RWY-04: hapus riwayat (dengan konfirmasi)', async () => {
     await hist.getByRole('button', { name: 'Hapus' }).first().click();
     await hist.locator('#msg', { hasText: 'Riwayat berhasil dihapus.' }).waitFor();
+    await hist.locator('.item').nth(2).waitFor({ state: 'detached' }); // pesan tampil sebelum daftar dimuat ulang
     assert.equal(await hist.locator('.item').count(), 2);
   });
 
