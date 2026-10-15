@@ -104,6 +104,7 @@
   // -------------------------------------------------------------------------
   const PANEL_CSS = `
     :host { all: initial; }
+    [hidden] { display: none !important; }
     * { box-sizing: border-box; }
     .panel {
       position: fixed; right: 16px; bottom: 16px; z-index: 2147483647;

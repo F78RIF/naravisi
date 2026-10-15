@@ -158,8 +158,20 @@ try {
     assert.equal(await popup.evaluate(() => document.activeElement.id), 'login-email');
   });
 
-  await step('registrasi dari popup → masuk sebagai Gratis, kuota 10', async () => {
+  await step('popup belum masuk: form Daftar benar-benar tidak terlihat (isVisible)', async () => {
+    assert.equal(await popup.locator('#login-form').isVisible(), true);
+    assert.equal(await popup.locator('#register-form').isVisible(), false);
+    assert.equal(await popup.getByLabel('Nama').isVisible(), false);
+  });
+
+  await step('klik "Daftar" → hanya form Daftar terlihat, fokus di Nama', async () => {
     await popup.getByRole('button', { name: 'Belum punya akun? Daftar' }).click();
+    assert.equal(await popup.locator('#register-form').isVisible(), true);
+    assert.equal(await popup.locator('#login-form').isVisible(), false);
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'reg-name');
+  });
+
+  await step('registrasi dari popup → langsung masuk sebagai Gratis, kuota 10', async () => {
     await popup.getByLabel('Nama').fill('Rifat Uji');
     await popup.getByLabel('Email').last().fill('rifat@uji.id');
     await popup.getByLabel('Kata sandi (minimal 8 karakter)').fill('sandiku123');

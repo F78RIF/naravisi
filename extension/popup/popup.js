@@ -47,6 +47,10 @@ function render(user) {
     $('premium-btn').textContent = user.jenis_pengguna === 'Premium' ? 'Langganan' : 'Upgrade Premium';
     $('scan').focus();
   } else {
+    // Selalu kembali ke form Masuk (mis. setelah keluar dari akun yang baru didaftarkan).
+    $('register-form').hidden = true;
+    $('login-form').hidden = false;
+    $('show-register').hidden = false;
     $('login-email').focus();
   }
 }

@@ -1,3 +1,4 @@
+[hidden] { display: none !important; } /* atribut hidden selalu menang atas aturan display lain */
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
 body {
