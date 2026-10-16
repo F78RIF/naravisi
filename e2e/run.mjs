@@ -32,6 +32,7 @@ const backend = await startTestApp();
 backend.clock.set(new Date().toISOString()); // jam nyata agar token & tanggal wajar
 backend.ai.caption = async ({ lang, imageBase64 }) => {
   backend.ai.calls += 1;
+  backend.ai.lastImage = imageBase64;
   const mime = Buffer.from(imageBase64, 'base64')[0] === 0xff ? 'JPEG' : 'PNG';
   return { text: `Deskripsi uji untuk gambar ${mime}.`, textEn: null, lang, model: 'fake', latencyMs: 1 };
 };
@@ -45,6 +46,8 @@ const fixtures = {
   '/img/modern.avif': { type: 'image/avif', body: await solid(320, 200, '#30a050').avif().toBuffer() },
   '/img/tiny.png': { type: 'image/png', body: await solid(16, 16, '#000').png().toBuffer() },
   '/img/hidden.png': { type: 'image/png', body: await solid(200, 200, '#999').png().toBuffer() },
+  '/img/pantai.jpg': { type: 'image/jpeg', body: await solid(600, 300, '#20a0c0').jpeg().toBuffer() },
+  '/img/sprite.png': { type: 'image/png', body: await solid(200, 200, '#555').png().toBuffer() },
   '/img/logo.svg': {
     type: 'image/svg+xml',
     body: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><circle cx="100" cy="100" r="90" fill="orange"/></svg>'),
@@ -63,7 +66,27 @@ const testPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><ti
   <p><img src="${inlinePng}" width="120" height="120" alt="Gambar inline"></p>
   <p><img src="/img/photo.jpg" alt="duplikat" width="150" height="150"></p>
 </body></html>`;
+// SVG inline, gambar latar CSS, dan yang harus diabaikan (ikon dekoratif, sprite kecil, gradien).
+const vectorPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Infografik Uji</title>
+<style>.batang { fill: #e03030; } .hero { width: 300px; height: 150px; background: url('/img/pantai.jpg') center / cover; }</style></head>
+<body style="font-family:sans-serif;padding:20px">
+  <h1>Infografik Uji</h1>
+  <svg id="grafik" width="200" height="120" viewBox="0 0 200 120"><title>Grafik penjualan</title>
+    <rect class="batang" x="0" y="0" width="200" height="120"/></svg>
+  <svg width="0" height="0" style="position:absolute"><symbol id="bulat" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#20a040"/></symbol></svg>
+  <svg id="peta" width="120" height="120" aria-label="Peta lokasi"><use href="#bulat" width="120" height="120"/><use href="#bulat" width="60" height="60"/></svg>
+  <svg aria-hidden="true" width="200" height="200"><circle cx="100" cy="100" r="90"/></svg>
+  <svg width="20" height="20"><circle cx="10" cy="10" r="9"/></svg>
+  <div class="hero" role="img" aria-label="Pemandangan pantai"></div>
+  <div style="width:200px;height:200px;background-image:url(/img/logo.svg)"></div>
+  <span style="display:inline-block;width:20px;height:20px;background:url(/img/sprite.png)"></span>
+  <div style="width:300px;height:100px;background:linear-gradient(red, blue)"></div>
+</body></html>`;
 const site = http.createServer((req, res) => {
+  if (req.url === '/infografik.html') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    return res.end(vectorPage);
+  }
   if (req.url === '/' || req.url === '/berita.html') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(testPage);
@@ -327,16 +350,18 @@ try {
     await text.filter({ hasText: 'gambar JPEG' }).waitFor({ timeout: 10000 });
   });
 
-  await step('SVG ditolak dengan pesan jelas', async () => {
+  await step('SVG (<img>) diubah ke JPEG oleh extension lalu dideskripsikan', async () => {
     await page.keyboard.press('ArrowDown');
+    assert.match(await page.locator('#nv-list [role="option"]').nth(3).innerText(), /Gambar vektor/);
     await page.keyboard.press('Enter');
-    await status.filter({ hasText: 'SVG' }).waitFor({ timeout: 10000 });
+    await status.filter({ hasText: 'Sisa kuota hari ini: 7.' }).waitFor({ timeout: 10000 });
+    assert.equal(await text.innerText(), 'Deskripsi uji untuk gambar JPEG.');
   });
 
   await step('gambar data: URL dideskripsikan; tersimpan di riwayat tanpa URL gambar', async () => {
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await status.filter({ hasText: 'Sisa kuota hari ini: 7.' }).waitFor({ timeout: 10000 });
+    await status.filter({ hasText: 'Sisa kuota hari ini: 6.' }).waitFor({ timeout: 10000 });
     const last = await backend.db.get('SELECT url_gambar, url_halaman FROM riwayat_deskripsi ORDER BY riwayat_id DESC LIMIT 1');
     assert.equal(last.url_gambar, null);
     assert.equal(last.url_halaman, `${SITE}/berita.html`);
@@ -355,9 +380,9 @@ try {
   watch(hist);
   await hist.goto(extPage('pages/riwayat.html'));
 
-  await step('UC-RWY-02: 3 riwayat tampil + info batas 7 hari untuk Gratis', async () => {
+  await step('UC-RWY-02: 4 riwayat tampil + info batas 7 hari untuk Gratis', async () => {
     await hist.locator('.item').first().waitFor();
-    assert.equal(await hist.locator('.item').count(), 3);
+    assert.equal(await hist.locator('.item').count(), 4);
     assert.match(await hist.locator('.notice').innerText(), /7 hari terakhir/);
   });
 
@@ -369,13 +394,75 @@ try {
   await step('UC-RWY-04: hapus riwayat (dengan konfirmasi)', async () => {
     await hist.getByRole('button', { name: 'Hapus' }).first().click();
     await hist.locator('#msg', { hasText: 'Riwayat berhasil dihapus.' }).waitFor();
-    await hist.locator('.item').nth(2).waitFor({ state: 'detached' }); // pesan tampil sebelum daftar dimuat ulang
-    assert.equal(await hist.locator('.item').count(), 2);
+    await hist.locator('.item').nth(3).waitFor({ state: 'detached' }); // pesan tampil sebelum daftar dimuat ulang
+    assert.equal(await hist.locator('.item').count(), 3);
   });
 
   await step('halaman riwayat lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(hist), []));
   await hist.screenshot({ path: path.join(shotsDir, '03-riwayat.png'), fullPage: true });
   await hist.close();
+
+  // =========================================================================
+  section('SVG inline & gambar latar CSS');
+  const vec = await context.newPage();
+  watch(vec);
+  await vec.goto(`${SITE}/infografik.html`);
+  const vecStatus = vec.locator('#nv-status');
+  const vecText = vec.locator('#nv-text');
+  const pixelAt = async (x, y) => {
+    const { data, info } = await sharp(Buffer.from(backend.ai.lastImage, 'base64')).raw().toBuffer({ resolveWithObject: true });
+    const i = (Math.round(y * (info.height - 1)) * info.width + Math.round(x * (info.width - 1))) * info.channels;
+    return [data[i], data[i + 1], data[i + 2]];
+  };
+  const near = (rgb, hex) => {
+    const want = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return rgb.every((v, i) => Math.abs(v - want[i]) < 40);
+  };
+
+  await step('4 gambar ditemukan: 2 SVG inline, latar foto, latar SVG (ikon dekoratif, sprite & gradien diabaikan)', async () => {
+    const res = await toggleOn(`${SITE}/infografik.html`);
+    assert.equal(res.count, 4);
+    const items = await vec.locator('#nv-list [role="option"]').allInnerTexts();
+    assert.match(items[0], /Gambar vektor · Teks alternatif: “Grafik penjualan”/);
+    assert.match(items[1], /Gambar vektor · Teks alternatif: “Peta lokasi”/);
+    assert.match(items[2], /Gambar latar · Teks alternatif: “Pemandangan pantai” · 300×150 px/);
+    assert.match(items[3], /Gambar latar · Tanpa teks alternatif/);
+    assert.equal(await vec.locator('[data-naravisi-mark]').count(), 4);
+  });
+
+  await step('SVG inline dikirim sebagai JPEG dengan warna dari CSS halaman', async () => {
+    await vec.keyboard.press('Enter');
+    await vecText.filter({ hasText: 'gambar JPEG' }).waitFor({ timeout: 10000 });
+    assert.ok(near(await pixelAt(0.5, 0.5), '#e03030'), `warna ${await pixelAt(0.5, 0.5)}`);
+  });
+
+  await step('SVG inline dengan <use> ke sprite di luar elemennya tetap tergambar', async () => {
+    await vec.keyboard.press('ArrowDown');
+    await vec.keyboard.press('Enter');
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 2 siap.' }).waitFor({ timeout: 10000 });
+    assert.ok(near(await pixelAt(0.5, 0.5), '#20a040'), `warna ${await pixelAt(0.5, 0.5)}`);
+  });
+
+  await step('gambar latar foto dideskripsikan', async () => {
+    await vec.keyboard.press('ArrowDown');
+    await vec.keyboard.press('Enter');
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 3 siap.' }).waitFor({ timeout: 10000 });
+    assert.ok(near(await pixelAt(0.5, 0.5), '#20a0c0'));
+    const last = await backend.db.get('SELECT url_gambar FROM riwayat_deskripsi ORDER BY riwayat_id DESC LIMIT 1');
+    assert.equal(last.url_gambar, `${SITE}/img/pantai.jpg`);
+  });
+
+  await step('gambar latar SVG diubah ke JPEG & dideskripsikan', async () => {
+    await vec.keyboard.press('ArrowDown');
+    await vec.keyboard.press('Enter');
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 4 siap.' }).waitFor({ timeout: 10000 });
+    assert.ok(near(await pixelAt(0.5, 0.5), '#ffa500')); // lingkaran oranye
+  });
+
+  await step('panel di halaman infografik lolos audit aksesibilitas', async () => {
+    assert.deepEqual(await a11yAudit(vec, '#naravisi-host'), []);
+  });
+  await vec.close();
 
   // =========================================================================
   section('Pengaturan (UC-AKS-01..03)');

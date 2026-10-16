@@ -52,39 +52,137 @@
     return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
   }
 
+  function toAbsolute(raw) {
+    if (!raw || raw.startsWith('javascript:')) return null;
+    try {
+      return new URL(raw, document.baseURI).href;
+    } catch {
+      return null;
+    }
+  }
+
+  const altOf = (el) =>
+    (el.getAttribute('alt') || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
+
+  // Ikon dekoratif yang sengaja disembunyikan situs dari pembaca layar.
+  const isDecorative = (el) =>
+    el.getAttribute('aria-hidden') === 'true' || ['presentation', 'none'].includes(el.getAttribute('role'));
+
+  /** Gambar latar CSS pertama yang berupa url(...) — gradien diabaikan. */
+  function backgroundUrl(style) {
+    const bg = style.backgroundImage;
+    if (!bg || bg === 'none') return null;
+    const match = bg.match(/url\(\s*(['"]?)(.*?)\1\s*\)/);
+    return match ? toAbsolute(match[2]) : null;
+  }
+
+  // Kunci tetap per elemen <svg>, juga saat panel dibuka ulang.
+  const svgKeys = new WeakMap();
+  let svgCounter = 0;
+  function inlineSvgKey(el) {
+    if (!svgKeys.has(el)) svgKeys.set(el, `inline-svg:${++svgCounter}`);
+    return svgKeys.get(el);
+  }
+
   function scanImages() {
     const seen = new Set();
     const found = [];
-    for (const el of document.querySelectorAll('img, input[type="image"]')) {
-      if (el.closest(`#${HOST_ID}`)) continue;
-      const raw = el.currentSrc || el.src || el.getAttribute('data-src') || '';
-      if (!raw || raw.startsWith('javascript:')) continue;
+    const add = (item) => {
+      if (seen.has(item.src)) return;
+      seen.add(item.src);
+      found.push(item);
+    };
 
-      let src;
-      try {
-        src = new URL(raw, document.baseURI).href;
-      } catch {
+    // Satu kali jalan dalam urutan dokumen agar nomor gambar mengikuti urutan baca halaman.
+    for (const el of document.body?.querySelectorAll('*') ?? []) {
+      if (el.id === HOST_ID || el.closest(`#${HOST_ID}`)) continue;
+      const tag = el.localName;
+
+      if (tag === 'img' || (tag === 'input' && el.type === 'image')) {
+        const src = toAbsolute(el.currentSrc || el.src || el.getAttribute('data-src') || '');
+        if (!src) continue;
+        const rect = el.getBoundingClientRect();
+        if (!isVisible(el, rect)) continue;
+        const naturalW = el.naturalWidth || rect.width;
+        const naturalH = el.naturalHeight || rect.height;
+        if (Math.min(naturalW, naturalH) < MIN_NATURAL_SIDE) continue;
+        if (Math.min(rect.width, rect.height) < MIN_RENDERED_SIDE) continue;
+        const kind = /\.svg(?:[?#]|$)/i.test(src) || src.startsWith('data:image/svg') ? 'svg' : 'img';
+        add({ el, src, kind, alt: altOf(el), width: Math.round(rect.width), height: Math.round(rect.height) });
         continue;
       }
 
+      if (tag === 'svg') {
+        if (el.parentElement?.closest('svg') || isDecorative(el)) continue;
+        const rect = el.getBoundingClientRect();
+        if (!isVisible(el, rect) || Math.min(rect.width, rect.height) < MIN_NATURAL_SIDE) continue;
+        const title = el.querySelector(':scope > title')?.textContent?.trim() || '';
+        add({
+          el,
+          src: inlineSvgKey(el), // kunci cache; isi SVG diambil saat dideskripsikan
+          kind: 'inline-svg',
+          alt: altOf(el) || title,
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        });
+        continue;
+      }
+
+      if (el.closest('svg')) continue; // elemen di dalam SVG bukan gambar latar
+      const style = getComputedStyle(el);
+      const src = backgroundUrl(style);
+      if (!src || isDecorative(el)) continue;
       const rect = el.getBoundingClientRect();
       if (!isVisible(el, rect)) continue;
-      const naturalW = el.naturalWidth || rect.width;
-      const naturalH = el.naturalHeight || rect.height;
-      if (Math.min(naturalW, naturalH) < MIN_NATURAL_SIDE) continue;
-      if (Math.min(rect.width, rect.height) < MIN_RENDERED_SIDE) continue;
-      if (seen.has(src)) continue;
-      seen.add(src);
-
-      found.push({
+      // Gambar latar tidak punya ukuran asli yang mudah dibaca; sprite ikon biasanya kecil.
+      if (Math.min(rect.width, rect.height) < MIN_NATURAL_SIDE) continue;
+      add({
         el,
         src,
-        alt: (el.getAttribute('alt') || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim(),
+        kind: 'background',
+        alt: (el.getAttribute('aria-label') || el.getAttribute('title') || '').trim(),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
       });
     }
     return found;
+  }
+
+  // -------------------------------------------------------------------------
+  // SVG inline → data URL. Gaya dari CSS halaman (fill, stroke, ...) disalin ke atribut
+  // style agar gambar tetap berwarna setelah dilepas dari halaman.
+  // -------------------------------------------------------------------------
+  const SVG_STYLE_PROPS = ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity', 'opacity',
+    'font-family', 'font-size', 'font-weight', 'display', 'visibility'];
+  const MAX_SVG_NODES = 3000;
+
+  function inlineSvgToDataUrl(svg) {
+    const clone = svg.cloneNode(true);
+    const originals = [svg, ...svg.querySelectorAll('*')];
+    const copies = [clone, ...clone.querySelectorAll('*')];
+    if (originals.length <= MAX_SVG_NODES) {
+      originals.forEach((orig, i) => {
+        const computed = getComputedStyle(orig);
+        const css = SVG_STYLE_PROPS.map((p) => `${p}:${computed.getPropertyValue(p)}`).join(';');
+        copies[i].setAttribute('style', `${copies[i].getAttribute('style') || ''};${css}`);
+      });
+    }
+    const rect = svg.getBoundingClientRect();
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(Math.round(rect.width)));
+    clone.setAttribute('height', String(Math.round(rect.height)));
+    // <use href="#id"> yang menunjuk sprite di luar elemen ini: salin definisinya ke dalam klon.
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    clone.insertBefore(defs, clone.firstChild); // dipasang dulu agar sprite yang sama tidak disalin dua kali
+    for (const use of clone.querySelectorAll('use')) {
+      const ref = use.getAttribute('href') || use.getAttribute('xlink:href') || '';
+      if (!ref.startsWith('#') || clone.querySelector(`#${CSS.escape(ref.slice(1))}`)) continue;
+      const target = document.getElementById(ref.slice(1));
+      if (target) defs.appendChild(target.cloneNode(true));
+    }
+    if (!defs.childNodes.length) defs.remove();
+    const xml = new XMLSerializer().serializeToString(clone);
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
   }
 
   function markImages() {
@@ -224,9 +322,12 @@
     btn.hidden = false;
   }
 
+  const KIND_LABEL = { svg: 'Gambar vektor', 'inline-svg': 'Gambar vektor', background: 'Gambar latar' };
+
   function describeItemLabel(item, i) {
     const alt = item.alt ? `Teks alternatif: “${item.alt}”` : 'Tanpa teks alternatif';
-    return { title: `Gambar ${i + 1} dari ${state.images.length}`, meta: `${alt} · ${item.width}×${item.height} px` };
+    const kind = KIND_LABEL[item.kind] ? `${KIND_LABEL[item.kind]} · ` : '';
+    return { title: `Gambar ${i + 1} dari ${state.images.length}`, meta: `${kind}${alt} · ${item.width}×${item.height} px` };
   }
 
   function renderList() {
@@ -367,10 +468,12 @@
     setStatus(`Mendeskripsikan gambar ${number}… mohon tunggu.`);
 
     try {
-      const dataUrl = item.src.startsWith('blob:') ? await blobUrlToDataUrl(item.src) : null;
+      let dataUrl = null;
+      if (item.kind === 'inline-svg') dataUrl = inlineSvgToDataUrl(item.el);
+      else if (item.src.startsWith('blob:')) dataUrl = await blobUrlToDataUrl(item.src);
       const res = await chrome.runtime.sendMessage({
         type: 'NV_DESCRIBE',
-        src: item.src,
+        src: item.kind === 'inline-svg' ? null : item.src,
         dataUrl,
         pageUrl: location.href,
       });

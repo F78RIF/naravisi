@@ -141,12 +141,45 @@ async function fetchImageBlob(src) {
   return response.blob();
 }
 
-/** Ubah format tak didukung (AVIF, SVG raster, dll.) atau gambar besar menjadi JPEG. */
+// ---------------------------------------------------------------------------
+// SVG → JPEG lewat dokumen offscreen (service worker tidak bisa menggambar SVG)
+// ---------------------------------------------------------------------------
+const OFFSCREEN_URL = 'offscreen/offscreen.html';
+const MAX_SVG_BYTES = 2 * 1024 * 1024;
+let offscreenReady = null;
+
+async function ensureOffscreen() {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_URL)],
+  });
+  if (contexts.length) return;
+  offscreenReady ??= chrome.offscreen
+    .createDocument({ url: OFFSCREEN_URL, reasons: ['BLOBS'], justification: 'Mengubah gambar SVG menjadi JPEG sebelum dideskripsikan.' })
+    .finally(() => { offscreenReady = null; });
+  await offscreenReady;
+}
+
+async function looksLikeSvg(blob, type) {
+  if (type === 'image/svg+xml') return true;
+  if (type.startsWith('image/')) return false;
+  // Server yang salah mengirim jenis berkas (text/xml, text/plain, kosong).
+  const head = (await blob.slice(0, 512).text()).trimStart().toLowerCase();
+  return head.startsWith('<svg') || (head.startsWith('<?xml') && head.includes('<svg'));
+}
+
+async function rasterizeSvg(blob) {
+  if (blob.size > MAX_SVG_BYTES) throw new NvError('IMAGE_TOO_LARGE', 'Gambar vektor (SVG) terlalu besar untuk diproses.');
+  await ensureOffscreen();
+  const res = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'NV_RASTERIZE_SVG', svg: await blob.text() });
+  if (!res?.ok) throw new NvError('IMAGE_UNSUPPORTED', 'Gambar vektor (SVG) ini tidak dapat dibaca.');
+  return (await fetch(res.dataUrl)).blob();
+}
+
+/** Ubah format tak didukung (AVIF, SVG, dll.) atau gambar besar menjadi JPEG. */
 async function normalizeBlob(blob) {
-  const type = (blob.type || '').toLowerCase();
-  if (type === 'image/svg+xml') {
-    throw new NvError('IMAGE_UNSUPPORTED', 'Gambar vektor (SVG) belum didukung.');
-  }
+  const type = (blob.type || '').toLowerCase().split(';')[0].trim();
+  if (await looksLikeSvg(blob, type)) return rasterizeSvg(blob);
   if (DIRECT_TYPES.has(type) && blob.size <= REENCODE_ABOVE_BYTES) return blob;
 
   let bitmap;
