@@ -87,3 +87,18 @@ class TestCaptionService(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWarmUp(unittest.TestCase):
+    def test_runs_one_inference_and_ignores_empty_caption(self):
+        from app.main import warm_up
+
+        class EmptyCaptioner(MockCaptioner):
+            calls = 0
+
+            def caption(self, image):
+                EmptyCaptioner.calls += 1
+                return ""
+
+        warm_up(CaptionService(EmptyCaptioner(), MockTranslator()))  # tidak melempar galat
+        self.assertEqual(EmptyCaptioner.calls, 1)

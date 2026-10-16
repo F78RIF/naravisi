@@ -6,6 +6,7 @@ Jalankan:  uvicorn app.main:app --host 127.0.0.1 --port 8000
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -34,6 +35,20 @@ def build_service(settings: Settings) -> CaptionService:
     return CaptionService(captioner, translator)
 
 
+def warm_up(service: CaptionService) -> None:
+    """Satu inferensi percobaan saat start.
+
+    Inferensi pertama PyTorch di CPU jauh lebih lambat (uji M-01: 16 dtk, melewati
+    AI_TIMEOUT_MS backend 15 dtk), jadi dibayar di sini, bukan oleh pengguna pertama.
+    """
+    from PIL import Image
+
+    try:
+        service.describe(Image.new("RGB", (384, 384), (128, 128, 128)), "id")
+    except ValueError:
+        pass  # gambar polos boleh tidak menghasilkan caption; tujuannya hanya memanaskan model
+
+
 class CaptionRequest(BaseModel):
     image_base64: str = Field(..., min_length=1, description="Gambar dalam base64 atau data URL")
     lang: Literal["id", "en"] = "id"
@@ -56,6 +71,9 @@ def create_app(settings: Settings | None = None, service: CaptionService | None 
         if state["service"] is None:
             # Model dimuat sekali saat start (unduhan pertama bisa beberapa menit).
             state["service"] = await run_in_threadpool(build_service, settings)
+            started = time.perf_counter()
+            await run_in_threadpool(warm_up, state["service"])
+            log.info("Pemanasan model: %.1f dtk", time.perf_counter() - started)
             log.info("Layanan AI siap: %s", state["service"].model_name)
         yield
 

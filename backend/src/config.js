@@ -24,7 +24,7 @@ export function loadConfig(env = process.env) {
     allowedOrigins: parseAllowedOrigins(env.ALLOWED_ORIGINS),
     publicUrl: (env.PUBLIC_URL || `http://localhost:${env.PORT || 3000}`).replace(/\/+$/, ''),
     aiServiceUrl: (env.AI_SERVICE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, ''),
-    aiTimeoutMs: intFromEnv('AI_TIMEOUT_MS', 15000),
+    aiTimeoutMs: intFromEnv('AI_TIMEOUT_MS', 25000),
     maxImageBytes: intFromEnv('MAX_IMAGE_BYTES', 5 * 1024 * 1024),
 
     jwtSecret,
