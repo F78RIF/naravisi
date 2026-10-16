@@ -29,11 +29,13 @@ Human (pemilik produk) → Requirement/Design agent → Coding agent → Testing
 
 ### Uji manual model asli (diisi human)
 
+Diisi agen pada 16 Oktober 2026 (contoh per situs; 10 gambar lengkap ada di `PENGUJIAN.md` M-01). Penilaian akurasi perlu dikonfirmasi manusia.
+
 | Situs | Gambar | Deskripsi NaraVisi | Waktu (dtk) | Akurat? (Y/T) |
 |---|---|---|---|---|
-| | | | | |
-| | | | | |
-| | | | | |
+| detik.com | dua petugas PLN di depan dinding bergrafiti | Dua orang dalam rompi oranye dan topi keras berdiri di depan gedung terbakar. | 12,22 | Y |
+| kompas.com | ruang sidang penuh pengunjung | Sekelompok orang duduk di ruang sidang. | 7,11 | Y |
+| antaranews.com | tangan memegang emas batangan | Seorang pria memegang beberapa emas batangan di tangannya. | 2,97 | Y |
 
 ## Fase 0b — Finalisasi keputusan audit (2026-10-08)
 
@@ -72,3 +74,13 @@ Human (pemilik produk) → Requirement/Design agent → Coding agent → Testing
 | Review | Agent | Video demo diperiksa per frame: diperbaiki rekaman terpotong (C-09) dan urutan deskripsi tiruan yang tidak cocok dengan gambar; kartu pembuka menyatakan bahwa model AI disimulasikan. |
 | Dokumentasi | Agent | `EVALUASI.md`, `NASKAH_DEMO.md`, laporan akhir, slide presentasi. |
 | Human approval | Rifat | ☐ Jalankan M-01..M-06 dan isi `EVALUASI.md` bagian 7 · ☐ gladi dengan `NASKAH_DEMO.md`. |
+
+## Lanjutan — SVG & latar CSS, uji model asli, MySQL (2026-10-16)
+
+| Langkah | Pelaku | Keluaran |
+|---|---|---|
+| Requirement | Human | "Lanjutkan semua" (tanpa push). |
+| Coding | Agent | Pemindai mengenali SVG inline, `<img>` SVG, dan `background-image`; SVG diubah ke JPEG di dokumen offscreen (izin `offscreen`). Pemanasan model saat layanan AI start. `AI_TIMEOUT_MS` 15 → 25 dtk. |
+| Testing | Agent | Backend 85/85 · AI service 15/15 · E2E 63/63 (6 skenario baru). M-01: 10 gambar nyata dari detik/kompas/antara dengan BLIP asli → mutu 10/10 Y/Sebagian, kecepatan rata-rata 7,3 dtk (❌ RNF-04 di CPU). M-02 ✅. M-06 di MySQL Laragon ✅, akun uji dihapus. |
+| Review | Agent | Temuan C-10 (timeout permintaan pertama) dan C-11 (thumbnail detik berupa latar CSS). Pemanasan saja tidak menyelesaikan C-10; penyebab utama adalah CPU dipakai bersama browser. |
+| Human approval | Rifat | ☐ Konfirmasi penilaian akurasi M-01 · ☐ putuskan: torch CUDA / server AI terpisah untuk RNF-04 · ☐ M-03 NVDA, M-04 Midtrans Sandbox, M-05 uji pengguna · ☐ rekam video progres 30% (`NASKAH_VIDEO_30.md`). |

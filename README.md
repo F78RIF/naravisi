@@ -51,7 +51,7 @@ Rencana uji manual lengkap: `docs/PENGUJIAN.md`.
 | c | Pesan login gagal seragam; **10 gagal / 15 menit → 429** | ✅ `accountService.js`, `lib/rateLimit.js` |
 | d | Semua query SQL berparameter (`?`) | ✅ |
 | e | Batas body **32 KB**, kecuali `/api/v1/descriptions` | ✅ `app.js`, `http/routes.js` |
-| f | Format gambar dikenali dari **magic bytes**; SVG ditolak; backend **tidak pernah mengunduh URL** dari klien (anti-SSRF); file gambar **tidak disimpan** | ✅ `lib/image.js` |
+| f | Format gambar dikenali dari **magic bytes**; SVG mentah ditolak (extension lebih dulu mengubah SVG menjadi JPEG); backend **tidak pernah mengunduh URL** dari klien (anti-SSRF); file gambar **tidak disimpan** | ✅ `lib/image.js` |
 | g | Kuota **atomik** (`UPDATE … WHERE jumlah < batas`) | ✅ `quotaService.js` |
 | h | Error ke klien tanpa stack trace | ✅ `http/dispatch.js` |
 | i | Teks ke DOM memakai `textContent` (`innerHTML` hanya untuk kerangka statis panel, tanpa data) | ✅ |
@@ -121,6 +121,7 @@ Kontrol panel: **↑/↓** pilih · **Enter** deskripsikan · **Spasi** jeda/lan
 | `activeTab`, `scripting` | menyuntik panel dan penghitung gambar ke halaman |
 | `storage` | sesi login (`chrome.storage.local`, tidak bisa dibaca situs web) dan pengaturan |
 | `tts` | pemandu suara dari service worker (`chrome.tts`): tetap berbicara walau popup tertutup atau belum ada halaman yang terbuka, misalnya sambutan saat dipasang dan pengumuman jumlah gambar |
+| `offscreen` | mengubah gambar SVG menjadi JPEG di dokumen offscreen (service worker tidak punya DOM untuk menggambar SVG) |
 | `<all_urls>` (host) | mengambil byte gambar dari halaman mana pun untuk dideskripsikan |
 
 ### 4. Dashboard Admin
@@ -146,8 +147,8 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 
 ```bash
 cd backend && npm test                         # 85 tes unit + integrasi API (SQLite di memori)
-cd ai-service && python -m pytest              # 14 tes
-cd e2e && npm install && npm test              # 57 skenario: extension + backend + Admin di Chromium
+cd ai-service && python -m pytest              # 15 tes
+cd e2e && npm install && npm test              # 63 skenario: extension + backend + Admin di Chromium
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur waktu respons (RNF-05)
 ```
@@ -168,6 +169,8 @@ Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`.
 ## Batasan yang diketahui
 
 - BLIP menghasilkan kalimat pendek berbahasa Inggris lalu diterjemahkan; kualitas terjemahan kadang kaku. Model bisa diganti lewat `CAPTION_PROVIDER` tanpa mengubah API.
-- Gambar SVG dan gambar latar CSS (`background-image`) belum dideskripsikan.
+- Gambar latar CSS hanya diambil dari `url(...)` pertama; gradien dan sprite ikon kecil (< 48 px) diabaikan. SVG inline dengan efek rumit (filter, font eksternal) bisa sedikit berbeda setelah diubah ke JPEG.
+- Model AI di CPU: rata-rata 7,3 detik per gambar saat model dan browser berbagi satu laptop (uji M-01; target RNF-04 ≤ 5 detik). Di GPU atau server terpisah jauh lebih cepat.
+- Halaman dengan sangat banyak gambar (beranda antaranews.com: ±500) menghasilkan daftar yang panjang.
 - Pintasan keyboard Chrome hanya bisa diubah di `chrome://extensions/shortcuts`; halaman Pengaturan menyimpan pilihan pengguna dan menautkan ke sana.
 - HTTPS (RNF-07) berlaku saat deploy ke server; demo berjalan di localhost.

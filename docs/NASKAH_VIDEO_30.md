@@ -8,7 +8,7 @@ Naskah demo lengkap 30 RF (untuk presentasi akhir) tetap di `NASKAH_DEMO.md`.
 - [ ] Laragon → MySQL **Start**.
 - [ ] Terminal 1: `cd ai-service` → `.venv\Scripts\activate` → `uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file .env`. Tunggu log **"Layanan AI siap"**.
 - [ ] Terminal 2: `cd backend` → `npm start`. `backend/.env` harus berisi `ALLOWED_ORIGINS=chrome-extension://<ID>`.
-- [ ] **Pemanasan:** deskripsikan 1 gambar apa saja, karena permintaan pertama lebih lambat (±5 detik di CPU).
+- [ ] **Pemanasan:** layanan AI sudah memanaskan model sendiri saat start (log "Pemanasan model"), tetapi tetap deskripsikan 1 gambar apa saja sebelum merekam. Saat uji M-01, permintaan pertama di halaman berita yang berat bisa memakan 10–20 detik.
 - [ ] Tutup aplikasi berat (RAM laptop terbatas; model memakai ±2 GB).
 - [ ] Hapus extension, lalu **Load unpacked** lagi. Dengan begitu tab sambutan dan suara sambutan muncul **di rekaman**. ID extension tidak berubah selama folder sama.
 - [ ] Siapkan 1 artikel berita dengan 3–5 foto jelas (orang/hewan/pemandangan), misalnya `https://id.wikipedia.org/wiki/Kucing`.
@@ -31,8 +31,8 @@ Naskah demo lengkap 30 RF (untuk presentasi akhir) tetap di `NASKAH_DEMO.md`.
 | 9 | 3:40–3:55 | Popup → **Riwayat**. **RF-13** | "Setiap deskripsi tersimpan di riwayat dan bisa diputar ulang." |
 | 10 | 3:55–4:25 | (lihat bagian C) deskripsikan gambar ke-10 ✅, lalu gambar ke-11 → ditolak | "Uji kuota. Supaya video singkat, penghitung kuota akun demo sudah saya majukan ke 9. Gambar ke-10 masih berhasil. Gambar ke-11 ditolak dengan pesan jelas: kuota direset pukul 00.00 WITA." |
 | 11 | 4:25–4:35 | (opsional) matikan terminal ai-service → Enter pada gambar baru | "Kalau layanan AI mati, pesannya jelas dan kuota tidak berkurang." |
-| 12 | 4:35–4:50 | Terminal: `cd backend && npm test` → **85 pass**; tunjukkan `57/57 skenario lulus` dari `e2e` (rekaman/screenshot) | "Ada 85 tes backend dan 57 skenario end-to-end di Chromium. Semuanya lulus." |
-| 13 | 4:50–5:05 | Slide keamanan | "Empat poin keamanan utama. Pertama, kata sandi di-hash scrypt dan login dikunci setelah 10 kali gagal. Kedua, kuota dihitung atomik di database, jadi tidak bisa diakali. Ketiga, gambar dicek dari isi file, SVG ditolak, dan server tidak pernah mengunduh URL dari klien. Keempat, API hanya menerima origin extension, dan token tidak pernah keluar ke halaman web." |
+| 12 | 4:35–4:50 | Terminal: `cd backend && npm test` → **85 pass**; tunjukkan `63/63 skenario lulus` dari `e2e` (rekaman/screenshot) | "Ada 85 tes backend dan 63 skenario end-to-end di Chromium. Semuanya lulus." |
+| 13 | 4:50–5:05 | Slide keamanan | "Empat poin keamanan utama. Pertama, kata sandi di-hash scrypt dan login dikunci setelah 10 kali gagal. Kedua, kuota dihitung atomik di database, jadi tidak bisa diakali. Ketiga, gambar dicek dari isi file, SVG diubah dulu menjadi JPEG di extension, dan server tidak pernah mengunduh URL dari klien. Keempat, API hanya menerima origin extension, dan token tidak pernah keluar ke halaman web." |
 | 14 | 5:05–5:20 | Slide rencana | "Tahap berikutnya: upgrade FastAPI dan transformers untuk menutup temuan pip-audit, uji dengan NVDA bersama pengguna tunanetra, lalu fitur Premium dan Admin yang kodenya sudah ada." |
 
 ## C. Uji kuota cepat (langkah 10)
@@ -58,6 +58,6 @@ Lalu pilih gambar **yang belum pernah dideskripsikan** (panel menyimpan cache, s
 | Masalah | Tindakan |
 |---|---|
 | Suara sambutan tidak terdengar | Cek volume; teks yang sama tetap tampil di tab. Lanjutkan saja. |
-| Deskripsi lama (>15 detik) | RAM penuh: tutup aplikasi lain, restart ai-service, lakukan pemanasan lagi. |
+| Deskripsi lama (>10 detik) | CPU/RAM penuh: tutup aplikasi dan tab lain, tunggu halaman selesai dimuat sebelum Enter. Batas tunggu backend 25 detik. |
 | "Tidak dapat terhubung ke server" | Backend mati atau MySQL belum Start. |
 | Alt+Shift+N tidak bereaksi | `chrome://extensions/shortcuts` → pastikan pintasan NaraVisi terisi. |

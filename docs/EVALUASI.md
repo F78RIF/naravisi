@@ -1,6 +1,6 @@
 # Evaluasi NaraVisi v1.0 (Fase 7)
 
-Tanggal: 10 Oktober 2026 · Versi kode: 1.0.0 · Penyusun: Rifat Arifaldo (dibantu agen AI, lihat `AGENTIC_SDLC_LOG.md`)
+Tanggal: 10 Oktober 2026 (bagian 1, 5, 7, 8 diperbarui 16 Oktober 2026) · Versi kode: 1.0.0 · Penyusun: Rifat Arifaldo (dibantu agen AI, lihat `AGENTIC_SDLC_LOG.md`)
 
 Dokumen ini menilai hasil implementasi terhadap SRS v1.1. Angka di bawah diukur langsung dari kode; bagian yang memerlukan perangkat nyata atau peserta manusia ditandai **⏳ menunggu uji manual** dan **tidak boleh diisi dengan perkiraan**.
 
@@ -9,11 +9,11 @@ Dokumen ini menilai hasil implementasi terhadap SRS v1.1. Angka di bawah diukur 
 | Aspek | Hasil | Status |
 |---|---|---|
 | Kebutuhan fungsional | 30/30 RF terimplementasi dan memiliki tes otomatis | ✅ |
-| Kebutuhan non-fungsional | 10/13 RNF terbukti otomatis; RNF-01, RNF-04 menunggu uji manual; RNF-07 berlaku saat deploy HTTPS | ⏳ sebagian |
-| Tes otomatis | Backend 80/80 · AI service 10/10 (+4 endpoint setelah `pip install`) · E2E 48/48 | ✅ |
+| Kebutuhan non-fungsional | 10/13 RNF terbukti otomatis; RNF-05 juga terbukti di laptop (M-02); RNF-04 **belum tercapai** di CPU; RNF-01 menunggu uji pengguna; RNF-07 berlaku saat deploy HTTPS | ⏳ sebagian |
+| Tes otomatis | Backend 85/85 · AI service 15/15 · E2E 63/63 | ✅ |
 | Cakupan kode backend | 94,9% baris · 88,5% cabang · 95,7% fungsi (termasuk berkas uji); adaptor MySQL tidak tercakup karena butuh server MySQL | ✅ |
 | Waktu respons non-AI (RNF-05) | p95 ≤ 3,5 ms untuk enam endpoint baca/tulis biasa; login p95 61 ms | ✅ |
-| Kecepatan & mutu model AI (RNF-04) | Belum diukur — model BLIP tidak dapat diunduh di lingkungan agen | ⏳ M-01 |
+| Kecepatan & mutu model AI (RNF-04) | Mutu: 10/10 deskripsi Y/Sebagian. Kecepatan: rata-rata 7,3 dtk (median 4,2) di CPU, target ≤ 5 dtk | ⚠️ M-01: mutu ✅, kecepatan ❌ |
 | Uji pengguna difabel | Belum dilaksanakan | ⏳ M-05 |
 
 ## 2. Pemenuhan kebutuhan
@@ -106,7 +106,7 @@ Risiko yang diterima: penguncian login disimpan di memori (hilang saat server re
 ## 5. Keterbatasan yang diketahui
 
 1. **Mutu deskripsi**: BLIP base menghasilkan kalimat pendek berbahasa Inggris lalu diterjemahkan; untuk gambar kompleks (infografis, teks dalam gambar) deskripsi kurang informatif. Peningkatan: model lebih besar (BLIP large / Florence-2) atau API vision — cukup ganti `CAPTION_PROVIDER`.
-2. **Gambar SVG dan latar CSS** belum dideskripsikan.
+2. **Kecepatan model di CPU** (M-01): rata-rata 7,3 dtk bila model dan browser berbagi satu laptop. Perbaikan: torch versi CUDA (laptop punya RTX 3050) atau layanan AI di mesin terpisah. Gambar SVG dan latar CSS kini didukung (16 Okt); latar hanya dari `url(...)` pertama, gradien dan sprite kecil diabaikan.
 3. **Pintasan keyboard** hanya bisa diterapkan dari `chrome://extensions/shortcuts` (batasan Chrome).
 4. **Webhook Midtrans** butuh URL publik; di localhost status diperbarui lewat pengecekan langsung.
 5. **Suara** bergantung pada suara TTS yang terpasang di perangkat; Windows tanpa paket bahasa Indonesia tidak punya suara Indonesia.
@@ -124,13 +124,15 @@ Risiko yang diterima: penguncian login disimpan di memori (hilang saat server re
 
 | Uji | Target | Hasil | Lulus? |
 |---|---|---|---|
-| M-01 Model AI asli | rata-rata ≤ 5 dtk, ≥ 70% deskripsi Y/Sebagian | ⏳ | ⏳ |
-| M-02 Respons non-AI di laptop | < 2 dtk | ⏳ | ⏳ |
+| M-01 Model AI asli | rata-rata ≤ 5 dtk, ≥ 70% deskripsi Y/Sebagian | 10 gambar dari detik, kompas, antara: 6 Y, 4 Sebagian, 0 T; rata-rata 7,30 dtk, median 4,21 dtk | Mutu ✅ · kecepatan ❌ |
+| M-02 Respons non-AI di laptop | < 2 dtk | `GET /history` maks. 23 ms, `GET /me` maks. 16 ms | ✅ |
 | M-03 NVDA | 5 langkah tanpa hambatan | ⏳ | ⏳ |
 | M-04 Midtrans Sandbox | bayar QRIS → Premium | ⏳ | ⏳ |
 | M-05 Uji pengguna difabel | T1–T7 tanpa bantuan, skor ≥ 4/5 | ⏳ | ⏳ |
-| M-06 MySQL | alur T1–T7 & data tampil di DBeaver | ⏳ | ⏳ |
+| M-06 MySQL | alur T1–T7 & data tampil di DBeaver | MySQL 8.0.30: semua tabel terisi & terhapus sesuai aturan (diperiksa dengan SQL, bukan DBeaver) | ✅ |
 
 ## 8. Kesimpulan
 
 NaraVisi v1.0 memenuhi seluruh 30 kebutuhan fungsional dan sebagian besar kebutuhan non-fungsional yang dapat diverifikasi secara otomatis, dengan cakupan tes backend ±95% dan waktu respons non-AI jauh di bawah target. Kelayakan rilis bergantung pada dua hal yang belum terukur: **kecepatan dan mutu model AI di perangkat nyata (M-01)** serta **kemudahan penggunaan oleh pengguna tunanetra (M-03, M-05)**. Keduanya wajib diselesaikan sebelum demo.
+
+**Pembaruan 16 Oktober 2026.** M-01, M-02, dan M-06 sudah dijalankan oleh agen (rincian di `PENGUJIAN.md` bagian 4). Mutu deskripsi cukup (tidak ada deskripsi yang salah total), tetapi kecepatan rata-rata 7,3 dtk belum memenuhi RNF-04 selama model berjalan di CPU yang sama dengan browser. Batas waktu AI dinaikkan ke 25 dtk agar permintaan lambat tidak gagal (C-10). M-03 (NVDA), M-04 (Midtrans Sandbox), dan M-05 (uji pengguna) tetap memerlukan manusia.

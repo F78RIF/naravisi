@@ -47,7 +47,7 @@ Durasi target: **8–10 menit** demo langsung + tanya jawab. Video cadangan: `e2
 | 10 | 5:45 | **Premium** → Beli → bayar (simulasi/QRIS Sandbox) → Cek status | "Status Premium dihitung dari tabel langganan, jadi otomatis kembali Gratis saat habis." (UC-PRM-01..04) |
 | 11 | 7:00 | Pengaturan → nada & jenis suara kini aktif | "Fitur Premium terbuka tanpa login ulang." |
 | 12 | 7:30 | `localhost:3000/admin/` → Pengguna (status Premium) → Laporan → Tinjau | "Admin mengelola pengguna dan menindaklanjuti laporan." (UC-ADM, UC-LAP-02/03) |
-| 13 | 8:30 | Slide hasil pengujian & keterbatasan | "30/30 RF, 80 tes backend, 48 skenario E2E; keterbatasan: mutu BLIP, SVG." |
+| 13 | 8:30 | Slide hasil pengujian & keterbatasan | "30/30 RF, 85 tes backend, 63 skenario E2E; keterbatasan: mutu BLIP dan kecepatan model di CPU." |
 
 ## C. Persiapan tanya jawab
 
