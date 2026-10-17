@@ -1,6 +1,6 @@
 // Premium & pembayaran: RF-23..RF-26 (UC-PRM-01..04)
 import { apiFetch, refreshProfile, refreshTts } from '../shared/config.js';
-import { $, el, fmtDate, requireSession, rupiah, say, shell } from './common.js';
+import { $, el, fmtDate, requireSession, rupiah, say, sayError, shell } from './common.js';
 
 shell('premium', 'NaraVisi Premium');
 
@@ -114,7 +114,7 @@ async function load() {
   try {
     await load();
   } catch (err) {
-    say(err.message, 'error');
+    sayError(err);
   }
 })();
 

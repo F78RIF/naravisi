@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Ikon toolbar 32/48/128 px: logo di atas ubin tinta agar terlihat di toolbar terang & gelap -->
+  <rect width="128" height="128" rx="28" fill="#14213D"/>
+  <g transform="translate(8 8) scale(2.3333)">
+    <path d="M4 24C11 13 37 13 44 24C37 35 11 35 4 24Z" fill="#E8A33D"/>
+    <path d="M16 23v2M20 21v6M24 18.5v11M28 21v6M32 23v2" fill="none" stroke="#14213D" stroke-width="2.75" stroke-linecap="round"/>
+  </g>
+</svg>

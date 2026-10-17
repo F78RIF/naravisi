@@ -188,8 +188,9 @@
   function markImages() {
     state.markStyle = document.createElement('style');
     state.markStyle.textContent = `
-      [${MARK_ATTR}] { outline: 3px dashed #ffb000 !important; outline-offset: 2px !important; }
-      [${MARK_ATTR}="active"] { outline: 4px solid #0b57d0 !important; outline-offset: 3px !important; }
+      [${MARK_ATTR}] { outline: 3px dashed #E8A33D !important; outline-offset: 2px !important; }
+      [${MARK_ATTR}="active"] { outline: 4px solid #14213D !important; outline-offset: 3px !important;
+        box-shadow: 0 0 0 3px #E8A33D !important; }
     `;
     document.documentElement.appendChild(state.markStyle);
     state.images.forEach((img) => img.el.setAttribute(MARK_ATTR, ''));
@@ -204,51 +205,126 @@
   // -------------------------------------------------------------------------
   // Panel (UC-GBR-02 Melihat daftar gambar, UC-GBR-03 Memilih gambar)
   // -------------------------------------------------------------------------
+  // Salinan token warna dari shared/tokens.css (Shadow DOM tidak bisa memuat berkas extension
+  // tanpa web_accessible_resources, yang akan membuat situs bisa mendeteksi NaraVisi).
+  // e2e/run.mjs memastikan nilai di sini sama dengan tokens.css.
   const PANEL_CSS = `
     :host { all: initial; }
     [hidden] { display: none !important; }
-    * { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; }
     .panel {
+      --nv-paper: #F7F3EA;
+      --nv-surface: #FFFDF8;
+      --nv-tint: #FBEBD0;
+      --nv-ink: #14213D;
+      --nv-ink-muted: #5A5446;
+      --nv-on-ink: #F7F3EA;
+      --nv-line: #E2D9C6;
+      --nv-field: #6E6553;
+      --nv-marigold: #E8A33D;
+      --nv-focus-inner: #14213D;
+      --nv-error: #A63D2F;
+      --nv-error-bg: #F8E3DE;
+      --nv-ok: #2F6B3F;
+      --nv-ok-bg: #E2EEDF;
+      --nv-motion: 120ms;
       position: fixed; right: 16px; bottom: 16px; z-index: 2147483647;
-      width: min(380px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 32px));
+      width: min(400px, calc(100vw - 32px)); max-height: min(600px, calc(100vh - 32px));
       display: flex; flex-direction: column;
-      background: #ffffff; color: #111111; border: 2px solid #111111; border-radius: 12px;
-      box-shadow: 0 8px 28px rgba(0,0,0,.35);
-      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background: var(--nv-paper); color: var(--nv-ink);
+      border: 2px solid var(--nv-ink); border-radius: 14px;
+      box-shadow: 0 6px 20px rgba(20, 33, 61, .22);
+      font: 16px/1.5 "NaraVisi Atkinson", system-ui, -apple-system, "Segoe UI", sans-serif;
+      text-align: left;
     }
+    @media (prefers-color-scheme: dark) {
+      .panel {
+        --nv-paper: #111A2C;
+        --nv-surface: #1A2438;
+        --nv-tint: #2A3550;
+        --nv-ink: #F2ECDD;
+        --nv-ink-muted: #BDB5A3;
+        --nv-on-ink: #14213D;
+        --nv-line: #2E3A55;
+        --nv-field: #8C93A6;
+        --nv-marigold: #E8A33D;
+        --nv-focus-inner: #111A2C;
+        --nv-error: #F08A78;
+        --nv-error-bg: #3A2224;
+        --nv-ok: #7CC48F;
+        --nv-ok-bg: #1E3327;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) { .panel { --nv-motion: 0ms; } }
+
+    :focus-visible { outline: 3px solid var(--nv-marigold); outline-offset: 2px; box-shadow: 0 0 0 2px var(--nv-focus-inner); }
     header { display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      padding: 10px 14px; border-bottom: 1px solid #d0d0d0; }
-    h2 { margin: 0; font-size: 18px; }
-    h3 { margin: 0 0 4px; font-size: 15px; }
-    .status { margin: 0; padding: 8px 14px; background: #f3f6fb; font-size: 15px; }
-    .status[data-tone="error"] { background: #fdecea; color: #8a1c13; }
-    ul { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1 1 auto; min-height: 60px; }
-    ul:focus { outline: 3px solid #0b57d0; outline-offset: -3px; }
-    li { padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; }
-    li[aria-selected="true"] { background: #e8f0fe; border-color: #0b57d0; }
-    li .meta { display: block; font-size: 13px; color: #444; }
-    .result { padding: 10px 14px; border-top: 1px solid #d0d0d0; }
-    .result[hidden] { display: none; }
-    .text { margin: 0 0 8px; font-size: 16px; }
-    .text:focus { outline: 3px solid #0b57d0; outline-offset: 2px; }
+      padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--nv-line); }
+    .brand { display: flex; align-items: center; gap: 8px; }
+    .brand svg { flex: none; }
+    h2 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.25; }
+    h3 { margin: 0 0 4px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--nv-ink-muted); }
+    .status { margin: 0; padding: 10px 14px; background: var(--nv-surface); border-bottom: 1px solid var(--nv-line); font-size: 15px; }
+    .status:empty { display: none; }
+    .status[data-tone="error"] { background: var(--nv-error-bg); color: var(--nv-error); font-weight: 700; }
+    ul { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1 1 auto; min-height: 60px; display: grid; gap: 4px; align-content: start; }
+    ul:focus { outline: 3px solid var(--nv-marigold); outline-offset: -3px; box-shadow: inset 0 0 0 5px var(--nv-focus-inner); }
+    li { padding: 8px 12px; border-radius: 10px; cursor: pointer; border: 2px solid transparent; }
+    li:hover { background: var(--nv-surface); }
+    li[aria-selected="true"] { background: var(--nv-tint); border-color: var(--nv-ink); box-shadow: inset 4px 0 0 var(--nv-marigold); }
+    li .title { display: block; font-weight: 700; }
+    li .meta { display: block; font-size: 13px; color: var(--nv-ink-muted); }
+    .result { padding: 12px 14px; border-top: 1px solid var(--nv-line); background: var(--nv-surface); }
+    .text { margin: 0 0 10px; font-size: 17px; }
     .controls { display: flex; flex-wrap: wrap; gap: 6px; }
-    button { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px;
-      border: 2px solid #111; background: #fff; color: #111; cursor: pointer; }
-    button:hover { background: #f0f0f0; }
-    button:focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
-    .close { padding: 2px 10px; font-size: 18px; line-height: 1; }
-    .action { margin: 0 14px 8px; }
-    .action[hidden], .report[hidden] { display: none; }
-    .report { display: grid; gap: 6px; margin-top: 10px; }
-    .report label { font-weight: 600; font-size: 14px; }
-    .report textarea { font: inherit; font-size: 14px; padding: 6px 8px; border: 2px solid #555; border-radius: 8px; resize: vertical; }
-    .report textarea:focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
-    .help { margin: 0; padding: 8px 14px; font-size: 12.5px; color: #333; border-top: 1px solid #d0d0d0; }
-    kbd { font: 12px ui-monospace, monospace; border: 1px solid #999; border-radius: 4px; padding: 0 4px; }
+    button { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 44px; min-width: 44px; padding: 6px 14px; border-radius: 10px;
+      border: 2px solid var(--nv-ink); background: var(--nv-surface); color: var(--nv-ink);
+      font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: background-color var(--nv-motion) ease-out; }
+    button:hover { background: var(--nv-tint); }
+    button[type="submit"], .action { background: var(--nv-ink); color: var(--nv-on-ink); }
+    button[type="submit"]:hover, .action:hover { background: var(--nv-ink); text-decoration: underline; text-decoration-color: var(--nv-marigold); }
+    .close { width: 44px; height: 44px; padding: 0; border-color: transparent; background: transparent; }
+    .close svg { width: 22px; height: 22px; }
+    .action { margin: 10px 14px 4px; }
+    .report { display: grid; gap: 6px; margin-top: 12px; }
+    .report label { font-weight: 700; font-size: 15px; }
+    .report textarea { font: inherit; font-size: 15px; min-height: 88px; padding: 8px 10px; color: var(--nv-ink);
+      background: var(--nv-paper); border: 2px solid var(--nv-field); border-radius: 10px; resize: vertical; }
+    .help { margin: 0; padding: 8px 14px; font-size: 13px; line-height: 1.7; color: var(--nv-ink-muted); border-top: 1px solid var(--nv-line); }
+    kbd { font: 12px ui-monospace, Consolas, monospace; color: var(--nv-ink); border: 1px solid currentColor; border-bottom-width: 2px; border-radius: 5px; padding: 0 4px; }
     @media (forced-colors: active) {
       li[aria-selected="true"] { outline: 2px solid Highlight; }
+      :focus-visible { outline-color: Highlight; box-shadow: none; }
     }
   `;
+
+  // Logo & ikon tutup: SVG statis milik extension sendiri (tidak ada data halaman di dalamnya).
+  const LOGO_SVG = `<svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true" focusable="false">
+    <path d="M4 24C11 13 37 13 44 24C37 35 11 35 4 24Z" fill="#E8A33D" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M16 23v2M20 21v6M24 18.5v11M28 21v6M32 23v2" fill="none" stroke="#14213D" stroke-width="2.75" stroke-linecap="round"/></svg>`;
+  const CLOSE_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor"
+    stroke-width="2.25" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+
+  // Atkinson Hyperlegible: byte font diminta dari service worker lalu dipasang dengan FontFace,
+  // jadi berkas font tidak perlu dibuka untuk situs. Gagal → panel memakai huruf sistem.
+  let fontRequested = false;
+  async function loadPanelFont() {
+    if (fontRequested || !('fonts' in document)) return;
+    fontRequested = true;
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'NV_FONTS' });
+      for (const { weight, base64 } of res?.data ?? []) {
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+        const face = new FontFace('NaraVisi Atkinson', bytes, { weight: String(weight) });
+        document.fonts.add(await face.load());
+      }
+    } catch {
+      // huruf sistem tetap terbaca
+    }
+  }
 
   function buildPanel() {
     const host = document.createElement('div');
@@ -260,8 +336,8 @@
       <style>${PANEL_CSS}</style>
       <div class="panel" role="dialog" aria-modal="false" aria-labelledby="nv-title">
         <header>
-          <h2 id="nv-title">NaraVisi</h2>
-          <button type="button" class="close" data-act="close" aria-label="Tutup NaraVisi">×</button>
+          <div class="brand">${LOGO_SVG}<h2 id="nv-title">NaraVisi</h2></div>
+          <button type="button" class="close" data-act="close" aria-label="Tutup NaraVisi">${CLOSE_SVG}</button>
         </header>
         <p class="status" id="nv-status" role="status" aria-live="polite"></p>
         <button type="button" class="action" id="nv-action" hidden></button>
@@ -360,7 +436,8 @@
     state.images.forEach((img, i) => img.el.setAttribute(MARK_ATTR, i === state.index ? 'active' : ''));
     const current = state.images[state.index];
     if (scroll && current.el.isConnected) {
-      current.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      current.el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
     }
   }
 
@@ -377,6 +454,7 @@
     renderList();
     markImages();
     loadTts();
+    loadPanelFont();
 
     const n = state.images.length;
     if (n === 0) {

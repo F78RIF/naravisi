@@ -1,6 +1,6 @@
 // Profil: RF-02..RF-04 (UC-AKUN-02..04)
 import { apiFetch, logout, refreshProfile } from '../shared/config.js';
-import { $, el, fmtDate, fmtDateTime, requireSession, say, shell } from './common.js';
+import { $, el, fmtDate, fmtDateTime, requireSession, say, sayError, shell } from './common.js';
 
 shell('profil', 'Profil saya');
 
@@ -112,6 +112,6 @@ async function load() {
   try {
     await load();
   } catch (err) {
-    say(err.message, 'error');
+    sayError(err);
   }
 })();

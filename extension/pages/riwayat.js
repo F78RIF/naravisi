@@ -1,6 +1,6 @@
 // Riwayat deskripsi: RF-14..RF-16, RF-20 (UC-RWY-02..04, UC-LAP-01)
 import { apiFetch } from '../shared/config.js';
-import { $, el, fmtDateTime, requireSession, say, shell, speak, stopSpeaking } from './common.js';
+import { $, el, fmtDateTime, requireSession, say, sayError, shell, speak, stopSpeaking } from './common.js';
 
 shell('riwayat', 'Riwayat deskripsi');
 const state = { page: 1, limit: 10 };
@@ -91,7 +91,7 @@ async function load() {
   try {
     data = await apiFetch(`/history?page=${state.page}&limit=${state.limit}`);
   } catch (err) {
-    say(err.message, 'error');
+    sayError(err, load);
     return;
   }
 

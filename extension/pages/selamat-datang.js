@@ -10,7 +10,7 @@ function showMember(text) {
   $('member-title').focus();
 }
 
-mountAuthForms($('auth'), { say, onSuccess: (_user, greeting) => showMember(greeting) });
+mountAuthForms($('auth'), { say, headingLevel: 3, onSuccess: (_user, greeting) => showMember(greeting) });
 
 (async () => {
   const [cmd] = (await chrome.commands.getAll()).filter((c) => c.name === 'scan-page');

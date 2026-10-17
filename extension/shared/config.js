@@ -53,11 +53,26 @@ export class ApiError extends Error {
     this.status = status;
     this.details = details;
   }
+
+  /** Gangguan koneksi/server (bukan kesalahan isian) → layak ditawari tombol "Coba lagi". */
+  get retryable() {
+    return this.code === 'BACKEND_UNREACHABLE' || this.code === 'TIMEOUT' || this.status >= 500;
+  }
+}
+
+/** "http://localhost:3000/api/v1" → "localhost:3000" (untuk pesan yang dibacakan). */
+export function apiHost(apiBase) {
+  try {
+    return new URL(apiBase).host;
+  } catch {
+    return apiBase;
+  }
 }
 
 /** Memanggil REST API NaraVisi dengan token sesi. */
 export async function apiFetch(path, { method = 'GET', body, timeoutMs = 15000, auth = true } = {}) {
   const { apiBase } = await getSettings();
+  const host = apiHost(apiBase);
   const headers = { accept: 'application/json' };
   if (body !== undefined) headers['content-type'] = 'application/json';
   if (auth) {
@@ -75,11 +90,12 @@ export async function apiFetch(path, { method = 'GET', body, timeoutMs = 15000, 
     });
   } catch (err) {
     if (err?.name === 'TimeoutError') {
-      throw new ApiError('TIMEOUT', 'Server terlalu lama merespons. Coba lagi.', 0);
+      throw new ApiError('TIMEOUT', `Server NaraVisi (${host}) terlalu lama menjawab. Coba lagi.`, 0);
     }
+    // Tidak ada jawaban sama sekali: server belum dijalankan, port salah, atau jaringan putus.
     throw new ApiError(
       'BACKEND_UNREACHABLE',
-      'Tidak dapat terhubung ke server NaraVisi. Periksa koneksi internet atau pastikan server berjalan.',
+      `Tidak dapat terhubung ke server NaraVisi: ${host} tidak menjawab. Pastikan server sudah berjalan, lalu coba lagi.`,
       0,
     );
   }
@@ -87,9 +103,18 @@ export async function apiFetch(path, { method = 'GET', body, timeoutMs = 15000, 
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     if (res.status === 401 && auth) await clearSession();
+    const code = data?.error?.code;
+    // Server menjawab tetapi gagal tanpa pesan yang berarti (galat internal, basis data mati, proxy, bukan JSON).
+    if (res.status >= 500 && (!code || code === 'INTERNAL')) {
+      throw new ApiError(
+        code || 'SERVER_ERROR',
+        `Server NaraVisi menjawab, tetapi sedang bermasalah (kode ${res.status}). Coba lagi sebentar lagi; bila tetap gagal, periksa log server.`,
+        res.status,
+      );
+    }
     throw new ApiError(
-      data?.error?.code || 'SERVER_ERROR',
-      data?.error?.message || 'Server gagal memproses permintaan.',
+      code || 'SERVER_ERROR',
+      data?.error?.message || `Server NaraVisi menjawab, tetapi permintaan gagal (kode ${res.status}).`,
       res.status,
       data?.error?.details,
     );

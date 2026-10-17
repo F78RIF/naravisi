@@ -1,0 +1,235 @@
+/* Komponen bersama NaraVisi v2 (popup & halaman extension). Warna/ukuran dari tokens.css. */
+
+[hidden] { display: none !important; } /* atribut hidden selalu menang atas aturan display lain */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--nv-font);
+  font-size: var(--nv-text);
+  line-height: var(--nv-leading);
+  color: var(--nv-ink);
+  background: var(--nv-paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { line-height: 1.25; margin: 0; }
+p { margin: 0; }
+a { color: var(--nv-ink); text-decoration-thickness: 2px; text-underline-offset: 3px; text-decoration-color: var(--nv-marigold); }
+a:hover { text-decoration-color: currentColor; }
+
+/* Fokus: outline marigold 3px + cincin tinta di dalamnya. Tidak pernah dihapus. */
+:focus-visible {
+  outline: 3px solid var(--nv-marigold);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--nv-focus-inner);
+}
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; box-shadow: none; }
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+kbd {
+  font-family: var(--nv-mono);
+  font-size: 0.8125em;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* Label kecil gaya editorial ("KUOTA HARI INI") */
+.eyebrow {
+  font-size: var(--nv-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nv-ink-muted);
+}
+
+/* ---------------------------------------------------------------- Merek */
+.brand { display: flex; align-items: center; gap: var(--nv-space-2); color: var(--nv-ink); text-decoration: none; }
+.brand svg { flex: none; }
+.brand-name { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---------------------------------------------------------------- Tombol */
+button, input, select, textarea { font: inherit; color: inherit; }
+
+button, .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nv-space-2);
+  min-height: var(--nv-target);
+  padding: 8px 16px;
+  border: var(--nv-border) solid var(--nv-ink);
+  border-radius: var(--nv-radius);
+  background: var(--nv-surface);
+  color: var(--nv-ink);
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--nv-motion) ease-out, color var(--nv-motion) ease-out;
+}
+button:hover, .btn:hover { background: var(--nv-tint); }
+button svg, .btn svg { flex: none; } /* ikon tidak ikut menyusut di dalam tombol flex */
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+button.primary, .btn.primary {
+  background: var(--nv-ink);
+  border-color: var(--nv-ink);
+  color: var(--nv-on-ink);
+}
+button.primary:hover, .btn.primary:hover { background: var(--nv-ink); text-decoration: underline; text-decoration-color: var(--nv-marigold); text-underline-offset: 4px; }
+
+button.danger {
+  background: var(--nv-error);
+  border-color: var(--nv-error);
+  color: var(--nv-on-ink);
+}
+button.danger:hover { background: var(--nv-error); text-decoration: underline; }
+
+button.link {
+  min-height: var(--nv-target);
+  padding: 8px 0;
+  border: none;
+  background: none;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--nv-marigold);
+}
+button.link:hover { background: none; text-decoration-color: currentColor; }
+
+/* ---------------------------------------------------------------- Kolom isian */
+label { font-weight: 700; }
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea {
+  width: 100%;
+  min-height: var(--nv-control-h);
+  padding: 10px 12px;
+  border: var(--nv-border) solid var(--nv-field);
+  border-radius: var(--nv-radius);
+  background: var(--nv-surface);
+  color: var(--nv-ink);
+}
+textarea { min-height: 96px; resize: vertical; }
+input::placeholder { color: var(--nv-ink-muted); }
+input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--nv-error); }
+input[type="range"] { width: 100%; accent-color: var(--nv-ink); min-height: var(--nv-target); }
+input[type="checkbox"] { width: 24px; height: 24px; margin: 0; flex: none; accent-color: var(--nv-ink); }
+
+.field { display: grid; gap: 6px; }
+.field-error {
+  display: flex; gap: 6px; align-items: baseline;
+  color: var(--nv-error);
+  font-size: var(--nv-small);
+  font-weight: 700;
+}
+.field-error::before { content: "!" / ""; /* ikon visual saja, tidak dibacakan */ flex: none; display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%; background: var(--nv-error); color: var(--nv-on-ink); font-size: 0.8em; }
+.field-hint { font-size: var(--nv-small); color: var(--nv-ink-muted); }
+
+/* Kolom kata sandi dengan tombol ikon mata di dalamnya (sisi kanan) */
+.input-wrap { position: relative; }
+.input-wrap input:not([type="checkbox"]) { padding-right: 56px; }
+.input-wrap .reveal {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: var(--nv-target);
+  height: var(--nv-target);
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nv-ink-muted);
+}
+.input-wrap .reveal:hover { color: var(--nv-ink); background: var(--nv-tint); }
+.input-wrap .reveal[aria-pressed="true"] { color: var(--nv-ink); }
+.input-wrap .reveal svg { width: 24px; height: 24px; }
+
+/* ---------------------------------------------------------------- Segmented control (tablist) */
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: var(--nv-border) solid var(--nv-ink);
+  border-radius: calc(var(--nv-radius) + 4px);
+  background: var(--nv-surface);
+}
+.segmented [role="tab"] {
+  min-height: var(--nv-target);
+  border: none;
+  border-radius: var(--nv-radius);
+  background: transparent;
+  font-weight: 400;
+}
+.segmented [role="tab"]:hover { background: var(--nv-tint); }
+.segmented [role="tab"][aria-selected="true"] {
+  background: var(--nv-ink);
+  color: var(--nv-on-ink);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- Pesan status (aria-live) + Coba lagi */
+.message-row { display: grid; gap: var(--nv-space-2); }
+.message-row:has(> .message:empty):has(> .retry[hidden]) { display: none; }
+.message:empty { display: none; }
+.message {
+  padding: 10px 12px 10px 14px;
+  border-left: 4px solid var(--nv-ink);
+  border-radius: 0 var(--nv-radius) var(--nv-radius) 0;
+  background: var(--nv-surface);
+}
+.message[data-tone="error"] { border-left-color: var(--nv-error); background: var(--nv-error-bg); }
+.message[data-tone="ok"] { border-left-color: var(--nv-ok); background: var(--nv-ok-bg); }
+.retry { justify-self: start; }
+
+/* ---------------------------------------------------------------- Status server (titik + teks) */
+.server-status { display: flex; align-items: center; gap: var(--nv-space-2); font-size: var(--nv-small); color: var(--nv-ink-muted); }
+.dot {
+  flex: none;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--nv-field);
+  background: transparent;
+}
+.dot[data-state="ok"] { background: var(--nv-ok); border-color: var(--nv-ok); }
+.dot[data-state="warn"] { background: var(--nv-marigold); border-color: var(--nv-ink); }
+.dot[data-state="off"] { background: var(--nv-error); border-color: var(--nv-error); }
+
+/* ---------------------------------------------------------------- Daftar menu berikon */
+.menu-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--nv-line); }
+.menu-list li { border-bottom: 1px solid var(--nv-line); }
+.menu-list button, .menu-list a {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  gap: var(--nv-space-3);
+  min-height: 52px;
+  padding: 8px 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-weight: 700;
+  text-align: left;
+}
+.menu-list button:hover, .menu-list a:hover { background: var(--nv-tint); }
+.menu-list .icon { flex: none; width: 24px; height: 24px; color: var(--nv-ink-muted); }
+.menu-list .label { flex: 1 1 auto; }
+.menu-list .chevron { flex: none; width: 20px; height: 20px; color: var(--nv-ink-muted); }
+
+/* Ikon SVG inline mengikuti warna teks */
+svg.icon, .icon svg { stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

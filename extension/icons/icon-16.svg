@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="geometricPrecision">
+  <!-- Versi 16 px: tiga batang gelombang selebar 2 px, sejajar piksel -->
+  <rect width="16" height="16" rx="3.5" fill="#14213D"/>
+  <path d="M1 8C3.5 3.6 12.5 3.6 15 8C12.5 12.4 3.5 12.4 1 8Z" fill="#E8A33D"/>
+  <path d="M4 7h2v2H4zM7 5.75h2v4.5H7zM10 7h2v2h-2z" fill="#14213D"/>
+</svg>

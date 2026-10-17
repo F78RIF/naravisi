@@ -147,7 +147,7 @@ try {
   await tab.goto(ext('popup/popup.html'));
   await caption('1. Daftar akun dari popup NaraVisi', 'UC-AKUN-01 · akun baru otomatis berstatus Gratis (10 deskripsi/hari)');
   await pause(1500);
-  await tab.getByRole('button', { name: 'Belum punya akun? Daftar' }).click();
+  await tab.getByRole('tab', { name: 'Daftar' }).click();
   await tab.getByLabel('Nama').pressSequentially('Rifat', { delay: 70 });
   await tab.getByLabel('Email').last().pressSequentially('rifat@contoh.id', { delay: 50 });
   await tab.getByLabel('Kata sandi (minimal 8 karakter)').pressSequentially('sandiku123', { delay: 50 });

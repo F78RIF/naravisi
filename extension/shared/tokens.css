@@ -1,0 +1,92 @@
+/* Token visual NaraVisi v2 — "buku cerita yang rapi": kertas hangat, tinta biru tua, sorotan marigold.
+ * Satu sumber warna & huruf untuk popup, halaman extension, dan panel di halaman web
+ * (content/content.js menyalin nilai warnanya karena Shadow DOM tidak bisa memuat berkas ini;
+ * uji e2e memastikan keduanya tetap sama).
+ *
+ * Kontras (WCAG 2.2) — diuji otomatis di e2e/run.mjs:
+ *   teks tinta di atas kertas 14.42:1 · teks redup 6.79:1 · error 5.69:1 · sukses 5.75:1
+ *   tombol utama (kertas di atas tinta) 14.42:1 · garis kolom 5.20:1
+ *   fokus: marigold di atas kertas hanya 1.95:1, karena itu outline marigold selalu
+ *   didampingi cincin tinta di dalamnya (tinta/kertas 14.42:1, marigold/tinta 7.41:1).
+ */
+
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  src: url("../fonts/atkinson-hyperlegible-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  src: url("../fonts/atkinson-hyperlegible-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Warna — mode terang */
+  --nv-paper: #F7F3EA;        /* latar halaman */
+  --nv-surface: #FFFDF8;      /* kartu & kolom */
+  --nv-tint: #FBEBD0;         /* sorotan lembut (marigold pudar) */
+  --nv-ink: #14213D;          /* teks utama, tombol utama */
+  --nv-ink-muted: #5A5446;    /* teks pendukung */
+  --nv-on-ink: #F7F3EA;       /* teks di atas tombol tinta */
+  --nv-line: #E2D9C6;         /* garis dekoratif (bukan batas kontrol) */
+  --nv-field: #6E6553;        /* batas kolom & kontrol */
+  --nv-marigold: #E8A33D;     /* fokus & sorotan */
+  --nv-focus-inner: #14213D;  /* cincin dalam fokus agar kontras ≥ 3:1 di atas kertas */
+  --nv-error: #A63D2F;        /* merah bata */
+  --nv-error-bg: #F8E3DE;
+  --nv-ok: #2F6B3F;           /* hijau daun */
+  --nv-ok-bg: #E2EEDF;
+
+  /* Huruf & ukuran */
+  --nv-font: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --nv-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --nv-text: 1rem;            /* 16px */
+  --nv-leading: 1.5;
+  --nv-small: 0.875rem;
+  --nv-eyebrow: 0.8125rem;
+
+  /* Bentuk */
+  --nv-radius: 10px;
+  --nv-radius-lg: 14px;
+  --nv-border: 2px;
+  --nv-control-h: 48px;
+  --nv-target: 44px;
+  --nv-space-1: 4px;
+  --nv-space-2: 8px;
+  --nv-space-3: 12px;
+  --nv-space-4: 16px;
+  --nv-space-5: 24px;
+  --nv-space-6: 32px;
+  --nv-motion: 120ms;         /* maks. 150 ms; 0 bila prefers-reduced-motion */
+}
+
+/* Mode gelap — "tinta di malam hari": latar biru tinta, teks kertas */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --nv-paper: #111A2C;
+    --nv-surface: #1A2438;
+    --nv-tint: #2A3550;
+    --nv-ink: #F2ECDD;
+    --nv-ink-muted: #BDB5A3;
+    --nv-on-ink: #14213D;
+    --nv-line: #2E3A55;
+    --nv-field: #8C93A6;
+    --nv-marigold: #E8A33D;
+    --nv-focus-inner: #111A2C;
+    --nv-error: #F08A78;
+    --nv-error-bg: #3A2224;
+    --nv-ok: #7CC48F;
+    --nv-ok-bg: #1E3327;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --nv-motion: 0ms; }
+}

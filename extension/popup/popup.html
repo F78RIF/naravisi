@@ -3,48 +3,70 @@
 <head>
   <meta charset="utf-8">
   <title>NaraVisi</title>
+  <link rel="stylesheet" href="../shared/tokens.css">
+  <link rel="stylesheet" href="../shared/components.css">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <main>
-    <h1>NaraVisi</h1>
+  <header class="masthead">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 48 48" width="36" height="36" aria-hidden="true" focusable="false">
+        <path d="M4 24C11 13 37 13 44 24C37 35 11 35 4 24Z" fill="#E8A33D" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M16 23v2M20 21v6M24 18.5v11M28 21v6M32 23v2" fill="none" stroke="#14213D" stroke-width="2.75" stroke-linecap="round"/>
+      </svg>
+      <h1 class="brand-name">NaraVisi</h1>
+    </div>
+    <p class="tagline">Gambar yang diceritakan</p>
+  </header>
 
-    <!-- Belum masuk: UC-AKUN-05 Login & UC-AKUN-01 Registrasi -->
-    <section id="guest" hidden aria-labelledby="guest-title">
-      <p class="lead" id="guest-title">Masuk untuk mulai mendeskripsikan gambar.</p>
-      <!-- Form Masuk & Daftar dibangun oleh shared/auth-forms.js (dipakai juga di tab sambutan) -->
+  <main>
+    <!-- Belum masuk: UC-AKUN-05 Login & UC-AKUN-01 Registrasi.
+         Form Masuk & Daftar dibangun oleh shared/auth-forms.js (dipakai juga di tab sambutan). -->
+    <section id="guest" class="guest" hidden aria-label="Masuk atau daftar">
       <div id="auth"></div>
     </section>
 
     <!-- Sudah masuk -->
-    <section id="member" hidden aria-labelledby="hello">
-      <p class="lead" id="hello"></p>
-      <p id="plan" class="plan"></p>
+    <section id="member" class="member" hidden aria-labelledby="hello">
+      <h2 id="hello" class="greeting"></h2>
 
-      <button id="scan" type="button" class="primary">Pindai gambar di halaman ini</button>
-      <p class="hint">Pintasan: <kbd id="shortcut">Alt+Shift+N</kbd></p>
+      <section class="quota" aria-labelledby="quota-title">
+        <p class="eyebrow" id="quota-title">Kuota hari ini</p>
+        <p class="quota-figure" id="quota"></p>
+        <div class="quota-bar" id="quota-bar" aria-hidden="true"><span></span></div>
+        <p class="plan" id="plan"></p>
+      </section>
 
-      <nav aria-label="Menu NaraVisi" class="menu">
-        <button type="button" data-page="riwayat">Riwayat</button>
-        <button type="button" data-page="pengaturan">Pengaturan</button>
-        <button type="button" data-page="premium" id="premium-btn">Premium</button>
-        <button type="button" data-page="profil">Profil</button>
+      <button id="scan" type="button" class="primary scan" aria-keyshortcuts="Alt+Shift+N">
+        <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8.5V5.5A1.5 1.5 0 0 1 5.5 4h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/>
+          <path d="M9 11v2M12 9v6M15 11v2"/>
+        </svg>
+        <span class="scan-label">Pindai gambar di halaman ini</span>
+        <kbd id="shortcut">Alt+Shift+N</kbd>
+      </button>
+
+      <nav aria-label="Menu NaraVisi">
+        <ul class="menu-list">
+          <li><button type="button" data-page="riwayat" data-icon="history"><span class="label">Riwayat</span></button></li>
+          <li><button type="button" data-page="pengaturan" data-icon="settings"><span class="label">Pengaturan</span></button></li>
+          <li><button type="button" data-page="premium" data-icon="bookmark" id="premium-btn"><span class="label">Premium</span></button></li>
+          <li><button type="button" data-page="profil" data-icon="person"><span class="label">Profil</span></button></li>
+        </ul>
       </nav>
       <button type="button" id="logout" class="link">Keluar</button>
     </section>
 
-    <p id="message" role="status" aria-live="polite"></p>
-
-    <details>
-      <summary>Status server</summary>
-      <p id="health">Memeriksa…</p>
-      <form id="api-form">
-        <label for="api-base">Alamat API</label>
-        <input id="api-base" type="url" required spellcheck="false">
-        <button type="submit">Simpan</button>
-      </form>
-    </details>
+    <div class="message-row">
+      <p id="message" class="message" role="status" aria-live="polite" tabindex="-1"></p>
+      <button type="button" id="retry" class="retry" hidden>Coba lagi</button>
+    </div>
   </main>
+
+  <footer class="statusbar">
+    <p class="server-status"><span class="dot" id="health-dot" data-state="checking"></span><span id="health">Memeriksa server…</span></p>
+    <button type="button" class="link" id="server-settings" data-page="pengaturan" hidden>Atur server</button>
+  </footer>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

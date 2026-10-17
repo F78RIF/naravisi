@@ -4,14 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Selamat datang — NaraVisi</title>
+  <link rel="stylesheet" href="../shared/tokens.css">
+  <link rel="stylesheet" href="../shared/components.css">
   <link rel="stylesheet" href="pages.css">
 </head>
 <body>
   <!-- Tab sambutan: dibuka saat extension dipasang, saat Alt+Shift+N ditekan sebelum masuk, dan saat sesi berakhir. -->
   <main id="main">
+    <div class="welcome-brand brand">
+      <svg class="logo" viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" focusable="false">
+        <path d="M4 24C11 13 37 13 44 24C37 35 11 35 4 24Z" fill="#E8A33D" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M16 23v2M20 21v6M24 18.5v11M28 21v6M32 23v2" fill="none" stroke="#14213D" stroke-width="2.75" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">NaraVisi</span>
+    </div>
     <h1 id="title" tabindex="-1">Selamat datang di NaraVisi</h1>
     <p>NaraVisi mendeskripsikan gambar di halaman web dengan AI lalu membacakannya dengan suara.</p>
-    <p id="msg" role="status" aria-live="polite"></p>
+    <p id="msg" class="message" role="status" aria-live="polite" tabindex="-1"></p>
 
     <section id="guest" class="card auth" aria-labelledby="guest-title">
       <h2 id="guest-title">Masuk atau daftar</h2>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Versi 32 px: lima batang gelombang selebar 2 px, sejajar piksel -->
+  <rect width="32" height="32" rx="7" fill="#14213D"/>
+  <path d="M2 16C7 7.5 25 7.5 30 16C25 24.5 7 24.5 2 16Z" fill="#E8A33D"/>
+  <path d="M7 15h2v2H7zM11 13h2v6h-2zM15 11h2v10h-2zM19 13h2v6h-2zM23 15h2v2h-2z" fill="#14213D"/>
+</svg>

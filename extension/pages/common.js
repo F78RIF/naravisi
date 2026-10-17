@@ -1,5 +1,6 @@
 // Kerangka bersama halaman extension: navigasi, pesan status, sesi, dan TTS.
 import { apiFetch, getSession, getTts, startSession } from '../shared/config.js';
+import { logo } from '../shared/icons.js';
 
 export const $ = (id) => document.getElementById(id);
 
@@ -33,7 +34,7 @@ export function shell(current, title) {
     el(
       'div',
       { class: 'inner' },
-      el('p', { class: 'brand' }, 'NaraVisi'),
+      el('p', { class: 'brand' }, logo(32), el('span', { class: 'brand-name' }, 'NaraVisi')),
       el(
         'nav',
         { 'aria-label': 'Menu NaraVisi' },
@@ -49,16 +50,38 @@ export function shell(current, title) {
   );
   document.body.prepend(el('a', { class: 'skip', href: '#main' }, 'Lewati ke konten utama'), header);
   const main = $('main');
-  main.prepend(el('h1', {}, title), el('p', { id: 'msg', role: 'status', 'aria-live': 'polite' }));
+  main.prepend(el('h1', {}, title), el('p', { id: 'msg', class: 'message', role: 'status', 'aria-live': 'polite', tabindex: '-1' }));
 }
 
-export function say(message, tone = 'info') {
+let retryAction = null;
+
+/** Tombol "Coba lagi" di bawah #msg (di luar area aria-live), dibuat sekali bila dibutuhkan. */
+function retryButton() {
+  let btn = $('retry');
+  if (!btn) {
+    btn = el('button', { type: 'button', id: 'retry', class: 'retry', hidden: true, onclick: () => retryAction?.() }, 'Coba lagi');
+    $('msg').after(btn);
+  }
+  return btn;
+}
+
+/** Pesan di area aria-live. `retry` → tampilkan tombol "Coba lagi" yang menjalankan fungsi itu. */
+export function say(message, tone = 'info', { retry } = {}) {
   const box = $('msg');
+  const btn = retryButton();
+  if (!retry && document.activeElement === btn) box.focus(); // jangan biarkan fokus hilang ke <body>
+  retryAction = retry ?? null;
+  btn.hidden = !retry;
   box.dataset.tone = tone;
   box.textContent = '';
   requestAnimationFrame(() => {
     box.textContent = message;
   });
+}
+
+/** Galat dari apiFetch: server mati / galat server → tawarkan "Coba lagi" (bawaan: muat ulang halaman). */
+export function sayError(err, retry = () => location.reload()) {
+  say(err.message, 'error', err.retryable ? { retry } : undefined);
 }
 
 /** Mengembalikan sesi aktif; bila belum masuk, menampilkan formulir masuk di halaman. */
@@ -73,10 +96,8 @@ export async function requireSession() {
     { class: 'card stack', novalidate: true },
     el('h2', {}, 'Masuk ke NaraVisi'),
     el('p', { class: 'hint' }, 'Belum punya akun? Klik ikon NaraVisi di toolbar browser lalu pilih "Daftar".'),
-    el('label', { for: 'g-email' }, 'Email'),
-    email,
-    el('label', { for: 'g-pass' }, 'Kata sandi'),
-    pass,
+    el('div', { class: 'field' }, el('label', { for: 'g-email' }, 'Email'), email),
+    el('div', { class: 'field' }, el('label', { for: 'g-pass' }, 'Kata sandi'), pass),
     el('div', { class: 'row' }, el('button', { type: 'submit', class: 'primary' }, 'Masuk')),
   );
   form.addEventListener('submit', async (e) => {
@@ -90,7 +111,7 @@ export async function requireSession() {
       await startSession(res);
       location.reload();
     } catch (err) {
-      say(err.message, 'error');
+      sayError(err, () => form.requestSubmit());
     }
   });
   $('content').replaceChildren(form);

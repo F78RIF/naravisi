@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-labelledby="t">
+  <title id="t">NaraVisi</title>
+  <!-- Mata yang pupilnya gelombang suara: gambar yang diceritakan dengan suara -->
+  <path d="M4 24C11 13 37 13 44 24C37 35 11 35 4 24Z" fill="#E8A33D" stroke="#14213D" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M16 23v2M20 21v6M24 18.5v11M28 21v6M32 23v2" fill="none" stroke="#14213D" stroke-width="2.75" stroke-linecap="round"/>
+</svg>

@@ -267,6 +267,24 @@ async function backendHealth() {
   }
 }
 
+// Font panel (Atkinson Hyperlegible) dikirim sebagai byte ke content script, supaya berkas font
+// tidak perlu dijadikan web_accessible_resources (yang memungkinkan situs mendeteksi NaraVisi).
+const FONT_WEIGHTS = [400, 700];
+let fontCache = null;
+
+function fontPayload() {
+  fontCache ??= Promise.all(
+    FONT_WEIGHTS.map(async (weight) => {
+      const res = await fetch(chrome.runtime.getURL(`fonts/atkinson-hyperlegible-${weight}.woff2`));
+      return { weight, base64: bytesToBase64(new Uint8Array(await res.arrayBuffer())) };
+    }),
+  ).catch((err) => {
+    fontCache = null;
+    throw err;
+  });
+  return fontCache;
+}
+
 const PAGES = {
   riwayat: 'pages/riwayat.html',
   pengaturan: 'pages/pengaturan.html',
@@ -288,7 +306,7 @@ async function openPage(name) {
 // ---------------------------------------------------------------------------
 // Tipe pesan yang diterima, per jenis pengirim. Content script berjalan di dalam halaman web
 // (kurang tepercaya), jadi hanya boleh memakai yang dibutuhkan panel; token tidak pernah dikirim balik.
-const CONTENT_SCRIPT_TYPES = new Set(['NV_DESCRIBE', 'NV_REPORT', 'NV_GET_TTS', 'NV_OPEN_PAGE']);
+const CONTENT_SCRIPT_TYPES = new Set(['NV_DESCRIBE', 'NV_REPORT', 'NV_GET_TTS', 'NV_OPEN_PAGE', 'NV_FONTS']);
 const EXTENSION_PAGE_TYPES = new Set([
   ...CONTENT_SCRIPT_TYPES,
   'NV_TOGGLE_ACTIVE',
@@ -328,6 +346,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { ok: true, data: await getTts(), loggedIn: Boolean((await getSession())?.token) };
       case 'NV_OPEN_PAGE':
         return openPage(message.page);
+      case 'NV_FONTS':
+        return { ok: true, data: await fontPayload() };
       case 'NV_REFRESH_PROFILE':
         return { ok: true, data: await refreshProfile() };
       case 'NV_SPEAK':

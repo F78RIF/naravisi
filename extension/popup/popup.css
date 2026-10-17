@@ -1,52 +1,95 @@
-[hidden] { display: none !important; } /* atribut hidden selalu menang atas aturan display lain */
-:root { color-scheme: light; }
-* { box-sizing: border-box; }
+/* Tata letak popup NaraVisi v2. Warna & komponen: shared/tokens.css + shared/components.css. */
 body {
-  margin: 0;
-  width: 330px;
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  color: #111;
-  background: #fff;
+  width: 360px;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
 }
-main { padding: 16px; }
-h1 { margin: 0 0 6px; font-size: 20px; }
-h2 { margin: 12px 0 4px; font-size: 16px; }
-.lead { margin: 0 0 10px; color: #333; }
-.plan { margin: 0 0 12px; padding: 8px 10px; background: #f3f6fb; border-radius: 8px; font-size: 14px; }
-.plan strong { font-weight: 700; }
-form { display: grid; gap: 6px; }
-label { font-weight: 600; font-size: 14px; }
-button, input, select { font: inherit; }
-input, select { width: 100%; padding: 6px 8px; border: 2px solid #555; border-radius: 6px; }
-button {
-  padding: 8px 14px;
-  border: 2px solid #111;
-  border-radius: 8px;
-  background: #fff;
-  color: #111;
-  cursor: pointer;
-}
-button:hover { background: #f0f0f0; }
-button.primary { width: 100%; background: #0b57d0; border-color: #0b57d0; color: #fff; font-weight: 600; }
-button.link { border: none; background: none; padding: 6px 0; color: #0b57d0; text-decoration: underline; }
-button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
-  outline: 3px solid #f2a900;
-  outline-offset: 2px;
-}
-.hint { margin: 6px 0 12px; font-size: 13px; color: #444; text-align: center; }
-kbd { font: 12px ui-monospace, monospace; border: 1px solid #999; border-radius: 4px; padding: 0 4px; }
-.menu { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-#message { min-height: 1.5em; margin: 10px 0; }
-#message[data-tone="error"] { color: #8a1c13; }
-details { border-top: 1px solid #ddd; padding-top: 8px; }
-summary { cursor: pointer; font-weight: 600; }
-#health[data-ok="true"] { color: #146c2e; }
-#health[data-ok="false"] { color: #8a1c13; }
 
-/* Form Masuk/Daftar (shared/auth-forms.js): target sentuh ≥ 44×44 px, error per kolom */
-input, select, button, summary { min-height: 44px; }
-button.link { min-height: 44px; padding: 10px 0; }
-button.reveal { justify-self: start; padding: 6px 12px; font-size: 14px; }
-button.reveal[aria-pressed="true"] { background: #111; color: #fff; }
-.field-error { margin: 0; color: #8a1c13; font-size: 14px; font-weight: 600; }
-input[aria-invalid="true"] { border-color: #8a1c13; }
+/* Kepala: logo + nama, tagline kecil, garis tipis seperti kepala halaman buku */
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--nv-line);
+}
+.tagline { font-size: var(--nv-small); color: var(--nv-ink-muted); }
+
+main {
+  flex: 1 1 auto;
+  display: grid;
+  align-content: start;
+  gap: var(--nv-space-4);
+  padding: var(--nv-space-4) 20px var(--nv-space-5);
+}
+
+/* ---------------------------------------------------------------- Belum masuk */
+.guest > div { display: grid; gap: var(--nv-space-4); }
+.auth-panel { display: grid; gap: var(--nv-space-3); }
+.form-title { font-size: 1.375rem; }
+.lead { color: var(--nv-ink-muted); }
+.auth-form { display: grid; gap: var(--nv-space-3); }
+.auth-form button[type="submit"] { width: 100%; min-height: var(--nv-control-h); margin-top: var(--nv-space-1); }
+
+/* ---------------------------------------------------------------- Sudah masuk */
+.member { display: grid; gap: var(--nv-space-4); }
+.greeting { font-size: 1.375rem; }
+
+.quota {
+  display: grid;
+  gap: 2px;
+  padding: var(--nv-space-4);
+  border: 1px solid var(--nv-line);
+  border-left: 4px solid var(--nv-marigold);
+  border-radius: 0 var(--nv-radius-lg) var(--nv-radius-lg) 0;
+  background: var(--nv-surface);
+}
+.quota-figure { font-size: var(--nv-text); color: var(--nv-ink-muted); }
+.quota-figure .num {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--nv-ink);
+  font-variant-numeric: tabular-nums;
+}
+.quota-figure .of { font-size: 1.5rem; font-weight: 700; color: var(--nv-ink); }
+.quota-figure .unit { display: block; }
+.quota-bar {
+  height: 6px;
+  margin: 8px 0 6px;
+  border-radius: 3px;
+  background: var(--nv-line);
+  overflow: hidden;
+}
+.quota-bar span { display: block; height: 100%; width: var(--nv-quota, 100%); background: var(--nv-ink); }
+.plan { font-size: var(--nv-small); color: var(--nv-ink-muted); }
+.plan strong { color: var(--nv-ink); }
+
+button.scan {
+  width: 100%;
+  min-height: 64px;
+  justify-content: flex-start;
+  gap: var(--nv-space-3);
+  padding: 10px 16px;
+  font-size: 1.0625rem;
+  text-align: left;
+}
+.scan .scan-label { flex: 1 1 auto; }
+.scan kbd { border-color: var(--nv-marigold); color: var(--nv-on-ink); }
+
+#logout { justify-self: start; }
+
+/* ---------------------------------------------------------------- Kaki: status server */
+.statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--nv-space-3);
+  padding: 4px 20px;
+  border-top: 1px solid var(--nv-line);
+}
+.statusbar .link { font-size: var(--nv-small); }

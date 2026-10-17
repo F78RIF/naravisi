@@ -106,6 +106,8 @@ Log menampilkan alamat API, dashboard Admin, dan mode pembayaran.
 3. Tab **Selamat datang** terbuka otomatis dan sambutan dibacakan. Tekan **Tab** untuk masuk atau daftar (bisa juga lewat ikon NaraVisi di toolbar).
 4. Buka situs berita, tekan **Alt+Shift+N**.
 
+> **"Tidak dapat terhubung ke server NaraVisi: localhost:3000 tidak menjawab"** (titik merah "Server tidak aktif" di kaki popup) berarti backend belum berjalan: nyalakan MySQL, jalankan `npm start` di `backend/`, cek `http://localhost:3000/api/v1/health`, lalu tekan **Coba lagi**. **"Server NaraVisi menjawab, tetapi sedang bermasalah (kode 500)"** berarti backend hidup tetapi gagal; lihat log terminal backend (sering: MySQL berhenti). Alamat API diubah di **Pengaturan → Koneksi server**.
+
 Kontrol panel: **↑/↓** pilih · **Enter** deskripsikan · **Spasi** jeda/lanjut · **R** ulang · **S** berhenti · **L** laporkan · **Esc** tutup.
 
 **Pemandu suara** (bisa dipakai tanpa melihat layar):
@@ -123,6 +125,8 @@ Kontrol panel: **↑/↓** pilih · **Enter** deskripsikan · **Spasi** jeda/lan
 | `tts` | pemandu suara dari service worker (`chrome.tts`): tetap berbicara walau popup tertutup atau belum ada halaman yang terbuka, misalnya sambutan saat dipasang dan pengumuman jumlah gambar |
 | `offscreen` | mengubah gambar SVG menjadi JPEG di dokumen offscreen (service worker tidak punya DOM untuk menggambar SVG) |
 | `<all_urls>` (host) | mengambil byte gambar dari halaman mana pun untuk dideskripsikan |
+
+**Tampilan (v2):** warna & ukuran di `extension/shared/tokens.css`, komponen di `shared/components.css`. Huruf [Atkinson Hyperlegible](https://www.brailleinstitute.org/freefont/) (Braille Institute, SIL OFL 1.1) disimpan lokal di `extension/fonts/` beserta `OFL.txt`; panel di halaman web menerima font lewat service worker, jadi tidak ada `web_accessible_resources` yang bisa dipakai situs untuk mendeteksi NaraVisi. Ikon PNG dibuat ulang dari SVG dengan `cd e2e && npm run icons`.
 
 ### 4. Dashboard Admin
 

@@ -7,7 +7,7 @@
 // Jalankan: cd e2e && npm install && npm test
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -21,7 +21,8 @@ const sharp = require('sharp');
 const here = path.dirname(fileURLToPath(import.meta.url));
 const extensionDir = path.resolve(here, '../extension');
 const shotsDir = path.resolve(here, 'screenshots');
-mkdirSync(shotsDir, { recursive: true });
+const uiDir = path.join(shotsDir, 'ui-v2'); // salinan terpilih disimpan di docs/gambar/ui-v2/
+mkdirSync(uiDir, { recursive: true });
 
 const { startTestApp, ADMIN } = await import('../backend/test/support/testApp.js');
 
@@ -83,6 +84,10 @@ const vectorPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><
   <div style="width:300px;height:100px;background:linear-gradient(red, blue)"></div>
 </body></html>`;
 const site = http.createServer((req, res) => {
+  if (req.url.startsWith('/rusak/')) {
+    res.writeHead(500, { 'content-type': 'text/html' });
+    return res.end('<h1>Internal Server Error</h1>');
+  }
   if (req.url === '/infografik.html') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(vectorPage);
@@ -150,6 +155,25 @@ async function a11yAudit(page, root = 'document') {
   }, root);
 }
 
+/** Rasio kontras WCAG 2.x antara dua warna #RRGGBB. */
+function contrast(a, b) {
+  const lum = (hex) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Token warna dari shared/tokens.css: { light: {--nv-x: '#..'}, dark: {...} } */
+function readTokens() {
+  const css = readFileSync(path.join(extensionDir, 'shared/tokens.css'), 'utf8');
+  const block = (src) => Object.fromEntries([...src.matchAll(/(--nv-[\w-]+):\s*(#[0-9A-Fa-f]{6})/g)].map((m) => [m[1], m[2].toUpperCase()]));
+  const darkStart = css.indexOf('@media (prefers-color-scheme: dark)');
+  return { light: block(css.slice(0, darkStart)), dark: block(css.slice(darkStart)) };
+}
+
 let sw;
 const extPage = (p) => `chrome-extension://${new URL(sw.url()).host}/${p}`;
 const toggleOn = (url) =>
@@ -172,6 +196,49 @@ try {
   const announcements = async () => (await spoken()).filter((t) => /^Ada \d+ gambar\./.test(t));
 
   // =========================================================================
+  section('Identitas visual v2 (token, kontras, ikon)');
+
+  await step('kontras token: teks ≥ 4.5:1, komponen & fokus ≥ 3:1 (terang & gelap)', async () => {
+    const report = [];
+    for (const [mode, t] of Object.entries(readTokens())) {
+      const pairs = [
+        ['teks utama', '--nv-ink', '--nv-paper', 4.5], ['teks utama/kartu', '--nv-ink', '--nv-surface', 4.5],
+        ['teks redup', '--nv-ink-muted', '--nv-paper', 4.5], ['teks redup/kartu', '--nv-ink-muted', '--nv-surface', 4.5],
+        ['teks redup/sorotan', '--nv-ink-muted', '--nv-tint', 4.5], ['teks/sorotan', '--nv-ink', '--nv-tint', 4.5],
+        ['tombol utama', '--nv-on-ink', '--nv-ink', 4.5],
+        ['error', '--nv-error', '--nv-paper', 4.5], ['error/kotak error', '--nv-error', '--nv-error-bg', 4.5],
+        ['sukses', '--nv-ok', '--nv-paper', 4.5], ['sukses/kotak sukses', '--nv-ok', '--nv-ok-bg', 4.5],
+        ['batas kolom', '--nv-field', '--nv-surface', 3], ['batas kolom/latar', '--nv-field', '--nv-paper', 3],
+        ['fokus: cincin dalam/latar', '--nv-focus-inner', '--nv-paper', 3, mode === 'light'],
+        ['fokus: marigold/cincin dalam', '--nv-marigold', '--nv-focus-inner', 3],
+        ['fokus: marigold/latar (gelap)', '--nv-marigold', '--nv-paper', 3, mode === 'dark'],
+      ];
+      for (const [name, fg, bg, min, applies = true] of pairs) {
+        if (!applies) continue;
+        const ratio = contrast(t[fg], t[bg]);
+        report.push(`${mode.padEnd(5)} ${name.padEnd(30)} ${ratio.toFixed(2)}:1`);
+        assert.ok(ratio >= min, `${mode} ${name}: ${ratio.toFixed(2)} < ${min}`);
+      }
+    }
+    console.log(report.map((r) => `      ${r}`).join('\n'));
+  });
+
+  await step('panel content script memakai nilai token yang sama dengan tokens.css', async () => {
+    const panel = readFileSync(path.join(extensionDir, 'content/content.js'), 'utf8');
+    const { light, dark } = readTokens();
+    const darkAt = panel.indexOf('@media (prefers-color-scheme: dark)');
+    for (const [name, value] of Object.entries(light)) assert.ok(panel.slice(0, darkAt).includes(`${name}: ${value};`), `${name} terang`);
+    for (const [name, value] of Object.entries(dark)) assert.ok(panel.slice(darkAt).includes(`${name}: ${value};`), `${name} gelap`);
+  });
+
+  await step('ikon 16/32/48/128 px tersedia dan berukuran benar', async () => {
+    for (const size of [16, 32, 48, 128]) {
+      const meta = await sharp(path.join(extensionDir, `icons/icon${size}.png`)).metadata();
+      assert.deepEqual([meta.width, meta.height], [size, size]);
+    }
+  });
+
+  // =========================================================================
   section('Pemandu suara saat pertama dipasang');
   await step('tab sambutan terbuka, fokus di judul, sambutan dibacakan; Tab → kolom Email', async () => {
     const welcome =
@@ -182,6 +249,8 @@ try {
     assert.match((await spoken())[0], /^Selamat datang di NaraVisi\. Tekan Tab untuk masuk atau mendaftar\. Setelah masuk, /);
     assert.deepEqual(await a11yAudit(welcome), []);
     assert.equal(await welcome.locator('#register-form').isVisible(), false);
+    await welcome.keyboard.press('Tab'); // pilihan Masuk/Daftar (tablist) ada di atas form
+    assert.equal(await welcome.evaluate(() => document.activeElement.id), 'tab-login');
     await welcome.keyboard.press('Tab');
     assert.equal(await welcome.evaluate(() => document.activeElement.id), 'login-email');
     await welcome.close();
@@ -191,7 +260,7 @@ try {
   section('Akun lewat popup (UC-AKUN-01, UC-AKUN-05)');
   const popup = await context.newPage();
   watch(popup);
-  await popup.setViewportSize({ width: 330, height: 560 });
+  await popup.setViewportSize({ width: 360, height: 600 });
   await popup.goto(extPage('popup/popup.html'));
 
   await step('popup belum masuk menampilkan formulir login dengan fokus di email', async () => {
@@ -199,18 +268,142 @@ try {
     assert.equal(await popup.evaluate(() => document.activeElement.id), 'login-email');
   });
 
-  await step('popup belum masuk: form Daftar benar-benar tidak terlihat (isVisible)', async () => {
+  const visibleForms = () => popup.locator('form.auth-form:visible').count();
+
+  await step('popup belum masuk: hanya form Masuk yang terlihat (isVisible)', async () => {
     assert.equal(await popup.locator('#login-form').isVisible(), true);
     assert.equal(await popup.locator('#register-form').isVisible(), false);
     assert.equal(await popup.getByLabel('Nama').isVisible(), false);
+    assert.equal(await visibleForms(), 1);
+    assert.equal(await popup.getByText('Masuk untuk mulai mendeskripsikan gambar.').isVisible(), true);
   });
 
-  await step('klik "Daftar" → hanya form Daftar terlihat, fokus di Nama', async () => {
-    await popup.getByRole('button', { name: 'Belum punya akun? Daftar' }).click();
+  await step('status server di kaki popup: titik + "Server terhubung"', async () => {
+    await popup.locator('#health', { hasText: /^Server terhubung/ }).waitFor();
+    assert.equal(await popup.locator('#health-dot').getAttribute('data-state'), 'ok');
+    assert.equal(await popup.locator('details').count(), 0); // bukan lagi <details> tersembunyi
+    assert.equal(await popup.locator('#api-base').count(), 0); // alamat API pindah ke Pengaturan
+  });
+
+  await popup.screenshot({ path: path.join(uiDir, '01-popup-masuk.png'), fullPage: true });
+
+  await step('Masuk/Daftar: tablist dengan panah kiri/kanan, Home/End; hanya satu form tampil', async () => {
+    const tabLogin = popup.getByRole('tab', { name: 'Masuk' });
+    const tabRegister = popup.getByRole('tab', { name: 'Daftar' });
+    assert.equal(await popup.getByRole('tablist').count(), 1);
+    await popup.keyboard.press('Shift+Tab'); // dari kolom Email ke tab terpilih
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'tab-login');
+    assert.equal(await tabLogin.getAttribute('aria-selected'), 'true');
+    assert.equal(await tabRegister.getAttribute('tabindex'), '-1'); // roving tabindex
+
+    await popup.keyboard.press('ArrowRight');
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'tab-register');
+    assert.equal(await tabRegister.getAttribute('aria-selected'), 'true');
+    assert.equal(await tabLogin.getAttribute('aria-selected'), 'false');
     assert.equal(await popup.locator('#register-form').isVisible(), true);
     assert.equal(await popup.locator('#login-form').isVisible(), false);
-    assert.equal(await popup.evaluate(() => document.activeElement.id), 'reg-name');
+    assert.equal(await visibleForms(), 1);
+    assert.equal(await popup.getByRole('heading', { name: 'Buat akun baru' }).isVisible(), true);
+    assert.equal(await popup.getByText('Masuk untuk mulai mendeskripsikan gambar.').isVisible(), false);
+
+    await popup.keyboard.press('ArrowRight'); // berputar ke awal
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'tab-login');
+    assert.equal(await popup.locator('#login-form').isVisible(), true);
+    await popup.keyboard.press('End');
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'tab-register');
+    await popup.keyboard.press('Home');
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'tab-login');
+    assert.equal(await popup.getByRole('heading', { name: 'Masuk ke NaraVisi' }).isVisible(), true);
+    await popup.keyboard.press('Tab'); // urutan Tab: tab terpilih → kolom pertama form
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'login-email');
+    assert.equal(await visibleForms(), 1);
   });
+
+  await step('fokus keyboard: outline marigold 3px + cincin tinta (tidak pernah dihapus)', async () => {
+    const ring = await popup.evaluate(() => {
+      const s = getComputedStyle(document.activeElement);
+      return { style: s.outlineStyle, width: s.outlineWidth, color: s.outlineColor, shadow: s.boxShadow };
+    });
+    assert.deepEqual([ring.style, ring.width, ring.color], ['solid', '3px', 'rgb(232, 163, 61)']);
+    assert.match(ring.shadow, /rgb\(20, 33, 61\) 0px 0px 0px 2px/);
+  });
+
+  await step('ikon mata: type & aria-label berganti, fokus tetap di tombol, kursor tidak hilang', async () => {
+    const input = popup.locator('#login-password');
+    const eye = popup.locator('#login-form .reveal');
+    assert.equal(await eye.getAttribute('type'), 'button');
+    assert.equal(await eye.getAttribute('aria-controls'), 'login-password');
+    assert.equal(await eye.locator('svg[aria-hidden="true"]').count(), 1);
+    assert.equal(await eye.locator('svg').getAttribute('stroke'), 'currentColor');
+    const box = await eye.boundingBox();
+    assert.ok(box.width >= 44 && box.height >= 44, `area klik ${box.width}×${box.height}`);
+    const field = await input.boundingBox(); // ikon berada di dalam kolom, sisi kanan
+    assert.ok(box.x > field.x + field.width / 2 && box.x + box.width <= field.x + field.width && box.y >= field.y && box.y + box.height <= field.y + field.height);
+
+    await input.fill('rahasia123');
+    await input.evaluate((el) => el.setSelectionRange(3, 3));
+    await eye.focus();
+    await popup.keyboard.press('Enter');
+    assert.equal(await input.getAttribute('type'), 'text');
+    assert.equal(await eye.getAttribute('aria-label'), 'Sembunyikan kata sandi');
+    assert.equal(await eye.getAttribute('aria-pressed'), 'true');
+    assert.equal(await eye.locator('path').count(), 2); // mata dicoret
+    assert.equal(await popup.evaluate(() => document.activeElement.className), 'reveal');
+    assert.deepEqual(await input.evaluate((el) => [el.selectionStart, el.selectionEnd]), [3, 3]);
+
+    await eye.click();
+    assert.equal(await input.getAttribute('type'), 'password');
+    assert.equal(await eye.getAttribute('aria-label'), 'Tampilkan kata sandi');
+    assert.equal(await eye.getAttribute('aria-pressed'), 'false');
+    assert.equal(await popup.evaluate(() => document.activeElement.className), 'reveal');
+    assert.deepEqual(await input.evaluate((el) => [el.selectionStart, el.selectionEnd]), [3, 3]);
+    assert.equal(await popup.getByRole('button', { name: 'Tampilkan kata sandi', includeHidden: true }).count(), 2); // Masuk & Daftar
+  });
+
+  await step('server belum berjalan → pesan "tidak menjawab" + tombol Coba lagi', async () => {
+    await sw.evaluate(() => chrome.storage.sync.set({ apiBase: 'http://127.0.0.1:9/api/v1' }));
+    await popup.getByLabel('Email').first().fill('belum@uji.id');
+    await popup.getByRole('button', { name: 'Masuk', exact: true }).click();
+    const msg = popup.locator('#message');
+    await msg.filter({ hasText: 'Tidak dapat terhubung ke server NaraVisi: 127.0.0.1:9 tidak menjawab.' }).waitFor({ timeout: 10000 });
+    assert.equal(await msg.getAttribute('aria-live'), 'polite');
+    assert.equal(await msg.getAttribute('data-tone'), 'error');
+    assert.equal(await popup.getByRole('button', { name: 'Coba lagi' }).isVisible(), true);
+    assert.equal(await popup.locator('#message button').count(), 0); // tombol di luar area aria-live
+    assert.match((await spoken()).at(-1), /tidak menjawab/);
+    await popup.getByRole('button', { name: 'Coba lagi' }).click(); // juga memeriksa ulang status server
+    await popup.locator('#health', { hasText: 'Server tidak aktif' }).waitFor();
+    assert.equal(await popup.locator('#health-dot').getAttribute('data-state'), 'off');
+    assert.equal(await popup.getByRole('button', { name: 'Atur server' }).isVisible(), true);
+  });
+
+  await step('server menjawab tetapi galat 500 → pesan berbeda + Coba lagi', async () => {
+    await sw.evaluate((base) => chrome.storage.sync.set({ apiBase: base }), `${SITE}/rusak/api/v1`);
+    await popup.getByRole('button', { name: 'Masuk', exact: true }).click();
+    await popup.locator('#message', { hasText: 'Server NaraVisi menjawab, tetapi sedang bermasalah (kode 500).' }).waitFor({ timeout: 10000 });
+    assert.equal(await popup.getByRole('button', { name: 'Coba lagi' }).isVisible(), true);
+  });
+
+  await step('server kembali → Coba lagi mengirim ulang form; galat isian tidak menawarkan Coba lagi', async () => {
+    await sw.evaluate((base) => chrome.storage.sync.set({ apiBase: base }), API);
+    await popup.getByRole('button', { name: 'Coba lagi' }).click();
+    await popup.locator('#message', { hasText: 'Email atau kata sandi salah.' }).waitFor({ timeout: 10000 });
+    assert.equal(await popup.getByRole('button', { name: 'Coba lagi' }).isVisible(), false);
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'message'); // fokus tidak hilang ke <body>
+    await popup.locator('#health', { hasText: /^Server terhubung/ }).waitFor();
+    await popup.getByLabel('Email').first().fill('');
+    await popup.getByLabel('Kata sandi', { exact: true }).fill('');
+  });
+
+  await step('klik tab "Daftar" → hanya form Daftar terlihat, fokus tetap di tab', async () => {
+    await popup.getByRole('tab', { name: 'Daftar' }).click();
+    assert.equal(await popup.locator('#register-form').isVisible(), true);
+    assert.equal(await popup.locator('#login-form').isVisible(), false);
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'tab-register');
+  });
+  await popup.mouse.move(0, 0);
+  await popup.waitForTimeout(200); // tunggu transisi hover (120 ms) selesai
+  await popup.screenshot({ path: path.join(uiDir, '02-popup-daftar.png'), fullPage: true });
 
   await step('Daftar dengan kolom kosong → error per kolom, aria-invalid, fokus ke Nama', async () => {
     await popup.getByRole('button', { name: 'Daftar', exact: true }).click();
@@ -220,16 +413,36 @@ try {
     assert.equal(await popup.locator('#reg-name-error').innerText(), 'Nama wajib diisi.');
     assert.equal(await popup.locator('#reg-password-error').isVisible(), true);
     assert.equal(await popup.locator('#message').innerText(), 'Nama wajib diisi.');
+    // Error tampil tepat di bawah kolomnya
+    const [field, err] = await Promise.all([popup.locator('#reg-name').boundingBox(), popup.locator('#reg-name-error').boundingBox()]);
+    assert.ok(err.y >= field.y + field.height);
   });
+  await popup.screenshot({ path: path.join(uiDir, '03-popup-daftar-error.png'), fullPage: true });
 
-  await step('tombol "Tampilkan kata sandi" (aria-pressed) menampilkan & menyembunyikan sandi', async () => {
-    const btn = popup.locator('#register-form').getByRole('button', { name: 'Tampilkan kata sandi' });
+  await step('tombol ikon mata di form Daftar (aria-pressed) menampilkan & menyembunyikan sandi', async () => {
+    assert.equal(await popup.locator('#register-form').getByRole('button', { name: 'Tampilkan kata sandi' }).count(), 1);
+    const btn = popup.locator('#register-form .reveal'); // nama tombol berganti setelah ditekan
     await btn.click();
     assert.equal(await btn.getAttribute('aria-pressed'), 'true');
+    assert.equal(await btn.getAttribute('aria-label'), 'Sembunyikan kata sandi');
     assert.equal(await popup.locator('#reg-password').getAttribute('type'), 'text');
     await btn.click();
     assert.equal(await btn.getAttribute('aria-pressed'), 'false');
+    assert.equal(await btn.getAttribute('aria-label'), 'Tampilkan kata sandi');
     assert.equal(await popup.locator('#reg-password').getAttribute('type'), 'password');
+  });
+
+  await step('mode gelap: popup belum masuk', async () => {
+    const dark = await context.newPage();
+    watch(dark);
+    await dark.emulateMedia({ colorScheme: 'dark' });
+    await dark.setViewportSize({ width: 360, height: 600 });
+    await dark.goto(extPage('popup/popup.html'));
+    await dark.locator('#guest:not([hidden])').waitFor();
+    await dark.locator('#health', { hasText: /^Server terhubung/ }).waitFor();
+    assert.equal(await dark.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(17, 26, 44)');
+    await dark.screenshot({ path: path.join(uiDir, '05-popup-masuk-gelap.png'), fullPage: true });
+    await dark.close();
   });
 
   await step('registrasi dari popup → langsung masuk sebagai Gratis, kuota 10', async () => {
@@ -238,7 +451,10 @@ try {
     await popup.getByLabel('Kata sandi (minimal 8 karakter)').fill('sandiku123');
     await popup.getByRole('button', { name: 'Daftar', exact: true }).click();
     await popup.locator('#member:not([hidden])').waitFor();
-    assert.match(await popup.locator('#plan').innerText(), /Gratis · sisa kuota hari ini 10 dari 10/);
+    assert.equal(await popup.locator('#quota .num').innerText(), '10');
+    // "/" hanya visual (aria-hidden); pembaca layar mendengar "10 dari 10 gambar hari ini"
+    assert.match(await popup.locator('#quota').innerText(), /^10 \/\s+dari\s+10\s+gambar hari ini$/);
+    assert.match(await popup.locator('#plan').innerText(), /^Akun Gratis/);
     assert.match((await spoken()).at(-1), /^Berhasil masuk sebagai Rifat Uji\. Jatah gratis hari ini 10 gambar\. (Tekan .+|Klik ikon NaraVisi di toolbar) untuk memindai gambar\.$/);
   });
 
@@ -256,8 +472,50 @@ try {
     await popup.locator('#hello', { hasText: 'Halo, Rifat Uji.' }).waitFor();
   });
 
+  await step('popup sudah masuk: sapaan, kartu kuota, tombol pindai + pintasan, menu berikon', async () => {
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'scan');
+    const scan = popup.getByRole('button', { name: /^Pindai gambar di halaman ini/ });
+    assert.ok((await scan.boundingBox()).height >= 56);
+    assert.match(await popup.locator('#shortcut').innerText(), /\S/);
+    const menu = popup.getByRole('navigation', { name: 'Menu NaraVisi' });
+    assert.deepEqual(await menu.getByRole('listitem').allInnerTexts(), ['Riwayat', 'Pengaturan', 'Upgrade Premium', 'Profil']);
+    assert.equal(await menu.locator('svg[aria-hidden="true"]').count(), 8); // ikon + panah per baris
+  });
+
+  await step('Atkinson Hyperlegible dimuat dari berkas lokal (bukan internet)', async () => {
+    await popup.evaluate(() => document.fonts.ready);
+    const fonts = await popup.evaluate(() => [...document.fonts].filter((f) => f.family.includes('Atkinson') && f.status === 'loaded').map((f) => f.weight));
+    assert.ok(fonts.includes('400') && fonts.includes('700'), `font termuat: ${fonts}`);
+    assert.match(await popup.evaluate(() => getComputedStyle(document.body).fontFamily), /^"Atkinson Hyperlegible"/);
+    assert.equal(await popup.evaluate(() => getComputedStyle(document.body).fontSize), '16px');
+    assert.equal(await popup.evaluate(() => getComputedStyle(document.body).lineHeight), '24px');
+  });
+
+  await step('prefers-reduced-motion: transisi dimatikan; tanpa itu ≤ 150 ms', async () => {
+    const dur = () => popup.evaluate(() => getComputedStyle(document.getElementById('logout')).transitionDuration);
+    for (const d of (await dur()).split(',')) assert.ok(parseFloat(d) <= 0.15, d);
+    await popup.emulateMedia({ reducedMotion: 'reduce' });
+    assert.ok((await dur()).split(',').every((d) => parseFloat(d) === 0));
+    await popup.emulateMedia({ reducedMotion: 'no-preference' });
+  });
+
   await step('popup lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(popup), []));
   await popup.screenshot({ path: path.join(shotsDir, '01-popup.png') });
+  await popup.mouse.move(0, 0);
+  await popup.waitForTimeout(200); // tunggu transisi hover (120 ms) selesai
+  await popup.screenshot({ path: path.join(uiDir, '04-popup-sudah-masuk.png'), fullPage: true });
+
+  await step('mode gelap: popup sudah masuk', async () => {
+    const dark = await context.newPage();
+    watch(dark);
+    await dark.emulateMedia({ colorScheme: 'dark' });
+    await dark.setViewportSize({ width: 360, height: 600 });
+    await dark.goto(extPage('popup/popup.html'));
+    await dark.locator('#hello', { hasText: 'Halo, Rifat Uji.' }).waitFor();
+    await dark.locator('#health', { hasText: /^Server terhubung/ }).waitFor();
+    await dark.screenshot({ path: path.join(uiDir, '06-popup-sudah-masuk-gelap.png'), fullPage: true });
+    await dark.close();
+  });
   await popup.close();
 
   // =========================================================================
@@ -320,12 +578,27 @@ try {
     assert.deepEqual(problems, [], problems.join('\n'));
   });
 
+  await step('panel memakai token v2 & Atkinson Hyperlegible tanpa web_accessible_resources', async () => {
+    const look = await page.evaluate(async () => {
+      await document.fonts.ready;
+      const panel = document.querySelector('#naravisi-host').shadowRoot.querySelector('.panel');
+      const s = getComputedStyle(panel);
+      return { bg: s.backgroundColor, color: s.color, font: s.fontFamily };
+    });
+    assert.deepEqual([look.bg, look.color], ['rgb(247, 243, 234)', 'rgb(20, 33, 61)']);
+    assert.match(look.font, /^"NaraVisi Atkinson"/);
+    await page.waitForFunction(() => [...document.fonts].some((f) => f.family.includes('NaraVisi Atkinson') && f.status === 'loaded'));
+    const manifest = JSON.parse(readFileSync(path.join(extensionDir, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.web_accessible_resources, undefined);
+  });
+
   await step('UC-GBR-04..07: Enter → deskripsi tampil, dibacakan, sisa kuota diumumkan', async () => {
     await page.keyboard.press('Enter');
     await text.filter({ hasText: 'gambar PNG' }).waitFor({ timeout: 10000 });
     await status.filter({ hasText: 'Sisa kuota hari ini: 9.' }).waitFor();
     assert.equal(await host.getAttribute('data-last-spoken'), 'Deskripsi uji untuk gambar PNG.');
   });
+  await page.screenshot({ path: path.join(uiDir, '07-panel-halaman.png') });
 
   await step('UC-LAP-01 alt: laporan tanpa alasan ditolak', async () => {
     await page.keyboard.press('l');
@@ -400,6 +673,13 @@ try {
 
   await step('halaman riwayat lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(hist), []));
   await hist.screenshot({ path: path.join(shotsDir, '03-riwayat.png'), fullPage: true });
+  await hist.screenshot({ path: path.join(uiDir, '08-riwayat.png'), fullPage: true });
+
+  await step('zoom 200% (lebar efektif 550 px): riwayat tidak menggulir ke samping', async () => {
+    await hist.setViewportSize({ width: 550, height: 820 });
+    assert.ok(await hist.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
+    await hist.setViewportSize({ width: 1100, height: 820 });
+  });
   await hist.close();
 
   // =========================================================================
@@ -498,6 +778,25 @@ try {
   await step('tombol "Coba suara" membacakan contoh', async () => {
     await set.getByRole('button', { name: 'Coba suara' }).click();
     assert.match(await set.locator('body').getAttribute('data-last-spoken'), /contoh suara NaraVisi/);
+  });
+
+  await step('alamat API & status server ada di Pengaturan', async () => {
+    assert.equal(await set.getByLabel('Alamat API').inputValue(), API);
+    await set.locator('#server-text', { hasText: /^Server terhubung/ }).waitFor();
+    await set.getByLabel('Alamat API').fill('localhost:3000');
+    await set.getByRole('button', { name: 'Simpan alamat' }).click();
+    await set.locator('#msg', { hasText: 'harus diawali http://' }).waitFor();
+    assert.equal(await set.getByLabel('Alamat API').getAttribute('aria-invalid'), 'true');
+    await set.getByLabel('Alamat API').fill(`${API}/`);
+    await set.getByRole('button', { name: 'Simpan alamat' }).click();
+    await set.locator('#msg', { hasText: 'Alamat API disimpan.' }).waitFor();
+    assert.equal(await sw.evaluate(async () => (await chrome.storage.sync.get('apiBase')).apiBase), API);
+  });
+
+  await step('zoom 200% (lebar efektif 550 px): pengaturan tidak menggulir ke samping', async () => {
+    await set.setViewportSize({ width: 550, height: 820 });
+    assert.ok(await set.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
+    await set.setViewportSize({ width: 1100, height: 820 });
   });
 
   await step('halaman pengaturan lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(set), []));

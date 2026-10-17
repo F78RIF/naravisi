@@ -14,7 +14,7 @@ Durasi target: **8–10 menit** demo langsung + tanya jawab. Video cadangan: `e2
 - [ ] Terminal 1: `cd ai-service && .venv\Scripts\activate && uvicorn app.main:app --port 8000 --env-file .env` → tunggu **"Layanan AI siap"**
 - [ ] Terminal 2: `cd backend && npm start` → cek log: basis data MySQL, pembayaran `simulasi` (atau `sandbox`)
 - [ ] Buka `http://localhost:3000/api/v1/health` → `"ai": {"ok": true}`
-- [ ] Popup NaraVisi → Status server → hijau
+- [ ] Popup NaraVisi → kaki popup: titik hijau "Server terhubung"
 - [ ] **Pemanasan model**: deskripsikan 1 gambar apa saja (permintaan pertama lebih lambat)
 
 ### Data demo

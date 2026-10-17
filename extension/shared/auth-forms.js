@@ -2,6 +2,7 @@
 // Dibangun dengan DOM (tanpa innerHTML). Token hanya disimpan lewat startSession → chrome.storage.local.
 import { apiFetch, startSession } from './config.js';
 import { greetingText, speakGuide, spokenShortcut } from './guide.js';
+import { icon } from './icons.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -15,20 +16,37 @@ function h(tag, attrs = {}, ...children) {
   return node;
 }
 
-/** Kolom + teks error di bawahnya; kolom kata sandi mendapat tombol "Tampilkan kata sandi". */
+/**
+ * Tombol ikon mata di dalam kolom kata sandi. Mata terbuka = sandi tersembunyi (tekan untuk menampilkan),
+ * mata dicoret = sandi terlihat. Fokus tetap di tombol dan posisi kursor di kolom dipertahankan.
+ */
+function revealButton(input) {
+  const btn = h('button', {
+    type: 'button',
+    class: 'reveal',
+    'aria-label': 'Tampilkan kata sandi',
+    'aria-pressed': 'false',
+    'aria-controls': input.id,
+  }, icon('eye'));
+  btn.addEventListener('click', () => {
+    const show = input.type === 'password';
+    const { selectionStart, selectionEnd, selectionDirection } = input;
+    input.type = show ? 'text' : 'password';
+    // Mengganti type mengatur ulang kursor; kembalikan tanpa memindahkan fokus dari tombol.
+    if (selectionStart !== null) input.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+    btn.setAttribute('aria-pressed', String(show));
+    btn.setAttribute('aria-label', show ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi');
+    btn.replaceChildren(icon(show ? 'eyeOff' : 'eye'));
+  });
+  return btn;
+}
+
+/** Label di atas, kolom, lalu teks error di bawahnya. */
 function field(id, label, attrs, { reveal = false } = {}) {
   const input = h('input', { id, required: true, ...attrs });
   const error = h('p', { id: `${id}-error`, class: 'field-error', hidden: true });
-  let toggle = null;
-  if (reveal) {
-    toggle = h('button', { type: 'button', class: 'reveal', 'aria-pressed': 'false', 'aria-controls': id }, 'Tampilkan kata sandi');
-    toggle.addEventListener('click', () => {
-      const show = input.type === 'password';
-      input.type = show ? 'text' : 'password';
-      toggle.setAttribute('aria-pressed', String(show));
-    });
-  }
-  return { input, error, nodes: [h('label', { for: id }, label), input, error, toggle] };
+  const control = reveal ? h('div', { class: 'input-wrap' }, input, revealButton(input)) : input;
+  return { input, error, node: h('div', { class: 'field' }, h('label', { for: id }, label), control, error) };
 }
 
 function setError(f, message) {
@@ -48,10 +66,11 @@ function clearErrors(fields) {
 }
 
 /**
- * Memasang form Masuk/Daftar ke `container`.
- * `say(text, tone)` menulis ke area aria-live halaman; `onSuccess(user, greeting)` dipanggil setelah masuk.
+ * Memasang form Masuk/Daftar ke `container`: segmented control (tablist) di atas, satu form tampil.
+ * `say(text, tone, { retry })` menulis ke area aria-live halaman (retry → tombol "Coba lagi");
+ * `onSuccess(user, greeting)` dipanggil setelah masuk. `headingLevel` = tingkat judul form.
  */
-export function mountAuthForms(container, { say, onSuccess }) {
+export function mountAuthForms(container, { say, onSuccess, headingLevel = 2 }) {
   const login = {
     email: field('login-email', 'Email', { type: 'email', autocomplete: 'username' }),
     password: field('login-password', 'Kata sandi', { type: 'password', autocomplete: 'current-password' }, { reveal: true }),
@@ -61,18 +80,57 @@ export function mountAuthForms(container, { say, onSuccess }) {
     email: field('reg-email', 'Email', { type: 'email', autocomplete: 'email' }),
     kata_sandi: field('reg-password', 'Kata sandi (minimal 8 karakter)', { type: 'password', autocomplete: 'new-password', minlength: '8' }, { reveal: true }),
   };
+  const heading = `h${headingLevel}`;
 
-  const loginForm = h('form', { id: 'login-form', novalidate: true },
-    ...login.email.nodes, ...login.password.nodes,
+  const loginForm = h('form', { id: 'login-form', class: 'auth-form', novalidate: true },
+    login.email.node, login.password.node,
     h('button', { type: 'submit', class: 'primary' }, 'Masuk'));
-  const showRegisterBtn = h('button', { type: 'button', id: 'show-register', class: 'link' }, 'Belum punya akun? Daftar');
-  const showLoginBtn = h('button', { type: 'button', id: 'show-login', class: 'link' }, 'Sudah punya akun? Masuk');
-  const registerForm = h('form', { id: 'register-form', novalidate: true, hidden: true },
-    h('h2', {}, 'Daftar akun baru'),
-    ...reg.nama.nodes, ...reg.email.nodes, ...reg.kata_sandi.nodes,
-    h('button', { type: 'submit', class: 'primary' }, 'Daftar'),
-    showLoginBtn);
-  container.replaceChildren(loginForm, showRegisterBtn, registerForm);
+  const registerForm = h('form', { id: 'register-form', class: 'auth-form', novalidate: true },
+    reg.nama.node, reg.email.node, reg.kata_sandi.node,
+    h('button', { type: 'submit', class: 'primary' }, 'Daftar'));
+
+  const panels = {
+    login: h('section', { id: 'login-panel', class: 'auth-panel', role: 'tabpanel', 'aria-labelledby': 'tab-login' },
+      h(heading, { class: 'form-title' }, 'Masuk ke NaraVisi'),
+      h('p', { class: 'lead' }, 'Masuk untuk mulai mendeskripsikan gambar.'),
+      loginForm),
+    register: h('section', { id: 'register-panel', class: 'auth-panel', role: 'tabpanel', 'aria-labelledby': 'tab-register', hidden: true },
+      h(heading, { class: 'form-title' }, 'Buat akun baru'),
+      registerForm),
+  };
+  const tabs = {
+    login: h('button', { type: 'button', role: 'tab', id: 'tab-login', 'aria-controls': 'login-panel', 'aria-selected': 'true', tabindex: '0' }, 'Masuk'),
+    register: h('button', { type: 'button', role: 'tab', id: 'tab-register', 'aria-controls': 'register-panel', 'aria-selected': 'false', tabindex: '-1' }, 'Daftar'),
+  };
+  const tablist = h('div', { class: 'segmented', role: 'tablist', 'aria-label': 'Masuk atau daftar' }, tabs.login, tabs.register);
+  container.replaceChildren(tablist, panels.login, panels.register);
+
+  /** Hanya satu form yang tampil; tab terpilih punya tabindex 0 (roving tabindex). */
+  function select(key) {
+    for (const k of Object.keys(tabs)) {
+      const on = k === key;
+      tabs[k].setAttribute('aria-selected', String(on));
+      tabs[k].tabIndex = on ? 0 : -1;
+      panels[k].hidden = !on;
+    }
+  }
+
+  const order = ['login', 'register'];
+  tablist.addEventListener('keydown', (e) => {
+    const current = order.findIndex((k) => tabs[k] === e.target);
+    if (current < 0) return;
+    const next = {
+      ArrowRight: (current + 1) % order.length,
+      ArrowLeft: (current - 1 + order.length) % order.length,
+      Home: 0,
+      End: order.length - 1,
+    }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    select(order[next]);
+    tabs[order[next]].focus();
+  });
+  for (const k of order) tabs[k].addEventListener('click', () => select(k));
 
   /** Tandai kolom yang salah, fokus ke yang pertama, dan bacakan pesannya sekali. */
   function invalid(pairs) {
@@ -83,7 +141,7 @@ export function mountAuthForms(container, { say, onSuccess }) {
     speakGuide(message);
   }
 
-  async function submit(fields, path, body) {
+  async function submit(form, fields, path, body) {
     clearErrors(Object.values(fields));
     say('Memeriksa…');
     try {
@@ -97,7 +155,8 @@ export function mountAuthForms(container, { say, onSuccess }) {
     } catch (err) {
       const target = err.details?.field && fields[err.details.field];
       if (target) return invalid([[target, err.message]]);
-      say(err.message, 'error');
+      // Server mati / galat server: tawarkan "Coba lagi" yang mengirim ulang form yang sama.
+      say(err.message, 'error', err.retryable ? { retry: () => form.requestSubmit() } : undefined);
       speakGuide(err.message);
     }
   }
@@ -115,7 +174,7 @@ export function mountAuthForms(container, { say, onSuccess }) {
       return invalid(problems);
     }
     // Pemetaan field server → kolom: { email, kata_sandi }
-    submit({ email: login.email, kata_sandi: login.password }, '/auth/login', { email, kata_sandi: pass });
+    submit(loginForm, { email: login.email, kata_sandi: login.password }, '/auth/login', { email, kata_sandi: pass });
   });
 
   registerForm.addEventListener('submit', (e) => {
@@ -132,26 +191,18 @@ export function mountAuthForms(container, { say, onSuccess }) {
       clearErrors(Object.values(reg));
       return invalid(problems);
     }
-    submit(reg, '/auth/register', { nama, email, kata_sandi: pass });
+    submit(registerForm, reg, '/auth/register', { nama, email, kata_sandi: pass });
   });
 
-  function showRegister() {
-    loginForm.hidden = true;
-    showRegisterBtn.hidden = true;
-    registerForm.hidden = false;
-    reg.nama.input.focus();
-    say('Formulir pendaftaran');
+  function showRegister({ focus = true } = {}) {
+    select('register');
+    if (focus) reg.nama.input.focus();
   }
 
-  function showLogin({ announce = true, focus = true } = {}) {
-    registerForm.hidden = true;
-    loginForm.hidden = false;
-    showRegisterBtn.hidden = false;
+  function showLogin({ focus = true } = {}) {
+    select('login');
     if (focus) login.email.input.focus();
-    if (announce) say('Formulir masuk');
   }
 
-  showRegisterBtn.addEventListener('click', showRegister);
-  showLoginBtn.addEventListener('click', () => showLogin());
   return { showLogin, showRegister };
 }

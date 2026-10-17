@@ -1,6 +1,6 @@
 // Pengaturan aksesibilitas & TTS: RF-17..RF-19 (UC-AKS-01..03)
-import { apiFetch, getSettings, setTts } from '../shared/config.js';
-import { $, el, requireSession, say, shell, speak } from './common.js';
+import { apiFetch, apiHost, DEFAULTS, getSettings, setTts } from '../shared/config.js';
+import { $, el, requireSession, say, sayError, shell, speak } from './common.js';
 
 shell('pengaturan', 'Pengaturan aksesibilitas');
 
@@ -21,6 +21,61 @@ function voicesFor(lang) {
     window.speechSynthesis.onvoiceschanged = () => resolve(pick());
     setTimeout(() => resolve(pick()), 1500);
   });
+}
+
+// --- Koneksi server (dipindah dari popup): alamat API + status titik/teks
+async function renderServer() {
+  const { apiBase } = await getSettings();
+  const input = el('input', { id: 'api-base', type: 'url', value: apiBase, spellcheck: 'false', required: true, 'aria-describedby': 'api-base-hint' });
+  const dot = el('span', { class: 'dot', 'data-state': 'checking' });
+  const text = el('span', { id: 'server-text' }, 'Memeriksa server…');
+
+  async function check() {
+    const health = await chrome.runtime.sendMessage({ type: 'NV_HEALTH' });
+    const host = apiHost(health?.apiBase ?? input.value);
+    if (!health?.ok) {
+      dot.dataset.state = 'off';
+      text.textContent = `Server tidak aktif: ${host} tidak menjawab.`;
+    } else if (!health.ai?.ok) {
+      dot.dataset.state = 'warn';
+      text.textContent = `Server terhubung (${host}), tetapi layanan AI belum siap.`;
+    } else {
+      dot.dataset.state = 'ok';
+      text.textContent = `Server terhubung (${host}).`;
+    }
+  }
+
+  const form = el(
+    'form',
+    { class: 'card stack', novalidate: true, 'aria-labelledby': 'sec-server' },
+    el('h2', { id: 'sec-server' }, 'Koneksi server'),
+    el('p', { class: 'server-status', role: 'status' }, dot, text),
+    el(
+      'div',
+      { class: 'field' },
+      el('label', { for: 'api-base' }, 'Alamat API'),
+      input,
+      el('p', { class: 'hint', id: 'api-base-hint' }, `Bawaan: ${DEFAULTS.apiBase}. Ubah hanya bila server NaraVisi berjalan di alamat lain.`),
+    ),
+    el('div', { class: 'row' }, el('button', { type: 'submit' }, 'Simpan alamat'), el('button', { type: 'button', onclick: check }, 'Periksa ulang')),
+  );
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const value = input.value.trim().replace(/\/+$/, '') || DEFAULTS.apiBase;
+    if (!/^https?:\/\/[^/]+/i.test(value)) {
+      input.setAttribute('aria-invalid', 'true');
+      say('Alamat API harus diawali http:// atau https://, mis. http://localhost:3000/api/v1.', 'error');
+      input.focus();
+      return;
+    }
+    input.removeAttribute('aria-invalid');
+    input.value = value;
+    await chrome.storage.sync.set({ apiBase: value });
+    say('Alamat API disimpan.', 'ok');
+    check();
+  });
+  $('server').replaceChildren(form);
+  check();
 }
 
 function field(id, label, control, hint) {
@@ -158,12 +213,13 @@ async function render(settings) {
 }
 
 (async () => {
+  renderServer();
   if (!(await requireSession())) return;
   try {
     const settings = await apiFetch('/settings');
     await setTts(settings);
     await render(settings);
   } catch (err) {
-    say(err.message, 'error');
+    sayError(err);
   }
 })();
