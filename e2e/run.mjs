@@ -49,21 +49,51 @@ const fixtures = {
   '/img/hidden.png': { type: 'image/png', body: await solid(200, 200, '#999').png().toBuffer() },
   '/img/pantai.jpg': { type: 'image/jpeg', body: await solid(600, 300, '#20a0c0').jpeg().toBuffer() },
   '/img/sprite.png': { type: 'image/png', body: await solid(200, 200, '#555').png().toBuffer() },
-  '/img/logo.svg': {
+  // Bukan "logo.svg": nama file berisi logo/ikon/avatar/iklan kini disaring sebagai bukan konten.
+  '/img/grafik.svg': {
     type: 'image/svg+xml',
     body: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><circle cx="100" cy="100" r="90" fill="orange"/></svg>'),
   },
 };
+// Halaman artikel: filter (ikon 50×50, alt="", logo situs), urutan (<main> dulu, lalu terbesar), keterangan.
+for (const [name, w, h, rgb] of [
+  ['logo-situs.png', 200, 100, '#000080'], ['samping.jpg', 500, 300, '#808000'], ['banjir.jpg', 400, 250, '#4060a0'],
+  ['ikon.png', 50, 50, '#a04060'], ['dekor.png', 300, 200, '#c0c0c0'], ['foto-1.jpg', 300, 200, '#60a040'],
+  ['peta.jpg', 260, 200, '#a0a040'], ['foto-2.jpg', 250, 200, '#40a0a0'], ['foto-3.jpg', 220, 180, '#a06040'],
+]) {
+  const img = solid(w, h, rgb);
+  fixtures[`/img/${name}`] = name.endsWith('.png')
+    ? { type: 'image/png', body: await img.png().toBuffer() }
+    : { type: 'image/jpeg', body: await img.jpeg().toBuffer() };
+}
+const articleBody = `
+  <header><img class="site-logo" src="/img/logo-situs.png" width="200" height="100"><a id="awal" href="#">Beranda</a></header>
+  <aside><img id="samping" src="/img/samping.jpg" width="500" height="300"></aside>
+  <main><article><h1>Banjir</h1>
+    <figure><img id="banjir" src="/img/banjir.jpg" width="400" height="250"><figcaption>Banjir di Samarinda</figcaption></figure>
+    <img id="ikon" src="/img/ikon.png" width="50" height="50">
+    <img id="dekor" src="/img/dekor.png" alt="" width="300" height="200">
+    <img id="foto1" src="/img/foto-1.jpg" width="300" height="200">
+    <img id="peta" src="/img/peta.jpg" alt="Peta jalur evakuasi" width="260" height="200">
+    <img id="foto2" src="/img/foto-2.jpg" width="250" height="200">
+    <img id="foto3" src="/img/foto-3.jpg" width="220" height="180">
+  </article></main>`;
+const articlePage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Artikel Uji</title></head>
+<body style="font-family:sans-serif;padding:20px">${articleBody}</body></html>`;
+const passwordPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Masuk Bank Uji</title></head>
+<body>${articleBody}<form><label>Sandi <input type="password"></label></form></body></html>`;
+const linkPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Tautan Uji</title></head>
+<body><main><a id="awal" href="#">Mulai</a><p><a id="tautan-gambar" href="#promo"><img src="/img/foto-3.jpg" width="220" height="180"></a></p></main></body></html>`;
 const inlinePng = `data:image/png;base64,${(await solid(120, 120, '#f0c020').png().toBuffer()).toString('base64')}`;
 const testPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Berita Uji</title></head>
 <body style="font-family:sans-serif;padding:20px">
   <h1>Berita Uji</h1><a href="#" id="page-link">Tautan halaman</a>
-  <p><img src="/img/wide.png" alt="" width="400" height="250"></p>
+  <p><img src="/img/wide.png" width="400" height="250"></p>
   <p><img src="/img/photo.jpg" alt="Foto produk sepatu" width="300" height="300"></p>
   <p><img src="/img/tiny.png" alt="ikon" width="16" height="16"> ikon kecil</p>
   <p><img src="/img/hidden.png" style="display:none" alt="tersembunyi"></p>
   <p><img src="/img/modern.avif" width="320" height="200"></p>
-  <p><img src="/img/logo.svg" alt="Logo" width="200" height="200"></p>
+  <p><img src="/img/grafik.svg" alt="Grafik lingkaran" width="200" height="200"></p>
   <p><img src="${inlinePng}" width="120" height="120" alt="Gambar inline"></p>
   <p><img src="/img/photo.jpg" alt="duplikat" width="150" height="150"></p>
 </body></html>`;
@@ -79,7 +109,7 @@ const vectorPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><
   <svg aria-hidden="true" width="200" height="200"><circle cx="100" cy="100" r="90"/></svg>
   <svg width="20" height="20"><circle cx="10" cy="10" r="9"/></svg>
   <div class="hero" role="img" aria-label="Pemandangan pantai"></div>
-  <div style="width:200px;height:200px;background-image:url(/img/logo.svg)"></div>
+  <div style="width:200px;height:200px;background-image:url(/img/grafik.svg)"></div>
   <span style="display:inline-block;width:20px;height:20px;background:url(/img/sprite.png)"></span>
   <div style="width:300px;height:100px;background:linear-gradient(red, blue)"></div>
 </body></html>`;
@@ -95,6 +125,11 @@ const site = http.createServer((req, res) => {
   if (req.url === '/' || req.url === '/berita.html') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(testPage);
+  }
+  const pages = { '/artikel.html': articlePage, '/artikel-2.html': articlePage, '/artikel-3.html': articlePage, '/masuk.html': passwordPage, '/tautan.html': linkPage };
+  if (pages[req.url]) {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    return res.end(pages[req.url]);
   }
   if (req.url === '/kosong.html') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
@@ -699,34 +734,20 @@ try {
     return rgb.every((v, i) => Math.abs(v - want[i]) < 40);
   };
 
-  await step('4 gambar ditemukan: 2 SVG inline, latar foto, latar SVG (ikon dekoratif, sprite & gradien diabaikan)', async () => {
+  await step('4 gambar ditemukan, terbesar dulu: latar foto, latar SVG, 2 SVG inline (ikon dekoratif, sprite & gradien diabaikan)', async () => {
     const res = await toggleOn(`${SITE}/infografik.html`);
     assert.equal(res.count, 4);
     const items = await vec.locator('#nv-list [role="option"]').allInnerTexts();
-    assert.match(items[0], /Gambar vektor · Teks alternatif: “Grafik penjualan”/);
-    assert.match(items[1], /Gambar vektor · Teks alternatif: “Peta lokasi”/);
-    assert.match(items[2], /Gambar latar · Teks alternatif: “Pemandangan pantai” · 300×150 px/);
-    assert.match(items[3], /Gambar latar · Tanpa teks alternatif/);
+    assert.match(items[0], /Gambar latar · teks alternatif: “Pemandangan pantai” · 300×150 px/);
+    assert.match(items[1], /Gambar latar · nama file: grafik · 200×200 px/);
+    assert.match(items[2], /Gambar vektor · teks alternatif: “Grafik penjualan”/);
+    assert.match(items[3], /Gambar vektor · teks alternatif: “Peta lokasi”/);
     assert.equal(await vec.locator('[data-naravisi-mark]').count(), 4);
   });
 
-  await step('SVG inline dikirim sebagai JPEG dengan warna dari CSS halaman', async () => {
-    await vec.keyboard.press('Enter');
-    await vecText.filter({ hasText: 'gambar JPEG' }).waitFor({ timeout: 10000 });
-    assert.ok(near(await pixelAt(0.5, 0.5), '#e03030'), `warna ${await pixelAt(0.5, 0.5)}`);
-  });
-
-  await step('SVG inline dengan <use> ke sprite di luar elemennya tetap tergambar', async () => {
-    await vec.keyboard.press('ArrowDown');
-    await vec.keyboard.press('Enter');
-    await vecStatus.filter({ hasText: 'Deskripsi gambar 2 siap.' }).waitFor({ timeout: 10000 });
-    assert.ok(near(await pixelAt(0.5, 0.5), '#20a040'), `warna ${await pixelAt(0.5, 0.5)}`);
-  });
-
   await step('gambar latar foto dideskripsikan', async () => {
-    await vec.keyboard.press('ArrowDown');
     await vec.keyboard.press('Enter');
-    await vecStatus.filter({ hasText: 'Deskripsi gambar 3 siap.' }).waitFor({ timeout: 10000 });
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 1 siap.' }).waitFor({ timeout: 10000 });
     assert.ok(near(await pixelAt(0.5, 0.5), '#20a0c0'));
     const last = await backend.db.get('SELECT url_gambar FROM riwayat_deskripsi ORDER BY riwayat_id DESC LIMIT 1');
     assert.equal(last.url_gambar, `${SITE}/img/pantai.jpg`);
@@ -735,8 +756,23 @@ try {
   await step('gambar latar SVG diubah ke JPEG & dideskripsikan', async () => {
     await vec.keyboard.press('ArrowDown');
     await vec.keyboard.press('Enter');
-    await vecStatus.filter({ hasText: 'Deskripsi gambar 4 siap.' }).waitFor({ timeout: 10000 });
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 2 siap.' }).waitFor({ timeout: 10000 });
     assert.ok(near(await pixelAt(0.5, 0.5), '#ffa500')); // lingkaran oranye
+  });
+
+  await step('SVG inline dikirim sebagai JPEG dengan warna dari CSS halaman', async () => {
+    await vec.keyboard.press('ArrowDown');
+    await vec.keyboard.press('Enter');
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 3 siap.' }).waitFor({ timeout: 10000 });
+    assert.equal(await vecText.innerText(), 'Deskripsi uji untuk gambar JPEG.');
+    assert.ok(near(await pixelAt(0.5, 0.5), '#e03030'), `warna ${await pixelAt(0.5, 0.5)}`);
+  });
+
+  await step('SVG inline dengan <use> ke sprite di luar elemennya tetap tergambar', async () => {
+    await vec.keyboard.press('ArrowDown');
+    await vec.keyboard.press('Enter');
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 4 siap.' }).waitFor({ timeout: 10000 });
+    assert.ok(near(await pixelAt(0.5, 0.5), '#20a040'), `warna ${await pixelAt(0.5, 0.5)}`);
   });
 
   await step('panel di halaman infografik lolos audit aksesibilitas', async () => {
@@ -801,6 +837,223 @@ try {
 
   await step('halaman pengaturan lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(set), []));
   await set.screenshot({ path: path.join(shotsDir, '04-pengaturan.png'), fullPage: true });
+
+  // =========================================================================
+  section('Daftar gambar & mode otomatis');
+  const userId = (await backend.db.get('SELECT user_id FROM users WHERE email = ?', ['rifat@uji.id'])).user_id;
+  const setUsed = (n) => backend.db.run('UPDATE kuota_harian SET jumlah_permintaan = ? WHERE user_id = ? AND tanggal = ?', [n, userId, backend.services.subscriptions.today()]);
+  const autoLog = () => sw.evaluate(() => globalThis.naraVisi.autoLog);
+  /** Buka URL di tab aktif lalu tunggu keputusan mode otomatis untuk URL itu. */
+  async function visitAndWaitAuto(tab, url) {
+    const since = Date.now();
+    await tab.bringToFront();
+    await tab.goto(url);
+    for (let i = 0; i < 150; i++) {
+      const hit = (await autoLog()).filter((e) => e.url === url && e.at >= since).at(-1);
+      if (hit) return hit;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error(`mode otomatis tidak memutuskan apa pun untuk ${url}`);
+  }
+  const alts = (tab) => tab.evaluate(() => Object.fromEntries([...document.querySelectorAll('img[id]')].map((i) => [i.id, i.getAttribute('alt')])));
+  const autoTab = await context.newPage();
+  watch(autoTab);
+
+  await step('filter: ikon 50×50, alt="", logo situs dibuang; <main> dulu lalu terbesar; label memakai figcaption', async () => {
+    await setUsed(0);
+    await autoTab.goto(`${SITE}/artikel.html`);
+    const res = await toggleOn(`${SITE}/artikel.html`);
+    assert.equal(res.count, 6);
+    const options = autoTab.locator('#nv-list [role="option"]');
+    const labels = await options.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+    assert.equal(labels[0], 'Gambar 1 dari 6 · di artikel · keterangan: Banjir di Samarinda · 400×250 px');
+    assert.match(labels[1], /^Gambar 2 dari 6 · di artikel · Gambar tanpa keterangan · 300×200 px$/); // foto-1.jpg: nama file tidak bermakna
+    assert.match(labels[2], /teks alternatif: “Peta jalur evakuasi”/);
+    assert.match(labels[5], /^Gambar 6 dari 6 · nama file: samping · 500×300 px$/); // di luar <main> → terakhir walau terbesar
+    const all = labels.join('\n');
+    assert.doesNotMatch(all, /ikon|logo|dekor/);
+    assert.equal(await autoTab.locator('#nv-list .thumb[aria-hidden="true"]').count(), 6);
+    assert.deepEqual(await a11yAudit(autoTab, '#naravisi-host'), []);
+    await autoTab.screenshot({ path: path.join(uiDir, '11-panel-daftar-gambar.png') });
+    await autoTab.keyboard.press('Escape');
+  });
+
+  await step('mode otomatis mati (bawaan) → tidak ada permintaan ke server', async () => {
+    const before = backend.ai.calls;
+    const hit = await visitAndWaitAuto(autoTab, `${SITE}/artikel-2.html`);
+    assert.equal(hit.result, 'off');
+    await new Promise((r) => setTimeout(r, 500));
+    assert.equal(backend.ai.calls, before);
+    assert.equal(await autoTab.locator('[data-naravisi]').count(), 0);
+  });
+
+  await step('Pengaturan "Otomatis": persetujuan dibacakan; Batal → tetap mati, Ya → aktif', async () => {
+    await set.bringToFront();
+    await set.reload();
+    const toggle = set.getByLabel('Deskripsikan otomatis gambar utama tanpa teks alternatif');
+    await toggle.waitFor();
+    assert.equal(await toggle.isChecked(), false);
+    assert.equal(await set.getByLabel('Umumkan jumlah gambar saat halaman dibuka').count(), 1);
+    assert.equal(await set.getByLabel('Sapaan saat Chrome dibuka').isChecked(), true);
+    assert.equal(await set.getByLabel('Jumlah gambar per halaman (mode otomatis)').inputValue(), '3');
+    assert.match(await set.getByLabel('Situs yang tidak pernah diproses otomatis (satu per baris)').inputValue(), /^klikbca\.com\n.*web\.whatsapp\.com$/s);
+    await set.locator('#otomatis-section').screenshot({ path: path.join(uiDir, '09-pengaturan-otomatis.png') });
+
+    await toggle.click(); // centang baru berlaku setelah disetujui
+    const dialog = set.getByRole('dialog', { name: 'Kirim gambar ke server?' });
+    await dialog.waitFor();
+    assert.match(await dialog.innerText(), /akan dikirim ke server NaraVisi untuk dideskripsikan dan memakai kuota harian\. Lanjutkan\?/);
+    assert.equal(await set.evaluate(() => document.activeElement.textContent), 'Batal');
+    assert.match((await spoken()).at(-1), /^Gambar dari halaman yang Anda buka akan dikirim ke server NaraVisi/);
+    await set.screenshot({ path: path.join(uiDir, '10-persetujuan-otomatis.png') });
+    await dialog.getByRole('button', { name: 'Batal' }).click();
+    assert.equal(await toggle.isChecked(), false);
+    assert.equal(await sw.evaluate(async () => (await chrome.storage.sync.get('autoDescribe')).autoDescribe ?? false), false);
+
+    await toggle.click();
+    await dialog.getByRole('button', { name: 'Ya, aktifkan' }).click();
+    await set.locator('#msg', { hasText: 'Deskripsi otomatis diaktifkan.' }).waitFor();
+    assert.equal(await toggle.isChecked(), true);
+    assert.equal(await sw.evaluate(async () => (await chrome.storage.sync.get('autoDescribe')).autoDescribe), true);
+    assert.deepEqual(await a11yAudit(set), []);
+  });
+
+  await step('mode otomatis hidup → maks. 3 permintaan berurutan, alt terisi, alt asli tidak ditimpa', async () => {
+    await setUsed(0);
+    const before = backend.ai.calls;
+    const url = `${SITE}/artikel.html`;
+    const hit = await visitAndWaitAuto(autoTab, url);
+    assert.equal(hit.result, 'done');
+    assert.equal(hit.described, 3);
+    assert.equal(backend.ai.calls - before, 3);
+    const a = await alts(autoTab);
+    for (const id of ['banjir', 'foto1', 'foto2']) assert.match(a[id], /^Deskripsi NaraVisi: Deskripsi uji untuk gambar JPEG\.$/, id);
+    assert.equal(a.peta, 'Peta jalur evakuasi'); // alt bermakna tidak ditimpa
+    assert.equal(a.foto3, null); // di luar batas 3
+    assert.equal(a.samping, null);
+    assert.equal(a.dekor, ''); // dekoratif tidak disentuh
+    assert.equal(await autoTab.locator('[data-naravisi="auto"]').count(), 3);
+    // Hanya alt & data-naravisi yang disuntik: tidak ada elemen/atribut lain, tidak ada token di DOM.
+    assert.equal(await autoTab.locator('#naravisi-host').count(), 0);
+    const html = await autoTab.content();
+    const token = await sw.evaluate(async () => (await chrome.storage.local.get('nvSession')).nvSession.token);
+    assert.ok(!html.includes(token));
+    assert.equal(hit.summary, '3 gambar sudah dideskripsikan. Sisa kuota hari ini 7.');
+    assert.equal((await spoken()).at(-1), '3 gambar sudah dideskripsikan. Sisa kuota hari ini 7.');
+  });
+
+  await step('rute SPA / pemicu ulang di dokumen yang sama → tidak memproses ulang', async () => {
+    const before = backend.ai.calls;
+    const res = await sw.evaluate(async (u) => {
+      const [tab] = await chrome.tabs.query({ url: u });
+      return globalThis.naraVisi.autoDescribePage(tab.id);
+    }, `${SITE}/artikel.html`);
+    assert.equal(res.described, 0);
+    assert.equal(backend.ai.calls, before);
+  });
+
+  await step('panel memakai cache hasil otomatis (tanpa permintaan baru)', async () => {
+    const before = backend.ai.calls;
+    await toggleOn(`${SITE}/artikel.html`);
+    await autoTab.keyboard.press('Enter');
+    await autoTab.locator('#nv-status', { hasText: 'Deskripsi gambar 1.' }).waitFor();
+    assert.equal(backend.ai.calls, before);
+    await autoTab.keyboard.press('Escape');
+  });
+
+  await step('domain dikecualikan (diedit di Pengaturan) → tidak ada permintaan', async () => {
+    await set.bringToFront();
+    const sites = set.getByLabel('Situs yang tidak pernah diproses otomatis (satu per baris)');
+    await sites.fill(`${await sites.inputValue()}\nhttp://127.0.0.1/jalur`);
+    await set.getByRole('button', { name: 'Simpan daftar situs' }).click();
+    await set.locator('#msg', { hasText: '11 situs dikecualikan' }).waitFor();
+    assert.match(await sites.inputValue(), /\n127\.0\.0\.1$/);
+    const before = backend.ai.calls;
+    const hit = await visitAndWaitAuto(autoTab, `${SITE}/artikel-2.html`);
+    assert.equal(hit.result, 'excluded');
+    assert.equal(backend.ai.calls, before);
+    assert.ok(await sw.evaluate(() => globalThis.naraVisi.isExcluded('https://ib.bri.co.id/masuk', ['bri.co.id'])));
+    assert.ok(await sw.evaluate(() => globalThis.naraVisi.isExcluded('https://app.gopay.co.id/', ['gopay'])));
+    assert.ok(!(await sw.evaluate(() => globalThis.naraVisi.isExcluded('https://abri.co.id/', ['bri.co.id']))));
+    await set.bringToFront();
+    await set.getByRole('button', { name: 'Kembalikan daftar bawaan' }).click();
+    await set.locator('#msg', { hasText: 'Daftar situs bawaan dikembalikan.' }).waitFor();
+  });
+
+  await step('halaman dengan <input type="password"> → mode otomatis tidak jalan', async () => {
+    const before = backend.ai.calls;
+    const hit = await visitAndWaitAuto(autoTab, `${SITE}/masuk.html`);
+    assert.equal(hit.result, 'password');
+    assert.equal(backend.ai.calls, before);
+    assert.equal(await autoTab.locator('[data-naravisi]').count(), 0);
+  });
+
+  await step('kuota tersisa 2 → tidak jalan & alasan dibacakan', async () => {
+    await setUsed(8);
+    const before = backend.ai.calls;
+    const hit = await visitAndWaitAuto(autoTab, `${SITE}/artikel-3.html`);
+    assert.equal(hit.result, 'quota');
+    assert.equal(backend.ai.calls, before);
+    assert.equal((await spoken()).at(-1), 'Mode otomatis berhenti: sisa kuota hari ini 2, disisakan untuk pilihan Anda.');
+  });
+
+  await step('kuota tersisa 4 → berhenti setelah 2 gambar (sisa 2) & alasan dibacakan', async () => {
+    await setUsed(6);
+    const before = backend.ai.calls;
+    const hit = await visitAndWaitAuto(autoTab, `${SITE}/artikel.html`);
+    assert.equal(backend.ai.calls - before, 2);
+    assert.equal(hit.described, 2);
+    assert.equal(hit.stopped, 'quota');
+    assert.equal((await spoken()).at(-1), '2 gambar sudah dideskripsikan. Sisa kuota hari ini 2. Mode otomatis berhenti agar 2 kuota tersisa untuk pilihan Anda.');
+  });
+
+  await step('fokus keyboard pada tautan bergambar tanpa alt → dideskripsikan & dibacakan', async () => {
+    await sw.evaluate(() => chrome.storage.sync.set({ autoDescribe: false }));
+    await set.bringToFront();
+    await set.reload();
+    const fokus = set.getByLabel('Deskripsikan saat gambar mendapat fokus keyboard');
+    await fokus.click();
+    await set.getByRole('dialog').getByRole('button', { name: 'Ya, aktifkan' }).click();
+    await set.locator('#msg', { hasText: 'Deskripsi saat fokus diaktifkan.' }).waitFor();
+    await setUsed(0);
+    const before = backend.ai.calls;
+    await autoTab.bringToFront();
+    await autoTab.goto(`${SITE}/tautan.html`);
+    await new Promise((r) => setTimeout(r, 2500)); // pendengar fokus dipasang ±1,5 detik setelah halaman selesai dimuat
+    await autoTab.focus('#awal');
+    await autoTab.keyboard.press('Tab');
+    assert.equal(await autoTab.evaluate(() => document.activeElement.id), 'tautan-gambar');
+    await autoTab.locator('#tautan-gambar img[data-naravisi="auto"]').waitFor({ state: 'attached', timeout: 10000 });
+    assert.equal(backend.ai.calls - before, 1);
+    assert.match(await autoTab.locator('#tautan-gambar img').getAttribute('alt'), /^Deskripsi NaraVisi: /);
+    assert.equal((await spoken()).at(-1), 'Deskripsi NaraVisi: Deskripsi uji untuk gambar JPEG.');
+    await sw.evaluate(() => chrome.storage.sync.set({ describeOnFocus: false }));
+  });
+  await autoTab.close();
+
+  await step('Chrome dibuka: sapaan sisa kuota; pintasan belum diatur → dibacakan & Pengaturan dibuka', async () => {
+    const shortcut = await sw.evaluate(async () => (await chrome.commands.getAll()).find((c) => c.name === 'scan-page')?.shortcut || '');
+    if (shortcut) {
+      assert.equal(await sw.evaluate(() => globalThis.naraVisi.startupGreeting()), 'greeted');
+      assert.equal((await spoken()).at(-1), 'NaraVisi aktif. Sisa kuota hari ini 9.');
+      return;
+    }
+    const [tab, result] = await Promise.all([
+      context.waitForEvent('page', { predicate: (p) => p.url().includes('pengaturan.html#pintasan') }),
+      sw.evaluate(() => globalThis.naraVisi.startupGreeting()),
+    ]);
+    assert.equal(result, 'no-shortcut');
+    assert.equal((await spoken()).at(-1), 'NaraVisi aktif. Sisa kuota hari ini 9. Pintasan NaraVisi belum diatur. Halaman pengaturan dibuka.');
+    await tab.waitForFunction(() => document.activeElement?.id === 'open-shortcuts');
+    await tab.locator('#msg', { hasText: 'Pintasan NaraVisi belum diatur' }).waitFor();
+    await tab.close();
+  });
+
+  await step('sapaan saat Chrome dibuka bisa dimatikan', async () => {
+    await sw.evaluate(() => chrome.storage.sync.set({ greetOnStartup: false }));
+    assert.equal(await sw.evaluate(() => globalThis.naraVisi.startupGreeting()), null);
+    await sw.evaluate(() => chrome.storage.sync.set({ greetOnStartup: true }));
+  });
 
   // =========================================================================
   section('Kuota habis (UC-GBR-04 alur alternatif)');
@@ -993,6 +1246,18 @@ try {
     await tab.waitForURL(/selamat-datang\.html#masuk$/);
     await tab.waitForFunction(() => document.activeElement?.id === 'login-email');
     assert.equal((await spoken()).at(-1), 'Anda belum masuk. Halaman masuk dibuka.');
+    await tab.close();
+  });
+
+  await step('Chrome dibuka dengan sesi kedaluwarsa → dibacakan & halaman masuk dibuka', async () => {
+    await sw.evaluate(() => chrome.storage.local.set({ nvSession: { token: 'token-kedaluwarsa', user: null } }));
+    const [tab, result] = await Promise.all([
+      context.waitForEvent('page', { predicate: (p) => p.url().includes('selamat-datang.html#masuk') }),
+      sw.evaluate(() => globalThis.naraVisi.startupGreeting()),
+    ]);
+    assert.equal(result, 'expired');
+    assert.equal((await spoken()).at(-1), 'Sesi NaraVisi berakhir. Halaman masuk dibuka.');
+    assert.equal(await sw.evaluate(async () => (await chrome.storage.local.get('nvSession')).nvSession ?? null), null);
     await tab.close();
   });
 

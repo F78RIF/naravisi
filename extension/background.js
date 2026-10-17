@@ -2,7 +2,9 @@
 // Tugas: menyuntik panel ke halaman, mengambil byte gambar, memanggil REST API,
 // dan pemandu suara (chrome.tts) yang tetap bekerja tanpa halaman terbuka.
 
-import { ApiError, apiFetch, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession } from './shared/config.js';
+import {
+  ApiError, apiFetch, AUTO_DAILY_MAX, AUTO_RESERVE, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession,
+} from './shared/config.js';
 import { imageCountText, spokenShortcut, welcomeText } from './shared/guide.js';
 
 const CONTENT_FILE = 'content/content.js';
@@ -92,7 +94,11 @@ const announcing = new Set();
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.status !== 'complete' || !isWebPage(tab.url)) return;
-  setTimeout(() => announceImageCount(tabId).catch(() => {}), ANNOUNCE_DELAY_MS);
+  setTimeout(() => {
+    announceImageCount(tabId).catch(() => {});
+    autoDescribePage(tabId).catch(() => {});
+    enableFocusDescribe(tabId).catch(() => {});
+  }, ANNOUNCE_DELAY_MS);
 });
 
 export async function announceImageCount(tabId) {
@@ -113,6 +119,162 @@ export async function announceImageCount(tabId) {
 
   const res = await chrome.tabs.sendMessage(tabId, { type: 'NV_COUNT' }, { documentId });
   if (res?.count > 0) await speakGuide(imageCountText(res.count, await spokenShortcut()));
+}
+
+// ---------------------------------------------------------------------------
+// Mode otomatis (bawaan MATI, wajib persetujuan di Pengaturan).
+// Semua syarat diperiksa di sini, bukan di halaman: http/https saja, bukan Incognito,
+// bukan situs dikecualikan, sudah masuk, sisa kuota > AUTO_RESERVE, dan batas harian.
+// ---------------------------------------------------------------------------
+const autoLog = []; // dipakai uji otomatis
+
+function logAuto(entry) {
+  autoLog.push({ ...entry, at: Date.now() });
+  if (autoLog.length > 50) autoLog.shift();
+  return entry;
+}
+
+const todayWita = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Makassar' }); // kuota direset 00.00 WITA
+
+/** "gopay" cocok dengan bagian domain mana pun; "bri.co.id" cocok dengan domain itu & subdomainnya. */
+export function isExcluded(url, list) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return true;
+  }
+  return (list ?? []).some((raw) => {
+    const entry = String(raw).trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/[/:].*$/, '');
+    if (!entry) return false;
+    if (!entry.includes('.')) return host.split('.').includes(entry);
+    return host === entry || host.endsWith(`.${entry}`);
+  });
+}
+
+/** null = boleh; selain itu alasan penolakan. */
+async function autoBlockedReason(tab, settings) {
+  if (!tab || !isWebPage(tab.url)) return 'not-web';
+  if (tab.incognito) return 'incognito';
+  if (isExcluded(tab.url, settings.autoExclude)) return 'excluded';
+  if (!(await getSession())?.token) return 'not-logged-in';
+  return null;
+}
+
+const quotaLow = (kuota) => Boolean(kuota && kuota.batas != null && kuota.sisa <= AUTO_RESERVE);
+
+async function autoDailyCount() {
+  const { nvAutoDaily } = await chrome.storage.local.get('nvAutoDaily');
+  return nvAutoDaily?.date === todayWita() ? nvAutoDaily.count : 0;
+}
+
+async function countAutoUse() {
+  await chrome.storage.local.set({ nvAutoDaily: { date: todayWita(), count: (await autoDailyCount()) + 1 } });
+}
+
+/** Alasan berhenti karena kuota dibacakan sekali per hari, tidak di setiap halaman. */
+async function noticeReserve(sisa) {
+  const { nvAutoReserveNotice } = await chrome.storage.local.get('nvAutoReserveNotice');
+  if (nvAutoReserveNotice === todayWita()) return;
+  await chrome.storage.local.set({ nvAutoReserveNotice: todayWita() });
+  await speakGuide(`Mode otomatis berhenti: sisa kuota hari ini ${sisa}, disisakan untuk pilihan Anda.`);
+}
+
+/** Dipanggil untuk setiap NV_DESCRIBE bertanda auto; melempar NvError bila tidak boleh. */
+async function autoGate(auto, sender, session) {
+  const settings = await getSettings();
+  const enabled = auto === 'focus' ? settings.describeOnFocus : settings.autoDescribe;
+  if (!enabled) throw new NvError('AUTO_OFF', 'Mode otomatis tidak aktif.');
+  if (await autoBlockedReason(sender?.tab, settings)) throw new NvError('AUTO_NOT_ALLOWED', 'Halaman ini tidak diproses otomatis.');
+  let kuota = session?.user?.kuota;
+  // Kuota tersimpan bisa basi (mis. sudah lewat 00.00 WITA): pastikan ke server sebelum menolak.
+  if (quotaLow(kuota)) kuota = (await refreshProfile().catch(() => null))?.kuota ?? kuota;
+  if (quotaLow(kuota)) {
+    await noticeReserve(kuota.sisa);
+    throw new NvError('AUTO_RESERVE', `Sisa kuota ${kuota.sisa} disisakan untuk pilihan Anda.`, { spoken: true });
+  }
+  if ((await autoDailyCount()) >= AUTO_DAILY_MAX) throw new NvError('AUTO_DAILY_LIMIT', 'Batas harian mode otomatis tercapai.');
+}
+
+function autoSummary({ described = 0, stopped, kuota }) {
+  if (!described && stopped !== 'quota' && stopped !== 'daily') return null;
+  const parts = [];
+  if (described) parts.push(`${described} gambar sudah dideskripsikan.`);
+  if (kuota && kuota.batas != null) parts.push(`Sisa kuota hari ini ${kuota.sisa}.`);
+  if (stopped === 'quota') parts.push(`Mode otomatis berhenti agar ${AUTO_RESERVE} kuota tersisa untuk pilihan Anda.`);
+  if (stopped === 'daily') parts.push('Batas harian mode otomatis tercapai.');
+  return parts.join(' ');
+}
+
+/** Setelah halaman selesai dimuat: deskripsikan maks. N gambar utama tanpa alt, satu per satu. */
+export async function autoDescribePage(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  const base = { tabId, url: tab.url };
+  if (!tab.active) return null;
+  const settings = await getSettings();
+  if (!settings.autoDescribe) return logAuto({ ...base, result: 'off' });
+  const blocked = await autoBlockedReason(tab, settings);
+  if (blocked) return logAuto({ ...base, result: blocked });
+
+  let user;
+  try {
+    user = await refreshProfile(); // kuota terbaru; tidak memakai kuota
+  } catch {
+    return logAuto({ ...base, result: 'error' });
+  }
+  if (quotaLow(user.kuota)) {
+    await noticeReserve(user.kuota.sisa);
+    return logAuto({ ...base, result: 'quota' });
+  }
+  const dailyLeft = AUTO_DAILY_MAX - (await autoDailyCount());
+  if (dailyLeft <= 0) return logAuto({ ...base, result: 'daily' });
+
+  const [injected] = await chrome.scripting.executeScript({ target: { tabId }, files: [CONTENT_FILE] });
+  const max = Math.min(Math.max(1, Math.min(5, Number(settings.autoMax) || 3)), dailyLeft);
+  const res = await chrome.tabs.sendMessage(tabId, { type: 'NV_AUTO_START', max }, { documentId: injected.documentId });
+  const summary = autoSummary(res ?? {});
+  if (summary) await speakGuide(summary);
+  return logAuto({ ...base, result: res?.skipped || 'done', described: res?.described ?? 0, stopped: res?.stopped ?? null, summary });
+}
+
+/** Pasang pendengar fokus di halaman bila "Deskripsikan saat gambar mendapat fokus" aktif. */
+export async function enableFocusDescribe(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  const settings = await getSettings();
+  if (!settings.describeOnFocus || (await autoBlockedReason(tab, settings))) return false;
+  const [injected] = await chrome.scripting.executeScript({ target: { tabId }, files: [CONTENT_FILE] });
+  await chrome.tabs.sendMessage(tabId, { type: 'NV_FOCUS_ENABLE' }, { documentId: injected.documentId });
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Saat Chrome dibuka: sapaan singkat, sesi kedaluwarsa, atau pintasan belum diatur
+// ---------------------------------------------------------------------------
+chrome.runtime.onStartup.addListener(() => {
+  startupGreeting().catch(() => {});
+});
+
+export async function startupGreeting() {
+  const { greetOnStartup } = await getSettings();
+  if (!greetOnStartup || !(await getSession())?.token) return null;
+  let user = null;
+  try {
+    user = await refreshProfile();
+  } catch (err) {
+    if (err.status === 401) {
+      await sendToLogin('Sesi NaraVisi berakhir. Halaman masuk dibuka.');
+      return 'expired';
+    }
+  }
+  const parts = ['NaraVisi aktif.'];
+  if (!user) parts.push('Server NaraVisi belum terhubung.');
+  else if (user.kuota?.batas != null) parts.push(`Sisa kuota hari ini ${user.kuota.sisa}.`);
+  else parts.push('Kuota tanpa batas.');
+  const shortcut = await spokenShortcut();
+  if (!shortcut) parts.push('Pintasan NaraVisi belum diatur. Halaman pengaturan dibuka.');
+  await speakGuide(parts.join(' '));
+  if (!shortcut) await openPage('pintasan'); // tombol ke chrome://extensions/shortcuts
+  return shortcut ? 'greeted' : 'no-shortcut';
 }
 
 // ---------------------------------------------------------------------------
@@ -214,8 +376,12 @@ async function imageToBase64({ src, dataUrl }) {
 // ---------------------------------------------------------------------------
 // Memanggil REST API (RF-09, RF-10, RF-11, RF-13)
 // ---------------------------------------------------------------------------
-async function requestDescription({ src, dataUrl, pageUrl }) {
+async function requestDescription({ src, dataUrl, pageUrl, auto }, sender) {
   const session = await getSession();
+  if (auto) {
+    if (!['page', 'focus'].includes(auto)) throw new NvError('MESSAGE_REJECTED', 'Pesan tidak dikenal.');
+    await autoGate(auto, sender, session); // mode otomatis tidak pernah membuka tab masuk
+  }
   if (!session?.token) {
     throw new NvError('NOT_LOGGED_IN', await sendToLogin('Anda belum masuk. Halaman masuk dibuka.'), { spoken: true });
   }
@@ -235,11 +401,12 @@ async function requestDescription({ src, dataUrl, pageUrl }) {
       },
     });
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) {
+    if (err instanceof ApiError && err.status === 401 && !auto) {
       throw new NvError(err.code, await sendToLogin('Sesi berakhir. Halaman masuk dibuka.'), { spoken: true });
     }
     throw new NvError(err.code || 'SERVER_ERROR', err.message);
   }
+  if (auto) await countAutoUse();
 
   // Simpan sisa kuota terbaru ke sesi agar popup langsung akurat.
   if (data.kuota && session.user) {
@@ -291,6 +458,7 @@ const PAGES = {
   premium: 'pages/premium.html',
   profil: 'pages/profil.html',
   masuk: 'pages/selamat-datang.html#masuk',
+  pintasan: 'pages/pengaturan.html#pintasan',
   selamatDatang: 'pages/selamat-datang.html',
 };
 
@@ -334,8 +502,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   const handle = async () => {
     switch (message?.type) {
-      case 'NV_DESCRIBE':
-        return { ok: true, data: await requestDescription(message) };
+      case 'NV_DESCRIBE': {
+        const data = await requestDescription(message, sender);
+        if (message.auto === 'focus') await speakGuide(`Deskripsi NaraVisi: ${data.text}`);
+        return { ok: true, data };
+      }
       case 'NV_TOGGLE_ACTIVE':
         return toggleActiveTab();
       case 'NV_HEALTH':
@@ -373,4 +544,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Dipakai pengujian otomatis (Playwright) untuk memicu panel tanpa shortcut.
-globalThis.naraVisi = { togglePanel, toggleActiveTab, openPage, handleScanCommand, announceImageCount, spokenLog, rejectReason };
+globalThis.naraVisi = {
+  togglePanel, toggleActiveTab, openPage, handleScanCommand, announceImageCount, spokenLog, rejectReason,
+  autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog,
+};

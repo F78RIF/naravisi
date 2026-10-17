@@ -1,5 +1,6 @@
 // Pengaturan aksesibilitas & TTS: RF-17..RF-19 (UC-AKS-01..03)
-import { apiFetch, apiHost, DEFAULTS, getSettings, setTts } from '../shared/config.js';
+import { apiFetch, apiHost, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
+import { speakGuide } from '../shared/guide.js';
 import { $, el, requireSession, say, sayError, shell, speak } from './common.js';
 
 shell('pengaturan', 'Pengaturan aksesibilitas');
@@ -78,6 +79,134 @@ async function renderServer() {
   check();
 }
 
+// --- Otomatis: semua tersimpan di perangkat ini (chrome.storage.sync) dan langsung berlaku.
+const CONSENT_TEXT =
+  'Gambar dari halaman yang Anda buka akan dikirim ke server NaraVisi untuk dideskripsikan dan memakai kuota harian. Lanjutkan?';
+
+/** Dialog persetujuan (modal, dibacakan). Fokus awal di "Batal" agar tidak tersetujui tanpa sengaja. */
+function askConsent() {
+  const yes = el('button', { type: 'button', class: 'primary' }, 'Ya, aktifkan');
+  const no = el('button', { type: 'button' }, 'Batal');
+  const dialog = el(
+    'dialog',
+    { class: 'consent', 'aria-labelledby': 'consent-title', 'aria-describedby': 'consent-text' },
+    el('h2', { id: 'consent-title' }, 'Kirim gambar ke server?'),
+    el('p', { id: 'consent-text' }, CONSENT_TEXT),
+    el('div', { class: 'row' }, yes, no),
+  );
+  document.body.append(dialog);
+  return new Promise((resolve) => {
+    const done = (answer) => {
+      dialog.close();
+      dialog.remove();
+      resolve(answer);
+    };
+    yes.addEventListener('click', () => done(true));
+    no.addEventListener('click', () => done(false));
+    dialog.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      done(false);
+    });
+    dialog.showModal();
+    no.focus();
+    speakGuide(CONSENT_TEXT);
+  });
+}
+
+/** Normalisasi daftar situs: satu domain per baris, tanpa protokol/jalur, tanpa duplikat. */
+function parseSites(text) {
+  const sites = text
+    .split(/[\n,]+/)
+    .map((line) => line.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/[/:].*$/, ''))
+    .filter(Boolean);
+  return [...new Set(sites)];
+}
+
+async function autoSection() {
+  const stored = await getSettings();
+  const check = (id, key, label, hint) => {
+    const input = el('input', { id, type: 'checkbox', checked: Boolean(stored[key]), 'aria-describedby': `${id}-hint` });
+    const node = el(
+      'div',
+      { class: 'stack' },
+      el('label', { for: id, class: 'check' }, input, label),
+      el('p', { class: 'hint', id: `${id}-hint` }, hint),
+    );
+    return { input, node };
+  };
+
+  const sapa = check('sapa', 'greetOnStartup', 'Sapaan saat Chrome dibuka',
+    'Contoh: "NaraVisi aktif. Sisa kuota hari ini 10." Juga memberi tahu bila pintasan belum diatur.');
+  const umumkan = check('umumkan', 'announceImages', 'Umumkan jumlah gambar saat halaman dibuka',
+    'Contoh: "Ada 5 gambar." Gambar tidak dideskripsikan, jadi kuota tidak terpakai dan tidak ada yang dikirim ke server.');
+  const otomatis = check('otomatis', 'autoDescribe', 'Deskripsikan otomatis gambar utama tanpa teks alternatif',
+    `Mengirim gambar ke server dan memakai kuota. Deskripsi dimasukkan ke teks alternatif gambar agar terbaca pembaca layar. Berhenti saat sisa kuota ${AUTO_RESERVE}.`);
+  const fokus = check('fokus', 'describeOnFocus', 'Deskripsikan saat gambar mendapat fokus keyboard',
+    'Saat Tab berhenti di gambar, atau tautan yang isinya hanya gambar, tanpa teks alternatif.');
+
+  const jumlah = el('select', { id: 'otomatis-jumlah', 'aria-describedby': 'otomatis-jumlah-hint' },
+    [1, 2, 3, 4, 5].map((n) => el('option', { value: String(n) }, `${n} gambar`)));
+  jumlah.value = String(stored.autoMax);
+
+  const sites = el('textarea', { id: 'kecuali', rows: 7, spellcheck: 'false', 'aria-describedby': 'kecuali-hint' });
+  sites.value = stored.autoExclude.join('\n');
+
+  const save = async (patch, message) => {
+    await chrome.storage.sync.set(patch);
+    say(message, 'ok');
+  };
+
+  sapa.input.addEventListener('change', () =>
+    save({ greetOnStartup: sapa.input.checked }, sapa.input.checked ? 'Sapaan saat Chrome dibuka diaktifkan.' : 'Sapaan saat Chrome dibuka dimatikan.'));
+  umumkan.input.addEventListener('change', () =>
+    save({ announceImages: umumkan.input.checked }, umumkan.input.checked ? 'Pengumuman jumlah gambar diaktifkan.' : 'Pengumuman jumlah gambar dimatikan.'));
+
+  // Mengirim gambar ke server → hanya aktif setelah persetujuan.
+  for (const [{ input }, key, name] of [[otomatis, 'autoDescribe', 'Deskripsi otomatis'], [fokus, 'describeOnFocus', 'Deskripsi saat fokus']]) {
+    input.addEventListener('change', async () => {
+      if (!input.checked) return save({ [key]: false }, `${name} dimatikan.`);
+      input.checked = false;
+      const agreed = await askConsent();
+      input.focus();
+      if (!agreed) return say(`${name} tetap mati.`);
+      input.checked = true;
+      return save({ [key]: true }, `${name} diaktifkan.`);
+    });
+  }
+
+  jumlah.addEventListener('change', () => save({ autoMax: Number(jumlah.value) }, `Maksimal ${jumlah.value} gambar per halaman.`));
+
+  const saveSites = el('button', { type: 'button', id: 'simpan-kecuali' }, 'Simpan daftar situs');
+  saveSites.addEventListener('click', async () => {
+    const list = parseSites(sites.value);
+    sites.value = list.join('\n');
+    await save({ autoExclude: list }, `Daftar situs disimpan: ${list.length} situs dikecualikan.`);
+  });
+  const resetSites = el('button', { type: 'button' }, 'Kembalikan daftar bawaan');
+  resetSites.addEventListener('click', async () => {
+    sites.value = DEFAULT_AUTO_EXCLUDE.join('\n');
+    await save({ autoExclude: [...DEFAULT_AUTO_EXCLUDE] }, 'Daftar situs bawaan dikembalikan.');
+  });
+
+  return el(
+    'section',
+    { class: 'card stack', id: 'otomatis-section', 'aria-labelledby': 'sec-otomatis' },
+    el('h2', { id: 'sec-otomatis' }, 'Otomatis'),
+    sapa.node,
+    umumkan.node,
+    otomatis.node,
+    field('otomatis-jumlah', 'Jumlah gambar per halaman (mode otomatis)', jumlah, 'Diproses satu per satu setelah halaman tenang.'),
+    fokus.node,
+    field(
+      'kecuali',
+      'Situs yang tidak pernah diproses otomatis (satu per baris)',
+      sites,
+      'Bank, dompet digital, email, dan WhatsApp sudah termasuk. Halaman yang memiliki kolom kata sandi dan jendela Incognito selalu dilewati.',
+    ),
+    el('div', { class: 'row' }, saveSites, resetSites),
+  );
+}
+
 function field(id, label, control, hint) {
   return el('div', { class: 'stack' }, el('label', { for: id }, label), control, hint ? el('p', { class: 'hint', id: `${id}-hint` }, hint) : null);
 }
@@ -96,13 +225,6 @@ async function render(settings) {
   );
   bahasa.value = settings.bahasa_deskripsi;
   const pintasan = el('input', { id: 'pintasan', value: settings.pintasan_keyboard, 'aria-describedby': 'pintasan-hint', spellcheck: 'false' });
-
-  // Pengumuman jumlah gambar: disimpan di perangkat ini (chrome.storage.sync), langsung berlaku.
-  const umumkan = el('input', { id: 'umumkan', type: 'checkbox', checked: (await getSettings()).announceImages, 'aria-describedby': 'umumkan-hint' });
-  umumkan.addEventListener('change', async () => {
-    await chrome.storage.sync.set({ announceImages: umumkan.checked });
-    say(umumkan.checked ? 'Pengumuman jumlah gambar diaktifkan.' : 'Pengumuman jumlah gambar dimatikan.', 'ok');
-  });
 
   // --- Suara (UC-AKS-03)
   const rateOut = el('output', { for: 'kecepatan', id: 'kecepatan-out' }, `${settings.kecepatan_suara}×`);
@@ -141,12 +263,6 @@ async function render(settings) {
         `Pintasan aktif saat ini: ${activeShortcut}. Chrome hanya mengizinkan pintasan diubah dari halaman pintasan Chrome — simpan pilihan Anda di sini, lalu terapkan di sana.`,
       ),
       el('div', { class: 'row' }, el('button', { type: 'button', id: 'open-shortcuts', onclick: () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }) }, 'Buka halaman pintasan Chrome')),
-      el(
-        'div',
-        { class: 'stack' },
-        el('label', { for: 'umumkan', class: 'check' }, umumkan, 'Umumkan jumlah gambar saat halaman dibuka'),
-        el('p', { class: 'hint', id: 'umumkan-hint' }, 'Contoh: "Ada 5 gambar." Gambar tidak dideskripsikan otomatis, jadi kuota tidak terpakai. Tersimpan langsung.'),
-      ),
     ),
     el(
       'section',
@@ -209,7 +325,12 @@ async function render(settings) {
     suara.value = [...suara.options].some((o) => o.value === keep) ? keep : '';
   });
 
-  $('content').replaceChildren(form);
+  $('content').replaceChildren(form, await autoSection());
+  if (location.hash === '#pintasan') {
+    // Dibuka saat Chrome dimulai dan pintasan belum diatur.
+    $('open-shortcuts').focus();
+    say('Pintasan NaraVisi belum diatur. Tekan tombol "Buka halaman pintasan Chrome" untuk mengaturnya.');
+  }
 }
 
 (async () => {

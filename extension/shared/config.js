@@ -1,8 +1,23 @@
 // Konfigurasi & sesi bersama untuk background, popup, dan halaman extension.
+// Situs yang tidak pernah diproses mode otomatis (bisa diedit di Pengaturan). Entri tanpa titik
+// ("gopay") cocok dengan bagian nama domain mana pun, mis. gopay.co.id.
+export const DEFAULT_AUTO_EXCLUDE = Object.freeze([
+  'klikbca.com', 'bri.co.id', 'bankmandiri.co.id', 'bni.co.id', 'dana.id', 'ovo.id', 'gopay',
+  'mail.google.com', 'outlook.live.com', 'web.whatsapp.com',
+]);
+
 export const DEFAULTS = Object.freeze({
   apiBase: 'http://localhost:3000/api/v1',
   announceImages: true, // umumkan jumlah gambar saat halaman dibuka (disimpan lokal, tidak ke server)
+  greetOnStartup: true, // sapaan singkat saat Chrome dibuka
+  autoDescribe: false, // mode otomatis: kirim gambar utama tanpa alt → wajib persetujuan
+  autoMax: 3, // maks. gambar per halaman (1–5)
+  describeOnFocus: false, // deskripsikan gambar yang mendapat fokus Tab → wajib persetujuan
+  autoExclude: DEFAULT_AUTO_EXCLUDE,
 });
+
+export const AUTO_RESERVE = 2; // mode otomatis berhenti bila sisa kuota ≤ 2 (disisakan untuk pilihan manual)
+export const AUTO_DAILY_MAX = 30; // batas deskripsi otomatis per hari, apa pun kuotanya
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 

@@ -1,13 +1,15 @@
 // Content script NaraVisi — memindai gambar, menampilkan panel aksesibel,
 // dan membacakan deskripsi dengan Web Speech API.
-// Disuntik sesuai permintaan (Alt+Shift+N / popup); aman bila disuntik berulang.
+// Disuntik sesuai permintaan (Alt+Shift+N / popup) atau oleh mode otomatis; aman bila disuntik berulang.
+// Mode otomatis hanya menyentuh atribut alt dan data-naravisi pada gambar halaman.
 
 (() => {
   if (window.__naraVisiLoaded) return;
   window.__naraVisiLoaded = true;
 
-  const MIN_NATURAL_SIDE = 48; // abaikan ikon kecil
-  const MIN_RENDERED_SIDE = 24;
+  const MIN_SIDE = 100; // sisi terpendek < 100 px = ikon/hiasan, bukan konten
+  const AUTO_RESERVE = 2; // sama dengan shared/config.js: sisakan kuota untuk pilihan manual
+  const AUTO_PREFIX = 'Deskripsi NaraVisi: ';
   const HOST_ID = 'naravisi-host';
   const MARK_ATTR = 'data-naravisi-mark';
 
@@ -26,6 +28,10 @@
     lastFocus: null,
     tts: null, // pengaturan suara dari server (UC-AKS-03)
     loggedIn: true,
+    autoUsed: 0, // permintaan mode otomatis di dokumen ini (batas per halaman)
+    autoDone: new Set(), // src yang sudah diproses → rute SPA baru tidak memproses ulang
+    focusOn: false,
+    focusBusy: false,
   };
 
   // -------------------------------------------------------------------------
@@ -40,7 +46,17 @@
     } else if (message?.type === 'NV_COUNT') {
       // Pengumuman saat halaman dibuka: hanya menghitung, tidak menandai atau mengirim apa pun.
       sendResponse({ count: scanImages().length });
+    } else if (message?.type === 'NV_AUTO_START') {
+      autoDescribe(Number(message.max) || 0).then(sendResponse, () => sendResponse({ described: 0, stopped: 'error' }));
+      return true; // respons asinkron
+    } else if (message?.type === 'NV_FOCUS_ENABLE') {
+      if (!state.focusOn) {
+        state.focusOn = true;
+        document.addEventListener('focusin', onFocusIn, true);
+      }
+      sendResponse({ ok: true });
     }
+    return undefined;
   });
 
   // -------------------------------------------------------------------------
@@ -48,6 +64,10 @@
   // -------------------------------------------------------------------------
   function isVisible(el, rect) {
     if (rect.width < 1 || rect.height < 1) return false;
+    if (typeof el.checkVisibility === 'function') {
+      // Termasuk leluhur yang opacity 0 / visibility hidden.
+      return el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true });
+    }
     const style = getComputedStyle(el);
     return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
   }
@@ -61,12 +81,67 @@
     }
   }
 
-  const altOf = (el) =>
-    (el.getAttribute('alt') || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
+  // Ikon, logo, avatar, iklan: dikenali dari nama file atau kelas/id elemen & dua leluhurnya.
+  const NOISE_RE = /(^|[^a-z])(icons?|ikon|logos?|avatars?|sprites?|emoji|badges?|ads?|advert\w*|iklan|sponsor\w*|tracking|pixel|spacer)([^a-z]|$)/i;
+  // Alt yang tidak menjelaskan apa-apa ("image", "IMG_1234.jpg") dianggap tidak ada.
+  const GENERIC_ALT_RE = /^(image|img|gambar|foto|photo|picture|pic|untitled|tanpa judul|thumbnail|thumb|null|undefined|-)$/i;
+  const FILE_ALT_RE = /\.(jpe?g|png|gif|webp|avif|svg|bmp)$|^(img|dsc|image|photo|foto|screenshot)[-_ ]?\d+/i;
 
-  // Ikon dekoratif yang sengaja disembunyikan situs dari pembaca layar.
-  const isDecorative = (el) =>
-    el.getAttribute('aria-hidden') === 'true' || ['presentation', 'none'].includes(el.getAttribute('role'));
+  const clip = (text, max = 120) => {
+    const t = (text || '').replace(/\s+/g, ' ').trim();
+    return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+  };
+
+  function fileName(src) {
+    if (!/^https?:/i.test(src || '')) return '';
+    try {
+      return decodeURIComponent(new URL(src).pathname.split('/').pop() || '');
+    } catch {
+      return '';
+    }
+  }
+
+  /** "banjir-samarinda_800x600.jpg" → "banjir samarinda"; kosong bila hanya angka/hash. */
+  function cleanFileName(src) {
+    const name = fileName(src)
+      .replace(/\.[a-z0-9]{2,5}$/i, '')
+      .replace(/@\dx/gi, '')
+      .replace(/[-_.+]+/g, ' ')
+      .replace(/\b\d{2,4}x\d{2,4}\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (name.length < 3 || /^\d+$/.test(name) || /^[0-9a-f ]{8,}$/i.test(name) || FILE_ALT_RE.test(name)) return '';
+    return name;
+  }
+
+  function isMeaningfulAlt(alt, src) {
+    const t = (alt || '').trim();
+    if (t.length < 3 || GENERIC_ALT_RE.test(t) || FILE_ALT_RE.test(t)) return false;
+    return t.toLowerCase() !== fileName(src).toLowerCase();
+  }
+
+  function isNoise(el, src) {
+    if (NOISE_RE.test(fileName(src))) return true;
+    for (let n = el, depth = 0; n && depth < 3; n = n.parentElement, depth += 1) {
+      if (NOISE_RE.test(`${n.getAttribute('class') || ''} ${n.id || ''}`)) return true;
+    }
+    return false;
+  }
+
+  /** Keterangan terdekat: figcaption → aria-describedby → elemen ber-kelas caption/keterangan di sekitarnya. */
+  function captionOf(el) {
+    const figcaption = el.closest('figure')?.querySelector('figcaption');
+    if (clip(figcaption?.textContent)) return clip(figcaption.textContent);
+    const described = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent || '').join(' ');
+    if (clip(described)) return clip(described);
+    // Pola CMS umum: <div class="wp-caption"><img><p class="wp-caption-text">…</p></div>
+    for (const scope of [el.parentElement, el.parentElement?.parentElement]) {
+      const cap = scope?.querySelector(':scope > [class*="caption" i], :scope > [class*="keterangan" i]');
+      if (cap && !cap.contains(el) && clip(cap.textContent)) return clip(cap.textContent);
+    }
+    return '';
+  }
 
   /** Gambar latar CSS pertama yang berupa url(...) — gradien diabaikan. */
   function backgroundUrl(style) {
@@ -84,68 +159,67 @@
     return svgKeys.get(el);
   }
 
+  /**
+   * Satu elemen → item gambar, atau null bila bukan konten: terlalu kecil, dekoratif (alt="",
+   * aria-hidden, role presentation/none), tidak terlihat, atau ikon/logo/avatar/iklan.
+   */
+  function inspect(el) {
+    if (el.id === HOST_ID || el.closest(`#${HOST_ID}`)) return null;
+    if (el.closest('[aria-hidden="true"]') || ['presentation', 'none'].includes(el.getAttribute('role'))) return null;
+    const tag = el.localName;
+    let kind;
+    let src;
+    let alt;
+
+    if (tag === 'img' || (tag === 'input' && el.type === 'image')) {
+      if (tag === 'img' && el.hasAttribute('alt') && !el.getAttribute('alt').trim()) return null; // alt="" = dekoratif (WCAG)
+      src = toAbsolute(el.currentSrc || el.src || el.getAttribute('data-src') || '');
+      kind = src && (/\.svg(?:[?#]|$)/i.test(src) || src.startsWith('data:image/svg')) ? 'svg' : 'img';
+      alt = el.getAttribute('alt') || el.getAttribute('aria-label') || '';
+    } else if (tag === 'svg') {
+      if (el.parentElement?.closest('svg')) return null;
+      src = inlineSvgKey(el); // kunci cache; isi SVG diambil saat dideskripsikan
+      kind = 'inline-svg';
+      alt = el.getAttribute('aria-label') || el.querySelector(':scope > title')?.textContent || '';
+    } else {
+      if (el.closest('svg')) return null; // elemen di dalam SVG bukan gambar latar
+      src = backgroundUrl(getComputedStyle(el));
+      kind = 'background';
+      alt = el.getAttribute('aria-label') || '';
+    }
+    if (!src) return null;
+
+    const rect = el.getBoundingClientRect();
+    if (!isVisible(el, rect) || Math.min(rect.width, rect.height) < MIN_SIDE) return null;
+    if (el.naturalWidth && Math.min(el.naturalWidth, el.naturalHeight) < MIN_SIDE) return null;
+    if (isNoise(el, kind === 'inline-svg' ? '' : src)) return null;
+    return {
+      el,
+      src,
+      kind,
+      alt: alt.trim(),
+      title: (el.getAttribute('title') || '').trim(),
+      inMain: Boolean(el.closest('main, article, [role="main"]')),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  }
+
+  /** Gambar konten tanpa duplikat src; yang di <main>/<article> dulu, lalu yang terbesar. */
   function scanImages() {
     const seen = new Set();
     const found = [];
-    const add = (item) => {
-      if (seen.has(item.src)) return;
+    for (const el of document.body?.querySelectorAll('*') ?? []) {
+      const item = inspect(el);
+      if (!item || seen.has(item.src)) continue;
       seen.add(item.src);
       found.push(item);
-    };
-
-    // Satu kali jalan dalam urutan dokumen agar nomor gambar mengikuti urutan baca halaman.
-    for (const el of document.body?.querySelectorAll('*') ?? []) {
-      if (el.id === HOST_ID || el.closest(`#${HOST_ID}`)) continue;
-      const tag = el.localName;
-
-      if (tag === 'img' || (tag === 'input' && el.type === 'image')) {
-        const src = toAbsolute(el.currentSrc || el.src || el.getAttribute('data-src') || '');
-        if (!src) continue;
-        const rect = el.getBoundingClientRect();
-        if (!isVisible(el, rect)) continue;
-        const naturalW = el.naturalWidth || rect.width;
-        const naturalH = el.naturalHeight || rect.height;
-        if (Math.min(naturalW, naturalH) < MIN_NATURAL_SIDE) continue;
-        if (Math.min(rect.width, rect.height) < MIN_RENDERED_SIDE) continue;
-        const kind = /\.svg(?:[?#]|$)/i.test(src) || src.startsWith('data:image/svg') ? 'svg' : 'img';
-        add({ el, src, kind, alt: altOf(el), width: Math.round(rect.width), height: Math.round(rect.height) });
-        continue;
-      }
-
-      if (tag === 'svg') {
-        if (el.parentElement?.closest('svg') || isDecorative(el)) continue;
-        const rect = el.getBoundingClientRect();
-        if (!isVisible(el, rect) || Math.min(rect.width, rect.height) < MIN_NATURAL_SIDE) continue;
-        const title = el.querySelector(':scope > title')?.textContent?.trim() || '';
-        add({
-          el,
-          src: inlineSvgKey(el), // kunci cache; isi SVG diambil saat dideskripsikan
-          kind: 'inline-svg',
-          alt: altOf(el) || title,
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        });
-        continue;
-      }
-
-      if (el.closest('svg')) continue; // elemen di dalam SVG bukan gambar latar
-      const style = getComputedStyle(el);
-      const src = backgroundUrl(style);
-      if (!src || isDecorative(el)) continue;
-      const rect = el.getBoundingClientRect();
-      if (!isVisible(el, rect)) continue;
-      // Gambar latar tidak punya ukuran asli yang mudah dibaca; sprite ikon biasanya kecil.
-      if (Math.min(rect.width, rect.height) < MIN_NATURAL_SIDE) continue;
-      add({
-        el,
-        src,
-        kind: 'background',
-        alt: (el.getAttribute('aria-label') || el.getAttribute('title') || '').trim(),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      });
     }
-    return found;
+    const area = (it) => it.width * it.height;
+    return found
+      .map((item, order) => ({ item, order }))
+      .sort((a, b) => Number(b.item.inMain) - Number(a.item.inMain) || area(b.item) - area(a.item) || a.order - b.order)
+      .map(({ item }) => item);
   }
 
   // -------------------------------------------------------------------------
@@ -270,7 +344,10 @@
     .status[data-tone="error"] { background: var(--nv-error-bg); color: var(--nv-error); font-weight: 700; }
     ul { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1 1 auto; min-height: 60px; display: grid; gap: 4px; align-content: start; }
     ul:focus { outline: 3px solid var(--nv-marigold); outline-offset: -3px; box-shadow: inset 0 0 0 5px var(--nv-focus-inner); }
-    li { padding: 8px 12px; border-radius: 10px; cursor: pointer; border: 2px solid transparent; }
+    li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; border: 2px solid transparent; }
+    li .label { min-width: 0; }
+    .thumb { flex: none; width: 48px; height: 48px; object-fit: cover; border-radius: 6px;
+      border: 1px solid var(--nv-line); background: var(--nv-surface); }
     li:hover { background: var(--nv-surface); }
     li[aria-selected="true"] { background: var(--nv-tint); border-color: var(--nv-ink); box-shadow: inset 4px 0 0 var(--nv-marigold); }
     li .title { display: block; font-weight: 700; }
@@ -400,10 +477,22 @@
 
   const KIND_LABEL = { svg: 'Gambar vektor', 'inline-svg': 'Gambar vektor', background: 'Gambar latar' };
 
+  /** "Gambar 1 dari 6" + "di artikel · keterangan: Banjir di Samarinda · 400×250 px" */
   function describeItemLabel(item, i) {
-    const alt = item.alt ? `Teks alternatif: “${item.alt}”` : 'Tanpa teks alternatif';
-    const kind = KIND_LABEL[item.kind] ? `${KIND_LABEL[item.kind]} · ` : '';
-    return { title: `Gambar ${i + 1} dari ${state.images.length}`, meta: `${kind}${alt} · ${item.width}×${item.height} px` };
+    const parts = [];
+    if (KIND_LABEL[item.kind]) parts.push(KIND_LABEL[item.kind]);
+    if (item.inMain) parts.push('di artikel');
+    const caption = captionOf(item.el);
+    if (caption) parts.push(`keterangan: ${caption}`);
+    if (item.alt) parts.push(`teks alternatif: “${clip(item.alt)}”`);
+    if (!caption && !item.alt) {
+      const name = cleanFileName(item.src);
+      if (item.title) parts.push(`keterangan: ${clip(item.title)}`);
+      else if (name) parts.push(`nama file: ${name}`);
+      else parts.push('Gambar tanpa keterangan');
+    }
+    parts.push(`${item.width}×${item.height} px`);
+    return { title: `Gambar ${i + 1} dari ${state.images.length}`, meta: parts.join(' · ') };
   }
 
   function renderList() {
@@ -414,10 +503,23 @@
       const label = describeItemLabel(item, i);
       li.id = `nv-opt-${i}`;
       li.setAttribute('role', 'option');
+      li.setAttribute('aria-label', `${label.title} · ${label.meta}`);
       li.dataset.index = String(i);
-      li.innerHTML = '<span class="title"></span><span class="meta"></span>';
-      li.querySelector('.title').textContent = label.title;
-      li.querySelector('.meta').textContent = label.meta;
+      // Thumbnail kecil untuk pengguna yang masih bisa melihat; disembunyikan dari pembaca layar.
+      const thumb = document.createElement(item.kind === 'inline-svg' ? 'span' : 'img');
+      thumb.className = 'thumb';
+      thumb.setAttribute('aria-hidden', 'true');
+      if (thumb.localName === 'img') {
+        thumb.alt = '';
+        thumb.loading = 'lazy';
+        thumb.src = item.src;
+      }
+      const text = document.createElement('span');
+      text.className = 'label';
+      text.innerHTML = '<span class="title"></span><span class="meta"></span>';
+      text.querySelector('.title').textContent = label.title;
+      text.querySelector('.meta').textContent = label.meta;
+      li.append(thumb, text);
       list.appendChild(li);
     });
     list.hidden = state.images.length === 0;
@@ -526,6 +628,29 @@
     $('#nv-text').textContent = text;
   }
 
+  /** Mengirim satu gambar ke service worker. `auto` = 'page' | 'focus' (mode otomatis) atau kosong (manual). */
+  async function fetchDescription(item, auto) {
+    let dataUrl = null;
+    if (item.kind === 'inline-svg') dataUrl = inlineSvgToDataUrl(item.el);
+    else if (item.src.startsWith('blob:')) dataUrl = await blobUrlToDataUrl(item.src);
+    const res = await chrome.runtime.sendMessage({
+      type: 'NV_DESCRIBE',
+      src: item.kind === 'inline-svg' ? null : item.src,
+      dataUrl,
+      pageUrl: location.href,
+      auto,
+    });
+    if (!res?.ok) {
+      const e = new Error(res?.message || 'Server gagal memproses gambar.');
+      e.code = res?.code;
+      e.spoken = res?.spoken;
+      throw e;
+    }
+    state.lang = res.data.lang || state.lang;
+    state.cache.set(item.src, { text: res.data.text, riwayatId: res.data.riwayat_id });
+    return res.data;
+  }
+
   async function describeCurrent() {
     const item = state.images[state.index];
     if (!item || state.busy) return;
@@ -546,27 +671,10 @@
     setStatus(`Mendeskripsikan gambar ${number}… mohon tunggu.`);
 
     try {
-      let dataUrl = null;
-      if (item.kind === 'inline-svg') dataUrl = inlineSvgToDataUrl(item.el);
-      else if (item.src.startsWith('blob:')) dataUrl = await blobUrlToDataUrl(item.src);
-      const res = await chrome.runtime.sendMessage({
-        type: 'NV_DESCRIBE',
-        src: item.kind === 'inline-svg' ? null : item.src,
-        dataUrl,
-        pageUrl: location.href,
-      });
-      if (!res?.ok) {
-        const e = new Error(res?.message || 'Server gagal memproses gambar.');
-        e.code = res?.code;
-        e.spoken = res?.spoken;
-        throw e;
-      }
+      const { text, riwayat_id: riwayatId, kuota } = await fetchDescription(item);
       if (!state.open) return; // panel ditutup saat menunggu
 
-      const { text, riwayat_id: riwayatId, kuota } = res.data;
-      state.lang = res.data.lang || state.lang;
       state.current = { text, riwayatId };
-      state.cache.set(item.src, state.current);
       showResult(text);
       state.host.dataset.state = 'done';
       setAction(null);
@@ -583,6 +691,105 @@
       if (!err.spoken) speak(message); // sudah dibacakan service worker → jangan dobel
     } finally {
       state.busy = false;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Mode otomatis: deskripsi dimasukkan ke alt gambar agar NVDA/JAWS membacanya saat menelusuri.
+  // Pemeriksaan keamanan (http/https, Incognito, pengecualian, kuota) diulang di service worker.
+  // -------------------------------------------------------------------------
+  const hasPasswordField = () => Boolean(document.querySelector('input[type="password"]'));
+
+  /** Tunggu halaman tenang: ±2 detik lalu saat browser menganggur. */
+  const settle = () =>
+    new Promise((resolve) => setTimeout(resolve, 2000)).then(
+      () => new Promise((resolve) => ('requestIdleCallback' in window ? requestIdleCallback(resolve, { timeout: 2000 }) : resolve())),
+    );
+
+  const canHoldAlt = (item) => item.kind === 'img' || item.kind === 'svg'; // <img>/<input type=image>
+
+  /** Hanya alt dan data-naravisi yang disentuh; alt yang sudah bermakna tidak pernah ditimpa. */
+  function applyAlt(item, text) {
+    const el = item.el;
+    if (!el.isConnected || isMeaningfulAlt(el.getAttribute('alt'), item.src)) return false;
+    el.setAttribute('alt', `${AUTO_PREFIX}${text}`);
+    el.setAttribute('data-naravisi', 'auto');
+    return true;
+  }
+
+  async function describeFor(item, auto) {
+    const cached = state.cache.get(item.src);
+    if (cached) return { text: cached.text, fresh: false };
+    const data = await fetchDescription(item, auto);
+    return { text: data.text, kuota: data.kuota, fresh: true };
+  }
+
+  async function autoDescribe(max) {
+    await settle();
+    if (hasPasswordField()) return { described: 0, skipped: 'password' };
+    const budget = Math.max(0, max - state.autoUsed);
+    const queue = scanImages()
+      .filter((it) => canHoldAlt(it) && !it.el.hasAttribute('data-naravisi') && !isMeaningfulAlt(it.alt, it.src) && !state.autoDone.has(it.src))
+      .slice(0, budget);
+
+    let described = 0;
+    let kuota = null;
+    let stopped = null;
+    // Berurutan, satu per satu — bukan paralel.
+    for (const [i, item] of queue.entries()) {
+      if (hasPasswordField()) {
+        stopped = 'password';
+        break;
+      }
+      state.autoDone.add(item.src);
+      try {
+        const result = await describeFor(item, 'page');
+        if (result.fresh) {
+          state.autoUsed += 1;
+          kuota = result.kuota ?? kuota;
+        }
+        if (applyAlt(item, result.text)) described += 1;
+      } catch (err) {
+        stopped = { AUTO_RESERVE: 'quota', AUTO_DAILY_LIMIT: 'daily' }[err.code] || 'error';
+        break;
+      }
+      const more = i < queue.length - 1;
+      if (more && kuota && kuota.batas != null && kuota.sisa <= AUTO_RESERVE) {
+        stopped = 'quota';
+        break;
+      }
+    }
+    return { described, stopped, kuota, candidates: queue.length };
+  }
+
+  /** Fokus Tab jatuh ke <img> atau tautan/tombol yang isinya hanya gambar tanpa alt bermakna. */
+  function onFocusIn(event) {
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest(`#${HOST_ID}`)) return;
+    let img = null;
+    if (target.localName === 'img') img = target;
+    else if (
+      target.matches('a[href], button, [role="link"], [role="button"]') &&
+      !target.textContent.trim() && !target.getAttribute('aria-label') && !target.getAttribute('title')
+    ) img = target.querySelector('img');
+    if (!img || img.hasAttribute('data-naravisi') || hasPasswordField()) return;
+    const item = inspect(img);
+    if (!item || isMeaningfulAlt(item.alt, item.src)) return;
+    describeOnFocus(item);
+  }
+
+  async function describeOnFocus(item) {
+    if (state.focusBusy) return;
+    state.focusBusy = true;
+    try {
+      const result = await describeFor(item, 'focus');
+      applyAlt(item, result.text);
+      // Deskripsi baru dibacakan service worker (chrome.tts); dari cache dibacakan di sini.
+      if (!result.fresh) speak(`${AUTO_PREFIX}${result.text}`);
+    } catch {
+      // alasan (kuota, pengecualian) sudah ditangani service worker
+    } finally {
+      state.focusBusy = false;
     }
   }
 

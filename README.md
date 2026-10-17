@@ -115,6 +115,11 @@ Kontrol panel: **↑/↓** pilih · **Enter** deskripsikan · **Spasi** jeda/lan
 - Setelah masuk/daftar: "Berhasil masuk sebagai … Jatah gratis hari ini … gambar." Sesi tersimpan sampai token kedaluwarsa.
 - **Alt+Shift+N** saat belum masuk: "Anda belum masuk. Halaman masuk dibuka." Begitu juga saat sesi berakhir.
 - Saat halaman dibuka: "Ada *n* gambar. Tekan Alt Shift N …", sekali per halaman. Ini hanya menghitung, tidak mendeskripsikan, dan tidak mengirim apa pun ke server. Bisa dimatikan di Pengaturan.
+- Saat Chrome dibuka: "NaraVisi aktif. Sisa kuota hari ini …". Bila sesi berakhir, halaman masuk dibuka; bila pintasan belum diatur, Pengaturan dibuka di tombol pintasan.
+
+**Daftar gambar** hanya memuat gambar konten: sisi terpendek ≥ 100 px, bukan dekoratif (`alt=""`, `aria-hidden`, `role="presentation"`), bukan ikon/logo/avatar/iklan, tanpa duplikat. Gambar di `<main>`/`<article>` tampil dulu, lalu yang terbesar. Label memakai figcaption → keterangan terdekat → title → nama file.
+
+**Mode otomatis** (Pengaturan → Otomatis, bawaan **mati**, wajib persetujuan): setelah halaman tenang, maks. 1–5 gambar utama tanpa teks alternatif dideskripsikan satu per satu dan hasilnya dimasukkan ke `alt="Deskripsi NaraVisi: …"` (+ `data-naravisi="auto"`), sehingga NVDA/JAWS membacanya saat menelusuri halaman. Alt yang sudah bermakna tidak ditimpa. Opsi serupa: deskripsikan saat gambar mendapat fokus Tab. Tidak pernah jalan di luar http/https, di Incognito, di situs dalam daftar pengecualian (bank, dompet digital, email, WhatsApp — bisa diedit), atau di halaman yang punya kolom kata sandi. Berhenti saat sisa kuota ≤ 2 dan maks. 30 deskripsi otomatis per hari. Semua syarat diperiksa ulang di service worker.
 
 **Izin extension (manifest):**
 

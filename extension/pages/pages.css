@@ -100,3 +100,16 @@ label.check { display: flex; gap: 12px; align-items: center; min-height: var(--n
   dl.kv dd { margin-bottom: 8px; }
   h1 { font-size: 1.625rem; }
 }
+
+/* Dialog persetujuan mode otomatis */
+dialog.consent {
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 24px;
+  border: 2px solid var(--nv-ink);
+  border-radius: var(--nv-radius-lg);
+  background: var(--nv-surface);
+  color: var(--nv-ink);
+}
+dialog.consent::backdrop { background: rgba(20, 33, 61, 0.55); }
+dialog.consent p { margin: 0 0 16px; }
+textarea#kecuali { font-family: var(--nv-mono); font-size: 0.9375rem; }
