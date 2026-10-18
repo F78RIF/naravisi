@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS pengaturan_aksesibilitas (
   pengaturan_id      INT AUTO_INCREMENT PRIMARY KEY,
   user_id            INT NOT NULL,
   bahasa_deskripsi   VARCHAR(10) NOT NULL DEFAULT 'id',
-  pintasan_keyboard  VARCHAR(50) NOT NULL DEFAULT 'Alt+Shift+N',
+  pintasan_keyboard  VARCHAR(50) NOT NULL DEFAULT 'Alt+Shift+K',
   kecepatan_suara    DECIMAL(3,1) NOT NULL DEFAULT 1.0,
   nada_suara         DECIMAL(3,1) NOT NULL DEFAULT 1.0,
   jenis_suara        VARCHAR(100) NULL,

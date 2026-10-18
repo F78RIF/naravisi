@@ -117,7 +117,7 @@ Buka DevTools → Network, muat halaman Riwayat dan Profil 5 kali. Lulus bila se
 
 ### M-03 — Pembaca layar NVDA (RNF-02, RF-12)
 Dengan NVDA aktif di Windows:
-1. Tekan Alt+Shift+N → NVDA mengumumkan "NaraVisi, dialog" dan jumlah gambar.
+1. Tekan Alt+Shift+K → NVDA mengumumkan "NaraVisi, dialog" dan jumlah gambar.
 2. Panah bawah → nama "Gambar 2 dari N" dan teks alternatif dibaca.
 3. Enter → status "Mendeskripsikan…", lalu TTS NaraVisi membacakan deskripsi tanpa bertabrakan dengan NVDA.
 4. Tombol Putar/Jeda/Ulang/Berhenti dapat dijangkau dengan Tab dan berfungsi.

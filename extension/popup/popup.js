@@ -1,5 +1,6 @@
 import { mountAuthForms } from '../shared/auth-forms.js';
 import { getSession, logout, refreshProfile } from '../shared/config.js';
+import { currentShortcut, openShortcutsPage } from '../shared/guide.js';
 import { icon } from '../shared/icons.js';
 
 const $ = (id) => document.getElementById(id);
@@ -62,12 +63,22 @@ function renderQuota(user) {
   }
 }
 
+/** Pintasan yang sedang berlaku (bisa diubah pengguna di chrome://extensions/shortcuts), bukan teks tetap. */
 async function showShortcut() {
-  const [cmd] = (await chrome.commands.getAll()).filter((c) => c.name === 'scan-page');
-  $('shortcut').textContent = cmd?.shortcut || 'belum diatur';
-  if (cmd?.shortcut) $('scan').setAttribute('aria-keyshortcuts', cmd.shortcut);
-  else $('scan').removeAttribute('aria-keyshortcuts');
+  const shortcut = await currentShortcut();
+  $('shortcut').textContent = shortcut || 'belum diatur';
+  $('set-shortcut').hidden = Boolean(shortcut);
+  if (shortcut) $('scan').setAttribute('aria-keyshortcuts', shortcut);
+  else {
+    $('scan').removeAttribute('aria-keyshortcuts');
+    say('Pintasan belum diatur.');
+  }
 }
+
+$('set-shortcut').addEventListener('click', async () => {
+  await openShortcutsPage();
+  window.close();
+});
 
 function render(user) {
   $('guest').hidden = Boolean(user);

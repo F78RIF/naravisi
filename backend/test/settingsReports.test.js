@@ -15,7 +15,7 @@ describe('Pengaturan (UC-AKS-01..03)', () => {
     const res = await app.api('GET', '/api/v1/settings', { token: u.token });
     assert.deepEqual(res.body, {
       bahasa_deskripsi: 'id',
-      pintasan_keyboard: 'Alt+Shift+N',
+      pintasan_keyboard: 'Alt+Shift+K',
       kecepatan_suara: 1,
       nada_suara: 1,
       jenis_suara: null,
@@ -63,7 +63,7 @@ describe('Pengaturan (UC-AKS-01..03)', () => {
 
   it('normalizeShortcut', () => {
     assert.equal(normalizeShortcut('shift+ctrl+k'), 'Ctrl+Shift+K');
-    assert.equal(normalizeShortcut('Alt+Shift+n'), 'Alt+Shift+N');
+    assert.equal(normalizeShortcut('Alt+Shift+k'), 'Alt+Shift+K');
   });
 });
 

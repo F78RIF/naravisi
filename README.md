@@ -3,7 +3,7 @@
 Browser extension berbasis AI yang mendeskripsikan gambar di halaman web dan membacakannya dengan suara, untuk pengguna tunanetra. Tugas mata kuliah IPPL — Rifat Arifaldo (11241078).
 
 ```
-Halaman web ──Alt+Shift+N──▶ Extension (scan, pilih, panel, TTS)
+Halaman web ──Alt+Shift+K──▶ Extension (scan, pilih, panel, TTS)
                                    │ gambar (base64) + token JWT
                                    ▼
                     Backend Express 5 ── MySQL 8.4
@@ -30,7 +30,7 @@ Fokus presentasi tahap ini: **10 dari 30 RF esensial** + kuota Gratis 10 gambar/
 |---|---|---|---|---|
 | RF-01 | Registrasi | ✅ | `extension/shared/auth-forms.js` (`mountAuthForms`) → `backend/src/services/accountService.js` (`register`) | popup/tab sambutan → "Daftar" · e2e "registrasi dari popup" |
 | RF-05 | Login | ✅ | `auth-forms.js` → `accountService.js` (`login`, batas gagal di `lib/rateLimit.js`) | popup → Masuk · `test/auth.test.js`, `security.test.js` |
-| RF-06 | Pindai gambar | ✅ | `extension/content/content.js` (`scanImages`), `background.js` (`handleScanCommand`, `togglePanel`) | Alt+Shift+N di halaman berita · e2e "5 gambar ditemukan" |
+| RF-06 | Pindai gambar | ✅ | `extension/content/content.js` (`scanImages`), `background.js` (`handleScanCommand`, `togglePanel`) | Alt+Shift+K di halaman berita · e2e "5 gambar ditemukan" |
 | RF-07 | Daftar gambar | ✅ | `content.js` (`renderList`, `markImages`) | panel menyebut "Gambar 1 dari 5", teks alternatif |
 | RF-08 | Pilih gambar | ✅ | `content.js` (`select`, `onKeyDown`) | panah ↑/↓, Home/End, klik |
 | RF-09 | Kirim ke AI | ✅ | `background.js` (`requestDescription`, `imageToBase64`) → `descriptionService.js` (`describe`) → `aiClient.js` → `ai-service/app/main.py` (`/caption`) | Enter pada gambar · `descriptionService.test.js` |
@@ -104,7 +104,8 @@ Log menampilkan alamat API, dashboard Admin, dan mode pembayaran.
 1. Buka `chrome://extensions`, aktifkan **Developer mode**.
 2. **Load unpacked** → pilih folder `extension/`. Salin **ID** extension ke `backend/.env`: `ALLOWED_ORIGINS=chrome-extension://<ID>`, lalu restart backend.
 3. Tab **Selamat datang** terbuka otomatis dan sambutan dibacakan. Tekan **Tab** untuk masuk atau daftar (bisa juga lewat ikon NaraVisi di toolbar).
-4. Buka situs berita, tekan **Alt+Shift+N**.
+4. Buka situs berita, tekan **Alt+Shift+K**.
+   **Alt+Shift+V** membuka popup NaraVisi. Alt+Shift+N tidak dipakai karena bentrok dengan Split View bawaan Chrome. Bila pintasan tetap "belum diatur" (bentrok dengan extension lain), atur di `chrome://extensions/shortcuts` (popup menyediakan tautan **Atur pintasan di Chrome**).
 
 > **"Tidak dapat terhubung ke server NaraVisi: localhost:3000 tidak menjawab"** (titik merah "Server tidak aktif" di kaki popup) berarti backend belum berjalan: nyalakan MySQL, jalankan `npm start` di `backend/`, cek `http://localhost:3000/api/v1/health`, lalu tekan **Coba lagi**. **"Server NaraVisi menjawab, tetapi sedang bermasalah (kode 500)"** berarti backend hidup tetapi gagal; lihat log terminal backend (sering: MySQL berhenti). Alamat API diubah di **Pengaturan → Koneksi server**.
 
@@ -113,8 +114,8 @@ Kontrol panel: **↑/↓** pilih · **Enter** deskripsikan · **Spasi** jeda/lan
 **Pemandu suara** (bisa dipakai tanpa melihat layar):
 - Saat dipasang: tab sambutan + sambutan suara.
 - Setelah masuk/daftar: "Berhasil masuk sebagai … Jatah gratis hari ini … gambar." Sesi tersimpan sampai token kedaluwarsa.
-- **Alt+Shift+N** saat belum masuk: "Anda belum masuk. Halaman masuk dibuka." Begitu juga saat sesi berakhir.
-- Saat halaman dibuka: "Ada *n* gambar. Tekan Alt Shift N …", sekali per halaman. Ini hanya menghitung, tidak mendeskripsikan, dan tidak mengirim apa pun ke server. Bisa dimatikan di Pengaturan.
+- **Alt+Shift+K** saat belum masuk: "Anda belum masuk. Halaman masuk dibuka." Begitu juga saat sesi berakhir.
+- Saat halaman dibuka: "Ada *n* gambar. Tekan Alt Shift K …", sekali per halaman. Ini hanya menghitung, tidak mendeskripsikan, dan tidak mengirim apa pun ke server. Bisa dimatikan di Pengaturan.
 - Saat Chrome dibuka: "NaraVisi aktif. Sisa kuota hari ini …". Bila sesi berakhir, halaman masuk dibuka; bila pintasan belum diatur, Pengaturan dibuka di tombol pintasan.
 
 **Daftar gambar** hanya memuat gambar konten: sisi terpendek ≥ 100 px, bukan dekoratif (`alt=""`, `aria-hidden`, `role="presentation"`), bukan ikon/logo/avatar/iklan, tanpa duplikat. Gambar di `<main>`/`<article>` tampil dulu, lalu yang terbesar. Label memakai figcaption → keterangan terdekat → title → nama file.

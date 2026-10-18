@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="pages.css">
 </head>
 <body>
-  <!-- Tab sambutan: dibuka saat extension dipasang, saat Alt+Shift+N ditekan sebelum masuk, dan saat sesi berakhir. -->
+  <!-- Tab sambutan: dibuka saat extension dipasang, saat pintasan pemindai ditekan sebelum masuk, dan saat sesi berakhir. -->
   <main id="main">
     <div class="welcome-brand brand">
       <svg class="logo" viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" focusable="false">
@@ -30,7 +30,8 @@
     <section id="member" class="card" aria-labelledby="member-title" hidden>
       <h2 id="member-title" tabindex="-1">Anda sudah masuk</h2>
       <p id="member-text"></p>
-      <p>Buka halaman web mana pun, lalu tekan <kbd id="shortcut">Alt+Shift+N</kbd> untuk memilih gambar dan mendengar deskripsinya. Tab ini boleh ditutup.</p>
+      <p>Buka halaman web mana pun, lalu tekan <kbd id="shortcut">Alt+Shift+K</kbd> untuk memilih gambar dan mendengar deskripsinya. Tab ini boleh ditutup.</p>
+      <p id="shortcut-missing" hidden>Pintasan belum diatur. <button type="button" id="set-shortcut" class="link">Atur pintasan di Chrome</button></p>
       <p class="row"><a class="btn" href="pengaturan.html">Pengaturan</a> <a class="btn" href="riwayat.html">Riwayat</a></p>
     </section>
   </main>

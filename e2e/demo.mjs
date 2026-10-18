@@ -160,7 +160,7 @@ try {
   // 2. Pindai & deskripsikan
   await tab.goto(SITE);
   await tab.focus('#link');
-  await caption('2. Buka situs berita, tekan Alt+Shift+N', 'UC-GBR-01/02 · gambar ditandai dan didaftar di Panel NaraVisi');
+  await caption('2. Buka situs berita, tekan Alt+Shift+K', 'UC-GBR-01/02 · gambar ditandai dan didaftar di Panel NaraVisi');
   await pause(2200);
   await toggle();
   await panelStatus.filter({ hasText: 'gambar ditemukan' }).waitFor();

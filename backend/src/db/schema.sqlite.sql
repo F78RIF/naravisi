@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS pengaturan_aksesibilitas (
   pengaturan_id      INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id            INTEGER NOT NULL UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
   bahasa_deskripsi   TEXT NOT NULL DEFAULT 'id',
-  pintasan_keyboard  TEXT NOT NULL DEFAULT 'Alt+Shift+N',
+  pintasan_keyboard  TEXT NOT NULL DEFAULT 'Alt+Shift+K',
   kecepatan_suara    REAL NOT NULL DEFAULT 1.0,
   nada_suara         REAL NOT NULL DEFAULT 1.0,
   jenis_suara        TEXT NULL

@@ -281,7 +281,7 @@ try {
       (await context.waitForEvent('page', { predicate: (p) => p.url().includes('selamat-datang.html'), timeout: 10000 }));
     watch(welcome);
     await welcome.waitForFunction(() => document.activeElement?.id === 'title');
-    assert.match((await spoken())[0], /^Selamat datang di NaraVisi\. Tekan Tab untuk masuk atau mendaftar\. Setelah masuk, /);
+    assert.match((await spoken())[0], /^Selamat datang di NaraVisi\. Tekan Tab untuk masuk atau mendaftar\. Setelah masuk: (Tekan .+|Pintasan belum diatur\. Klik ikon NaraVisi di toolbar) untuk mendengar deskripsi gambar\.$/);
     assert.deepEqual(await a11yAudit(welcome), []);
     assert.equal(await welcome.locator('#register-form').isVisible(), false);
     await welcome.keyboard.press('Tab'); // pilihan Masuk/Daftar (tablist) ada di atas form
@@ -490,7 +490,7 @@ try {
     // "/" hanya visual (aria-hidden); pembaca layar mendengar "10 dari 10 gambar hari ini"
     assert.match(await popup.locator('#quota').innerText(), /^10 \/\s+dari\s+10\s+gambar hari ini$/);
     assert.match(await popup.locator('#plan').innerText(), /^Akun Gratis/);
-    assert.match((await spoken()).at(-1), /^Berhasil masuk sebagai Rifat Uji\. Jatah gratis hari ini 10 gambar\. (Tekan .+|Klik ikon NaraVisi di toolbar) untuk memindai gambar\.$/);
+    assert.match((await spoken()).at(-1), /^Berhasil masuk sebagai Rifat Uji\. Jatah gratis hari ini 10 gambar\. (Tekan .+|Pintasan belum diatur\. Klik ikon NaraVisi di toolbar) untuk memindai gambar\.$/);
   });
 
   await step('login dengan sandi salah → pesan jelas', async () => {
@@ -565,7 +565,7 @@ try {
     for (let i = 0; i < 50 && (await announcements()).length === before; i++) await new Promise((r) => setTimeout(r, 100));
     const list = await announcements();
     assert.equal(list.length, before + 1);
-    assert.match(list.at(-1), /^Ada 5 gambar\. (Tekan .+|Klik ikon NaraVisi di toolbar) untuk mendengar deskripsinya\.$/);
+    assert.match(list.at(-1), /^Ada 5 gambar\. (Tekan .+|Pintasan belum diatur\. Klik ikon NaraVisi di toolbar) untuk mendengar deskripsinya\.$/);
     await ann.evaluate(() => { location.hash = 'bagian-2'; }); // dokumen sama → tidak diumumkan lagi
     await new Promise((r) => setTimeout(r, 2500));
     assert.equal((await announcements()).length, before + 1);
@@ -1238,7 +1238,7 @@ try {
     assert.equal(await page.getByRole('button', { name: 'Masuk atau daftar NaraVisi' }).isVisible(), true);
   });
 
-  await step('Alt+Shift+N saat belum masuk → dibacakan & tab masuk terbuka, fokus di Email', async () => {
+  await step('Alt+Shift+K saat belum masuk → dibacakan & tab masuk terbuka, fokus di Email', async () => {
     const [tab] = await Promise.all([
       context.waitForEvent('page'),
       sw.evaluate(() => globalThis.naraVisi.handleScanCommand()),

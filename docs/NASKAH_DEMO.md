@@ -6,7 +6,7 @@ Durasi target: **8–10 menit** demo langsung + tanya jawab. Video cadangan: `e2
 
 ### Perangkat
 - [ ] Laptop dicas penuh + charger; speaker/headphone untuk suara TTS (sambungkan ke pengeras ruangan bila ada)
-- [ ] Chrome versi terbaru; **tutup** extension lain yang memakai Alt+Shift+N
+- [ ] Chrome versi terbaru; **tutup** extension lain yang memakai Alt+Shift+K atau Alt+Shift+V
 - [ ] Windows: paket bahasa Indonesia terpasang (Settings → Time & Language → Speech) agar suara Indonesia tersedia
 - [ ] NVDA terpasang (untuk segmen pembaca layar, opsional)
 
@@ -37,7 +37,7 @@ Durasi target: **8–10 menit** demo langsung + tanya jawab. Video cadangan: `e2
 |---|---|---|---|
 | 1 | 0:00 | Slide judul → masalah | "Banyak gambar di web tidak punya teks alternatif, sehingga pengguna pembaca layar kehilangan informasi. NaraVisi menjawab itu dengan AI." |
 | 2 | 0:45 | Popup → **Daftar** akun demo | "Akun baru otomatis Gratis: 10 deskripsi per hari." (UC-AKUN-01) |
-| 3 | 1:30 | Buka artikel berita, tekan **Alt+Shift+N** | "NaraVisi memindai gambar, mengabaikan ikon kecil, dan menandai gambar yang bisa dideskripsikan." (UC-GBR-01/02) |
+| 3 | 1:30 | Buka artikel berita, tekan **Alt+Shift+K** | "NaraVisi memindai gambar, mengabaikan ikon kecil, dan menandai gambar yang bisa dideskripsikan." (UC-GBR-01/02) |
 | 4 | 2:00 | **↓** ke gambar 2, **Enter** | Biarkan suara membacakan. "Gambar diunduh dan dinormalkan oleh extension, dikirim ke layanan AI BLIP, diterjemahkan ke bahasa Indonesia, lalu dibacakan." (UC-GBR-03..07) |
 | 5 | 3:00 | **Spasi** (jeda), **Spasi** (lanjut), **R** (ulang), **S** (berhenti) | "Semua kontrol bisa dengan keyboard." (RNF-03) |
 | 6 | 3:30 | (opsional) nyalakan NVDA, ulangi langkah 3–4 | "Status diumumkan pembaca layar; deskripsi dibacakan TTS tanpa tabrakan." (RNF-02) |

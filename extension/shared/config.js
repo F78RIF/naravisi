@@ -23,7 +23,7 @@ export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export const DEFAULT_TTS = Object.freeze({
   bahasa_deskripsi: 'id',
-  pintasan_keyboard: 'Alt+Shift+N',
+  pintasan_keyboard: 'Alt+Shift+K',
   kecepatan_suara: 1,
   nada_suara: 1,
   jenis_suara: null,

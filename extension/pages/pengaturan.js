@@ -1,6 +1,6 @@
 // Pengaturan aksesibilitas & TTS: RF-17..RF-19 (UC-AKS-01..03)
 import { apiFetch, apiHost, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
-import { speakGuide } from '../shared/guide.js';
+import { currentShortcut, openShortcutsPage, speakGuide } from '../shared/guide.js';
 import { $, el, requireSession, say, sayError, shell, speak } from './common.js';
 
 shell('pengaturan', 'Pengaturan aksesibilitas');
@@ -213,8 +213,7 @@ function field(id, label, control, hint) {
 
 async function render(settings) {
   const premium = settings.fitur_premium;
-  const [cmd] = (await chrome.commands.getAll()).filter((c) => c.name === 'scan-page');
-  const activeShortcut = cmd?.shortcut || 'belum diatur';
+  const activeShortcut = (await currentShortcut()) || 'belum diatur';
 
   // --- Bahasa & pintasan (UC-AKS-02)
   const bahasa = el(
@@ -262,7 +261,7 @@ async function render(settings) {
         pintasan,
         `Pintasan aktif saat ini: ${activeShortcut}. Chrome hanya mengizinkan pintasan diubah dari halaman pintasan Chrome — simpan pilihan Anda di sini, lalu terapkan di sana.`,
       ),
-      el('div', { class: 'row' }, el('button', { type: 'button', id: 'open-shortcuts', onclick: () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }) }, 'Buka halaman pintasan Chrome')),
+      el('div', { class: 'row' }, el('button', { type: 'button', id: 'open-shortcuts', onclick: () => openShortcutsPage() }, 'Buka halaman pintasan Chrome')),
     ),
     el(
       'section',

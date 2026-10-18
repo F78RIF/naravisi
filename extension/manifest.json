@@ -13,7 +13,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "NaraVisi — pindai gambar (Alt+Shift+N)",
+    "default_title": "NaraVisi — pindai gambar (Alt+Shift+K)",
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -31,10 +31,17 @@
   "commands": {
     "scan-page": {
       "suggested_key": {
-        "default": "Alt+Shift+N",
-        "mac": "Alt+Shift+N"
+        "default": "Alt+Shift+K",
+        "mac": "Alt+Shift+K"
       },
       "description": "Pindai gambar pada halaman ini"
+    },
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+V",
+        "mac": "Alt+Shift+V"
+      },
+      "description": "Aktifkan ekstensi"
     }
   }
 }

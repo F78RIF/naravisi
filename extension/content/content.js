@@ -1,6 +1,6 @@
 // Content script NaraVisi — memindai gambar, menampilkan panel aksesibel,
 // dan membacakan deskripsi dengan Web Speech API.
-// Disuntik sesuai permintaan (Alt+Shift+N / popup) atau oleh mode otomatis; aman bila disuntik berulang.
+// Disuntik sesuai permintaan (Alt+Shift+K / popup) atau oleh mode otomatis; aman bila disuntik berulang.
 // Mode otomatis hanya menyentuh atribut alt dan data-naravisi pada gambar halaman.
 
 (() => {

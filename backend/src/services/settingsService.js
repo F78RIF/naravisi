@@ -69,7 +69,7 @@ export function createSettingsService({ db }) {
       if (!SHORTCUT_RE.test(normalizeShortcut(raw))) {
         throw Errors.validation(
           'pintasan_keyboard',
-          'Format pintasan tidak valid. Contoh yang benar: Alt+Shift+N atau Ctrl+Shift+Y.',
+          'Format pintasan tidak valid. Contoh yang benar: Alt+Shift+K atau Ctrl+Shift+Y.',
         );
       }
       const shortcut = normalizeShortcut(raw);

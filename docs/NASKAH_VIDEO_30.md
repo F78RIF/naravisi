@@ -25,7 +25,7 @@ Naskah demo lengkap 30 RF (untuk presentasi akhir) tetap di `NASKAH_DEMO.md`.
 | 3 | 1:10–1:35 | Load unpacked → tab **Selamat datang** terbuka, suara sambutan terdengar | "Begitu dipasang, NaraVisi langsung menyapa dengan suara, jadi pengguna tunanetra tidak perlu mencari ikon di toolbar." |
 | 4 | 1:35–2:00 | Tekan **Tab** → "Belum punya akun? Daftar" → isi Nama, Email, Kata sandi → Daftar. **RF-01** | "Registrasi. Kalau ada kolom yang salah, kursor pindah ke kolom itu dan kesalahannya dibacakan. Setelah daftar, langsung masuk tanpa login ulang. Suara mengumumkan jatah gratis: 10 gambar per hari." |
 | 5 | 2:00–2:15 | Popup → Keluar → Masuk lagi. **RF-05** | "Login. Sesi disimpan aman di extension, jadi tidak perlu login setiap membuka Chrome." |
-| 6 | 2:15–2:40 | Buka artikel → tunggu suara **"Ada n gambar"** → tekan **Alt+Shift+N**. **RF-06, RF-07** | "Saat halaman dibuka, NaraVisi hanya memberi tahu jumlah gambar, tanpa mendeskripsikan otomatis, supaya kuota tidak terpakai tanpa izin. Alt+Shift+N membuka daftar gambar. Ikon kecil dan gambar tersembunyi diabaikan." |
+| 6 | 2:15–2:40 | Buka artikel → tunggu suara **"Ada n gambar"** → tekan **Alt+Shift+K**. **RF-06, RF-07** | "Saat halaman dibuka, NaraVisi hanya memberi tahu jumlah gambar, tanpa mendeskripsikan otomatis, supaya kuota tidak terpakai tanpa izin. Alt+Shift+K membuka daftar gambar. Ikon kecil dan gambar tersembunyi diabaikan." |
 | 7 | 2:40–3:20 | **↓** ke gambar 2 → **Enter** → biarkan suara selesai. **RF-08 s.d. RF-11** | "Saya pilih dengan panah, lalu Enter. Gambar dikirim ke model BLIP. Deskripsinya diterima, disimpan, tampil sebagai teks, dan…" (biarkan suara membacakan) |
 | 8 | 3:20–3:40 | **Spasi** (jeda) → **Spasi** (lanjut) → **R** (ulang) → **S** (berhenti). **RF-12** | "Pembacaan bisa dijeda, dilanjutkan, diulang, dan dihentikan, semuanya dari keyboard." |
 | 9 | 3:40–3:55 | Popup → **Riwayat**. **RF-13** | "Setiap deskripsi tersimpan di riwayat dan bisa diputar ulang." |
@@ -60,4 +60,4 @@ Lalu pilih gambar **yang belum pernah dideskripsikan** (panel menyimpan cache, s
 | Suara sambutan tidak terdengar | Cek volume; teks yang sama tetap tampil di tab. Lanjutkan saja. |
 | Deskripsi lama (>10 detik) | CPU/RAM penuh: tutup aplikasi dan tab lain, tunggu halaman selesai dimuat sebelum Enter. Batas tunggu backend 25 detik. |
 | "Tidak dapat terhubung ke server" | Backend mati atau MySQL belum Start. |
-| Alt+Shift+N tidak bereaksi | `chrome://extensions/shortcuts` → pastikan pintasan NaraVisi terisi. |
+| Alt+Shift+K tidak bereaksi | `chrome://extensions/shortcuts` → pastikan pintasan NaraVisi terisi. |
