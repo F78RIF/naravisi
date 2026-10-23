@@ -11,11 +11,16 @@ function intFromEnv(name, fallback) {
 }
 
 const DEV_JWT_SECRET = 'naravisi-dev-secret-ganti-di-produksi';
+const DEV_ENVS = new Set(['development', 'test']);
 
 export function loadConfig(env = process.env) {
   const jwtSecret = env.JWT_SECRET || DEV_JWT_SECRET;
-  if (jwtSecret === DEV_JWT_SECRET && env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET wajib diisi di produksi.');
+  // Kunci cadangan ada di repo publik, jadi hanya boleh dipakai saat pengembangan/tes.
+  if (jwtSecret === DEV_JWT_SECRET && !DEV_ENVS.has(env.NODE_ENV)) {
+    throw new Error('JWT_SECRET wajib diisi di .env (kosong hanya boleh bila NODE_ENV=development atau test).');
+  }
+  if (env.NODE_ENV === 'production' && jwtSecret.length < 32) {
+    throw new Error('JWT_SECRET di produksi minimal 32 karakter.');
   }
 
   return {
