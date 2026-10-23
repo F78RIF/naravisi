@@ -24,3 +24,19 @@ Setiap keputusan yang mengubah atau melengkapi SRS/SDD v1.0 dicatat di sini, lal
 | ADR-18 | 2026-10-09 | **Mode simulasi pembayaran** bila `MIDTRANS_SERVER_KEY` kosong; status pembayaran juga dicek langsung ke Midtrans saat pengguna membuka halaman Premium (webhook tidak bisa menjangkau localhost). | Final | UC-PRM-03. |
 | ADR-19 | 2026-10-09 | **Hapus akun mewajibkan kata sandi** sebagai konfirmasi (UC-AKUN-04 langkah 2–3). | Final | UC-AKUN-04. |
 | ADR-20 | 2026-10-09 | **Kolom `langganan.status_langganan` dihapus** dari ERD karena status dihitung dari tanggal (ADR-09); `paket_premium.aktif` ditambahkan untuk menyembunyikan paket tanpa menghapusnya. | Final | ERD. |
+| ADR-21 | 2026-10-23 | **Provider Gemini sebagai opsi**: menambahkan opsi penyedia model cloud Google Gemini (Google AI Studio) lewat SDK `google-genai` tanpa menghapus model lokal BLIP. | Diterapkan | `ai-service`: `CAPTION_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL`. Backend dan extension tidak berubah. |
+
+## Detail Keputusan Tambahan
+
+### ADR-21: Provider Gemini sebagai Opsi
+
+- **Konteks & Alasan:**
+  - Model lokal BLIP + MarianMT di CPU memerlukan resource komputasi besar dan waktu inferensi yang relatif lama (±7 detik per gambar pada CPU laptop), serta kualitas kalimat terjemahan yang kadang kaku.
+  - Google Gemini (Google AI Studio) menyediakan inferensi multimodal mutakhir dengan latensi jauh lebih rendah (1–2 detik), mendukung deskripsi langsung dalam bahasa Indonesia yang luwes dan ramah pengguna tunanetra (membaca teks penting, mendeskripsikan subjek, kegiatan, dan latar) tanpa membutuhkan tahap penerjemahan terpisah.
+  - SDK resmi `google-genai` digunakan dengan model Flash / Flash-Lite yang dapat diakses secara gratis di Google AI Studio.
+- **Kekurangan & Risiko:**
+  - *Privasi Data*: Pada tingkat gratis (free tier) Google AI Studio, Google dapat menggunakan data prompt dan gambar untuk meningkatkan produk dan melatih model.
+  - *Ketergantungan Internet*: Membutuhkan koneksi internet aktif ke API Google.
+  - *Batas Kuota (Rate Limit)*: Tingkat gratis memiliki kuota permintaan per menit (RPM) dan per hari (RPD). Jika terlampaui (429), sistem memetakan galat ke kode `MODEL_BUSY` dengan pesan yang ramah pengguna.
+- **BLIP sebagai Cadangan Offline:**
+  - Provider BLIP + MarianMT tetap dipertahankan penuh dan dapat dipilih kapan saja (`CAPTION_PROVIDER=blip`) untuk skenario luring (offline), lingkungan tanpa koneksi internet, atau pengguna yang memprioritaskan privasi lokal secara mutlak (data gambar tidak pernah keluar dari mesin lokal).

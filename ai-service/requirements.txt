@@ -4,6 +4,9 @@ uvicorn[standard]>=0.30
 pydantic>=2.7
 pillow>=10.3
 
+# Provider Gemini (Google AI Studio)
+google-genai>=1.0
+
 # Model gratis yang berjalan lokal (CPU cukup).
 # Untuk CPU saja, pasang torch dari indeks CPU agar unduhan lebih kecil:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu

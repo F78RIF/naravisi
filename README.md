@@ -18,7 +18,7 @@ Halaman web ──Alt+Shift+K──▶ Extension (scan, pilih, panel, TTS)
 |---|---|---|
 | `extension/` | Chrome Extension: panel deskripsi, popup akun, halaman Riwayat/Pengaturan/Premium/Profil | Manifest V3, JavaScript ES2022, Web Speech API |
 | `backend/` | REST API + dashboard Admin (`/admin/`) | Node.js 22, Express 5, MySQL 8.4 (`mysql2`) |
-| `ai-service/` | Image captioning | Python 3.12, FastAPI 0.115, BLIP + MarianMT (gratis, lokal) |
+| `ai-service/` | Image captioning | Python 3.12, FastAPI 0.115, BLIP + MarianMT (lokal) atau Gemini Flash (Google AI Studio) |
 | `e2e/` | Uji end-to-end di Chromium | Playwright |
 | `docs/` | API, keputusan desain, pengujian, log Agentic SDLC | – |
 
@@ -78,7 +78,9 @@ cp .env.example .env        # Windows: copy .env.example .env
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file .env
 ```
 
-Start pertama mengunduh model BLIP (±1 GB) dan model terjemahan (±300 MB). Tunggu log **"Layanan AI siap"**. Untuk mencoba alur tanpa model, set `CAPTION_PROVIDER=mock`.
+Start pertama mengunduh model BLIP (±1 GB) dan model terjemahan (±300 MB). Tunggu log **"Layanan AI siap"**.
+Untuk mencoba alur tanpa model, set `CAPTION_PROVIDER=mock`.
+Untuk menggunakan **Google Gemini (Google AI Studio)**: set `CAPTION_PROVIDER=gemini`, isi `GEMINI_API_KEY`, dan opsional tentukan `GEMINI_MODEL` (bawaan: `gemini-2.5-flash`). Model Gemini mendeskripsikan langsung dalam bahasa Indonesia dengan latensi rendah. BLIP tetap menjadi cadangan offline (lihat ADR-21).
 
 ### 2. Backend (terminal 2)
 
@@ -157,7 +159,7 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 
 ```bash
 cd backend && npm test                         # 85 tes unit + integrasi API (SQLite di memori)
-cd ai-service && python -m pytest              # 15 tes
+cd ai-service && python -m pytest              # 33 tes
 cd e2e && npm install && npm test              # 63 skenario: extension + backend + Admin di Chromium
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur waktu respons (RNF-05)
@@ -178,7 +180,7 @@ Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`.
 
 ## Batasan yang diketahui
 
-- BLIP menghasilkan kalimat pendek berbahasa Inggris lalu diterjemahkan; kualitas terjemahan kadang kaku. Model bisa diganti lewat `CAPTION_PROVIDER` tanpa mengubah API.
+- BLIP menghasilkan kalimat pendek berbahasa Inggris lalu diterjemahkan; kualitas terjemahan kadang kaku. Alternatif Google Gemini (ADR-21) menghasilkan bahasa Indonesia alami secara langsung, namun memiliki konsekuensi: data pada paket gratis berpotensi dipakai Google untuk peningkatan produk, membutuhkan koneksi internet, dan dibatasi kuota rate limit Google AI Studio. BLIP tetap dipertahankan penuh sebagai opsi lokal offline.
 - Gambar latar CSS hanya diambil dari `url(...)` pertama; gradien dan sprite ikon kecil (< 48 px) diabaikan. SVG inline dengan efek rumit (filter, font eksternal) bisa sedikit berbeda setelah diubah ke JPEG.
 - Model AI di CPU: rata-rata 7,3 detik per gambar saat model dan browser berbagi satu laptop (uji M-01; target RNF-04 ≤ 5 detik). Di GPU atau server terpisah jauh lebih cepat.
 - Halaman dengan sangat banyak gambar (beranda antaranews.com: ±500) menghasilkan daftar yang panjang.

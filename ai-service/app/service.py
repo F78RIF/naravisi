@@ -56,6 +56,21 @@ class CaptionService:
 
     def describe(self, image: Image.Image, lang: str = "id") -> CaptionResult:
         started = time.perf_counter()
+
+        # Provider yang langsung menghasilkan bahasa Indonesia (mis. Gemini)
+        if getattr(self.captioner, "native_lang", "en") == "id":
+            raw = self.captioner.caption(image)
+            text = to_sentence(raw)
+            if not text:
+                raise ValueError("Model tidak menghasilkan deskripsi.")
+            return CaptionResult(
+                text=text,
+                text_en="",
+                lang="id",
+                model=self.model_name,
+                latency_ms=round((time.perf_counter() - started) * 1000),
+            )
+
         english = clean_english_caption(self.captioner.caption(image))
         if not english:
             raise ValueError("Model tidak menghasilkan deskripsi.")

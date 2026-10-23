@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from .config import Settings, load_settings
 from .image_utils import ImageError, decode_base64_image
-from .providers import MockCaptioner, MockTranslator
+from .providers import MockCaptioner, MockTranslator, ProviderError
 from .service import CaptionService
 
 log = logging.getLogger("naravisi.ai")
@@ -25,6 +25,18 @@ log = logging.getLogger("naravisi.ai")
 def build_service(settings: Settings) -> CaptionService:
     if settings.provider == "mock":
         return CaptionService(MockCaptioner(), MockTranslator())
+
+    if settings.provider == "gemini":
+        from .providers import GeminiCaptioner
+
+        log.info("Memuat provider Gemini model %s ...", settings.gemini_model)
+        captioner = GeminiCaptioner(
+            api_key=settings.gemini_api_key,
+            model_name=settings.gemini_model,
+            timeout_seconds=settings.gemini_timeout_seconds,
+            max_output_tokens=settings.gemini_max_output_tokens,
+        )
+        return CaptionService(captioner, None)
 
     from .providers import BlipCaptioner, MarianTranslator
 
@@ -45,7 +57,7 @@ def warm_up(service: CaptionService) -> None:
 
     try:
         service.describe(Image.new("RGB", (384, 384), (128, 128, 128)), "id")
-    except ValueError:
+    except (ValueError, ProviderError):
         pass  # gambar polos boleh tidak menghasilkan caption; tujuannya hanya memanaskan model
 
 
@@ -71,9 +83,10 @@ def create_app(settings: Settings | None = None, service: CaptionService | None 
         if state["service"] is None:
             # Model dimuat sekali saat start (unduhan pertama bisa beberapa menit).
             state["service"] = await run_in_threadpool(build_service, settings)
-            started = time.perf_counter()
-            await run_in_threadpool(warm_up, state["service"])
-            log.info("Pemanasan model: %.1f dtk", time.perf_counter() - started)
+            if settings.provider == "blip":
+                started = time.perf_counter()
+                await run_in_threadpool(warm_up, state["service"])
+                log.info("Pemanasan model: %.1f dtk", time.perf_counter() - started)
             log.info("Layanan AI siap: %s", state["service"].model_name)
         yield
 
@@ -96,6 +109,8 @@ def create_app(settings: Settings | None = None, service: CaptionService | None 
 
         try:
             result = await run_in_threadpool(svc.describe, image, req.lang)
+        except ProviderError as err:
+            raise HTTPException(status_code=422, detail={"code": err.code, "message": err.message}) from err
         except ValueError as err:
             raise HTTPException(status_code=422, detail={"code": "NO_CAPTION", "message": str(err)}) from err
 
