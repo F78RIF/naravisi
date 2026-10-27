@@ -82,8 +82,8 @@ Semua endpoint bertanda **user** wajib `Authorization: Bearer <JWT>` (didapat da
 | Auth | `POST /auth/register` `{nama, email, kata_sandi}` | – | RF-01 | → `201 {token, user}` |
 | Auth | `POST /auth/login` `{email, kata_sandi}` | – | RF-05 | `401 INVALID_CREDENTIALS`, `403 ACCOUNT_DISABLED` |
 | Profil | `GET /me` | user | RF-02 | termasuk `jenis_pengguna`, `langganan`, `kuota` |
-| Profil | `PATCH /me` `{nama?, kata_sandi_lama?, kata_sandi_baru?}` | user | RF-03 | ganti sandi wajib sandi lama |
-| Profil | `DELETE /me` `{kata_sandi}` | user | RF-04 | data terkait terhapus, transaksi dianonimkan |
+| Profil | `PATCH /me` `{nama?, email?, kata_sandi_lama?, kata_sandi_baru?}` | user | RF-03 | ganti email/sandi wajib `kata_sandi_lama`; `409 EMAIL_TAKEN` |
+| Profil | `DELETE /me` `{konfirmasi: "HAPUS", kata_sandi}` | user | RF-04 | riwayat, pengaturan, kuota, laporan terhapus; transaksi dianonimkan; token langsung ditolak (401) |
 | Kuota | `GET /me/quota` | user | RF-09 | `{tanggal, terpakai, batas, sisa}` (`batas` null = tanpa batas) |
 | Deskripsi | `POST /descriptions` | user | RF-09..11, 13 | + `riwayat_id`, `kuota`; `429 QUOTA_EXCEEDED` |
 | Riwayat | `GET /history?page&limit` | user | RF-14 | `{items, total, batas_hari, tersembunyi}` |

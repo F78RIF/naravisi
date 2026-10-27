@@ -1300,7 +1300,7 @@ try {
   await prem.close();
 
   // =========================================================================
-  section('Profil (UC-AKUN-02..03)');
+  section('Profil (UC-AKUN-02..04)');
   const prof = await context.newPage();
   watch(prof);
   await prof.goto(extPage('pages/profil.html'));
@@ -1316,13 +1316,69 @@ try {
   });
 
   await step('UC-AKUN-03 alt: sandi baru terlalu pendek ditolak', async () => {
-    await prof.getByLabel('Kata sandi saat ini (wajib bila mengganti kata sandi)').fill('sandiku123');
+    await prof.getByLabel('Kata sandi saat ini').fill('sandiku123');
     await prof.getByLabel('Kata sandi baru').fill('123');
     await prof.getByRole('button', { name: 'Simpan perubahan' }).click();
     await prof.locator('#msg', { hasText: 'minimal 8 karakter' }).waitFor();
   });
 
-  await step('halaman profil lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(prof), []));
+  await step('RF-03: ubah email wajib kata sandi saat ini', async () => {
+    const saved = await sw.evaluate(() => chrome.storage.local.get(['nvSession', 'nvTts']));
+    const tmp = await backend.register({ nama: 'Akun Sementara', email: 'sementara@uji.id' });
+    try {
+      await sw.evaluate((s) => chrome.storage.local.set({ nvSession: { token: s.token, user: s.user, savedAt: Date.now() } }), tmp);
+      await prof.reload();
+      const email = prof.getByLabel('Email', { exact: true });
+      await email.waitFor();
+      await email.fill('pindah@uji.id');
+      await prof.getByRole('button', { name: 'Simpan perubahan' }).click();
+      await prof.locator('#msg', { hasText: 'Masukkan kata sandi saat ini' }).waitFor();
+      assert.equal(await prof.evaluate(() => document.activeElement.id), 'e-lama');
+      await prof.getByLabel('Kata sandi saat ini').fill(tmp.password);
+      await prof.getByRole('button', { name: 'Simpan perubahan' }).click();
+      await prof.locator('#msg', { hasText: 'Profil berhasil diperbarui.' }).waitFor();
+      const row = await backend.db.get('SELECT email FROM users WHERE user_id = ?', [tmp.user.user_id]);
+      assert.equal(row.email, 'pindah@uji.id');
+    } finally {
+      await sw.evaluate((s) => chrome.storage.local.set(s), saved);
+    }
+  });
+
+  await step('RF-04: hapus akun permanen — wajib ketik "HAPUS"; riwayat ikut terhapus; token dicabut', async () => {
+    const saved = await sw.evaluate(() => chrome.storage.local.get(['nvSession', 'nvTts']));
+    const tmp = await backend.register({ nama: 'Akan Dihapus', email: 'dihapus@uji.id' });
+    await backend.describe(tmp.token);
+    try {
+      await sw.evaluate((s) => chrome.storage.local.set({ nvSession: { token: s.token, user: s.user, savedAt: Date.now() } }), tmp);
+      await prof.reload();
+      const konfirmasi = prof.getByLabel('Ketik HAPUS untuk konfirmasi');
+      await konfirmasi.waitFor();
+      await konfirmasi.fill('hapus');
+      await prof.locator('#d-sandi').fill(tmp.password);
+      await prof.getByRole('button', { name: 'Hapus akun permanen' }).click();
+      await prof.locator('#msg', { hasText: 'Akun tidak dihapus. Ketik HAPUS' }).waitFor();
+      assert.equal(await prof.evaluate(() => document.activeElement.id), 'd-konfirmasi');
+      assert.equal(await konfirmasi.getAttribute('aria-invalid'), 'true');
+      assert.ok(await backend.db.get('SELECT 1 AS ada FROM users WHERE user_id = ?', [tmp.user.user_id]));
+
+      await konfirmasi.fill('HAPUS');
+      await prof.getByRole('button', { name: 'Hapus akun permanen' }).click();
+      await prof.locator('#msg', { hasText: 'Akun berhasil dihapus.' }).waitFor();
+      assert.equal(await backend.db.get('SELECT 1 AS ada FROM users WHERE user_id = ?', [tmp.user.user_id]), undefined);
+      const left = await backend.db.get('SELECT COUNT(*) AS n FROM riwayat_deskripsi WHERE user_id = ?', [tmp.user.user_id]);
+      assert.equal(Number(left.n), 0);
+      assert.equal((await backend.api('GET', '/api/v1/me', { token: tmp.token })).status, 401);
+      assert.equal(await sw.evaluate(async () => (await chrome.storage.local.get('nvSession')).nvSession ?? null), null);
+    } finally {
+      await sw.evaluate((s) => chrome.storage.local.set(s), saved);
+    }
+  });
+
+  await step('halaman profil lolos audit aksesibilitas', async () => {
+    await prof.reload();
+    await prof.locator('#p-nama').waitFor();
+    assert.deepEqual(await a11yAudit(prof), []);
+  });
   await prof.screenshot({ path: path.join(shotsDir, '06-profil.png'), fullPage: true });
   await prof.close();
 

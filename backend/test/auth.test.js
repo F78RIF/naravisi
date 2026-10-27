@@ -120,15 +120,59 @@ describe('Akun: UC-AKUN-01..05', () => {
     assert.equal(login.status, 200);
   });
 
-  it('UC-AKUN-04: hapus akun wajib konfirmasi sandi, lalu tidak bisa login', async () => {
+  it('RF-03: ubah email wajib sandi saat ini; email dipakai orang lain → 409; format salah → 400', async () => {
     const u = await app.register();
-    const wrong = await app.api('DELETE', '/api/v1/me', { token: u.token, body: { kata_sandi: 'keliru123' } });
+    const other = await app.register();
+    const noPass = await app.api('PATCH', '/api/v1/me', { token: u.token, body: { email: 'baru@uji.id' } });
+    assert.equal(noPass.status, 400);
+    assert.equal(noPass.body.error.details.field, 'kata_sandi_lama');
+    const wrong = await app.api('PATCH', '/api/v1/me', { token: u.token, body: { email: 'baru@uji.id', kata_sandi_lama: 'salah12345' } });
+    assert.equal(wrong.body.error.code, 'WRONG_PASSWORD');
+    const taken = await app.api('PATCH', '/api/v1/me', { token: u.token, body: { email: other.email, kata_sandi_lama: u.password } });
+    assert.equal(taken.status, 409);
+    assert.equal(taken.body.error.code, 'EMAIL_TAKEN');
+    const bad = await app.api('PATCH', '/api/v1/me', { token: u.token, body: { email: 'bukan-email', kata_sandi_lama: u.password } });
+    assert.equal(bad.status, 400);
+    const ok = await app.api('PATCH', '/api/v1/me', { token: u.token, body: { email: '  Baru@Uji.ID ', kata_sandi_lama: u.password } });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.body.email, 'baru@uji.id');
+    assert.equal((await app.api('POST', '/api/v1/auth/login', { body: { email: 'baru@uji.id', kata_sandi: u.password } })).status, 200);
+    // Email yang sama dengan sekarang tidak butuh sandi (tidak ada perubahan berarti)
+    assert.equal((await app.api('PATCH', '/api/v1/me', { token: u.token, body: { email: 'baru@uji.id', nama: 'Tetap' } })).status, 200);
+  });
+
+  it('UC-AKUN-04: hapus akun wajib ketik "HAPUS" + sandi; riwayat ikut terhapus; token dicabut', async () => {
+    const u = await app.register();
+    await app.describe(u.token);
+    const noConfirm = await app.api('DELETE', '/api/v1/me', { token: u.token, body: { kata_sandi: u.password } });
+    assert.equal(noConfirm.status, 400);
+    assert.equal(noConfirm.body.error.details.field, 'konfirmasi');
+    const lower = await app.api('DELETE', '/api/v1/me', { token: u.token, body: { konfirmasi: 'hapus', kata_sandi: u.password } });
+    assert.equal(lower.status, 400);
+    const wrong = await app.api('DELETE', '/api/v1/me', { token: u.token, body: { konfirmasi: 'HAPUS', kata_sandi: 'keliru123' } });
     assert.equal(wrong.status, 400);
-    const ok = await app.api('DELETE', '/api/v1/me', { token: u.token, body: { kata_sandi: u.password } });
+    assert.equal(wrong.body.error.code, 'WRONG_PASSWORD');
+    const ok = await app.api('DELETE', '/api/v1/me', { token: u.token, body: { konfirmasi: 'HAPUS', kata_sandi: u.password } });
     assert.equal(ok.status, 200);
     const login = await app.api('POST', '/api/v1/auth/login', { body: { email: u.email, kata_sandi: u.password } });
     assert.equal(login.status, 401);
     assert.equal((await app.api('GET', '/api/v1/me', { token: u.token })).status, 401);
+    assert.equal((await app.api('GET', '/api/v1/history', { token: u.token })).status, 401);
+    const rows = await app.db.get('SELECT COUNT(*) AS n FROM riwayat_deskripsi WHERE user_id = ?', [u.user.user_id]);
+    assert.equal(Number(rows.n), 0);
+  });
+
+  it('token akun terhapus tidak berlaku untuk akun lain yang kebetulan mendapat ID sama', async () => {
+    const u = await app.register();
+    await app.api('DELETE', '/api/v1/me', { token: u.token, body: { konfirmasi: 'HAPUS', kata_sandi: u.password } });
+    // Tiru basis data yang memakai ulang ID: akun baru dengan user_id yang sama, waktu registrasi berbeda.
+    app.clock.advanceDays(1);
+    await app.db.run(
+      "INSERT INTO users (user_id, nama, email, kata_sandi, peran, status_akun, tanggal_registrasi) VALUES (?, 'Baru', 'idsama@uji.id', 'x', 'pengguna', 'aktif', ?)",
+      [u.user.user_id, '2026-10-09 05:00:00'],
+    );
+    assert.equal((await app.api('GET', '/api/v1/me', { token: u.token })).status, 401);
+    app.clock.set('2026-10-08T03:00:00Z');
   });
 
   it('JSON rusak → 400, rute tak dikenal → 404', async () => {
