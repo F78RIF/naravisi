@@ -1,0 +1,13 @@
+# Daftar URL ARTIKEL (bukan URL gambar), satu per baris. Salin menjadi sources.txt lalu isi.
+#   copy eval\sources.example.txt eval\sources.txt      (Windows)
+#   cp   eval/sources.example.txt eval/sources.txt      (macOS/Linux)
+# sources.txt tidak di-commit. Baris yang diawali "#" diabaikan; komentar di akhir baris pakai " #".
+#
+# Target: ±150 gambar dari ≥ 3 situs berita, seimbang antara orang, hewan, tempat, benda,
+# dan teks/grafik. collect.py mengambil maks. 5 gambar per artikel (--per-page) dan mematuhi
+# robots.txt tiap situs; artikel yang dilarang robots.txt otomatis dilewati.
+#
+# Contoh bentuk baris (ganti dengan artikel nyata yang Anda pilih):
+# https://www.situs-berita-1.id/berita/2026/10/27/judul-artikel-banjir      # tempat / orang
+# https://www.situs-berita-2.id/foto/2026/10/26/galeri-satwa-taman-nasional # hewan
+# https://www.situs-berita-3.id/infografis/2026/10/25/harga-beras-naik      # teks / grafik

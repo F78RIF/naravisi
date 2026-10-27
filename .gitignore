@@ -16,3 +16,9 @@ backend/data/
 huggingface/
 *.safetensors
 *.webm
+
+# Dataset evaluasi: gambar & keluaran model tidak masuk repo (hak cipta & privasi). Lihat docs/DATASET.md.
+ai-service/eval/data/images/
+ai-service/eval/data/predictions/
+ai-service/eval/sources.txt
+*.tmp
