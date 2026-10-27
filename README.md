@@ -22,9 +22,11 @@ Halaman web ──Alt+Shift+K──▶ Extension (scan, pilih, panel, TTS)
 | `e2e/` | Uji end-to-end di Chromium | Playwright |
 | `docs/` | API, keputusan desain, pengujian, log Agentic SDLC | – |
 
-## Progres Prototype (tahap 30%)
+## Progres Prototype: 21/30 RF (70%) — target tahap ini 50% (15/30) terlampaui
 
-Fokus presentasi tahap ini: **10 dari 30 RF esensial** + kuota Gratis 10 gambar/hari. RF lain (profil, riwayat lengkap, pengaturan, laporan, Premium, Admin) juga sudah ada di kode dan ikut diuji otomatis, tetapi **tidak** menjadi fokus presentasi tahap ini.
+Target penilaian tahap ini **15 RF (50%)**: 10 RF tahap 30% + RF-14, RF-15, RF-16, RF-17, RF-19, ditambah peningkatan AI
+(Gemini terstruktur + cadangan BLIP) dan urutan baca + alt text untuk NVDA. Semuanya **selesai dan lulus tes**.
+Enam RF lain (RF-02, RF-03, RF-04, RF-18, RF-20, RF-23) juga sudah jadi dan lulus tes — **sudah ada, belum termasuk penilaian tahap ini**.
 
 | RF | Fitur | Status | File & fungsi utama | Cara uji |
 |---|---|---|---|---|
@@ -38,6 +40,19 @@ Fokus presentasi tahap ini: **10 dari 30 RF esensial** + kuota Gratis 10 gambar/
 | RF-11 | Tampilkan teks | ✅ | `content.js` (`showResult`, area `aria-live`) | teks muncul di panel |
 | RF-12 | Bacakan + kontrol | ✅ otomatis · ⏳ dengar manual | `content.js` (`speak`, `togglePause`, `play`, `stopSpeech`) | tombol Putar/Jeda/Ulang/Berhenti, tombol Spasi/R/S |
 | RF-13 | Simpan riwayat | ✅ | `historyService.js` (dipanggil dari `describe`) | halaman Riwayat · `describeQuotaHistory.test.js` |
+| RF-14 | Daftar riwayat (Gratis 7 hari, Premium semua; berhalaman) | ✅ target 50% | `extension/pages/riwayat.js` (`load`) → `historyService.js` (`list`) | halaman Riwayat · e2e "UC-RWY-02" |
+| RF-15 | Detail riwayat + putar ulang (jenis gambar tampil) | ✅ target 50% | `riwayat.js` (`loadDetail`, `speak`) → `historyService.js` (`get`) | tombol Detail → Enter "Putar ulang" · e2e "RF-15" |
+| RF-16 | Hapus riwayat (satu & semua, dengan konfirmasi) | ✅ target 50% | `riwayat.js` (`remove`, `removeAll`) → `historyService.js` (`remove`, `removeAll`) | e2e "UC-RWY-04", "RF-16" · `describeQuotaHistory.test.js` |
+| RF-17 | Halaman pengaturan | ✅ target 50% | `extension/pages/pengaturan.js` → `settingsService.js` | e2e "UC-AKS-01" · `settingsReports.test.js` |
+| RF-19 | Kecepatan, nada, jenis suara + "Coba suara" | ✅ target 50% | `pengaturan.js` (penggeser ber-`aria-valuetext`), `settingsService.js` (`update`) | e2e "UC-AKS-02/03", "Coba suara" |
+| AI | Gemini terstruktur (jenis, ringkasan, detail, teks_dalam_gambar, keyakinan) + cadangan BLIP | ✅ target 50% | `ai-service/app/gemini.py`, `prompts.py`, `service.py` (`CaptionRouter`) | `ai-service/tests/test_gemini.py` (klien palsu) |
+| A11y | Urutan baca atas→bawah + deskripsi disuntik ke `alt` untuk NVDA; mode Baca berurutan | ✅ target 50% | `content.js` (`readingOrder`, `applyAlt`, `autoDescribe`) | e2e "urutan baca", "alt asli …", "baca berurutan" |
+| RF-02 | Lihat profil | ✅ sudah ada, belum dinilai | `pages/profil.js` → `accountService.js` (`profile`) | e2e "UC-AKUN-02" |
+| RF-03 | Ubah profil (nama, email, sandi dgn sandi lama) | ✅ sudah ada, belum dinilai | `profil.js` → `accountService.js` (`updateProfile`) | e2e "RF-03" · `auth.test.js` |
+| RF-04 | Hapus akun (ketik "HAPUS", token dicabut) | ✅ sudah ada, belum dinilai | `profil.js` → `accountService.js` (`deleteAccount`) | e2e "RF-04" · `auth.test.js` |
+| RF-18 | Bahasa & pintasan | ✅ sudah ada, belum dinilai | `pengaturan.js`, `shared/guide.js` (`currentShortcut`) | e2e "RF-18" |
+| RF-20 | Laporkan deskripsi (pilih alasan + catatan) | ✅ sudah ada, belum dinilai | panel `content.js`, `riwayat.js` → `reportService.js` | e2e "RF-20" · `settingsReports.test.js` |
+| RF-23 | Daftar paket Premium | ✅ sudah ada, belum dinilai | `pages/premium.js` → `paymentService.js` (`listPlans`) | e2e "UC-PRM-01" |
 | Kuota | Gratis 10/hari, reset 00.00 WITA | ✅ | `quotaService.js` (`increment`: `UPDATE … WHERE jumlah_permintaan < batas`) | gambar ke-11 ditolak · e2e "setelah 10 deskripsi" |
 
 Rencana uji manual lengkap: `docs/PENGUJIAN.md`.
@@ -170,9 +185,9 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 ## Pengujian
 
 ```bash
-cd backend && npm test                         # 85 tes unit + integrasi API (SQLite di memori)
-cd ai-service && python -m pytest              # 33 tes
-cd e2e && npm install && npm test              # 63 skenario: extension + backend + Admin di Chromium
+cd backend && npm test                         # 97 tes unit + integrasi API (SQLite di memori)
+cd ai-service && python -m pytest              # 47 tes (Gemini dengan klien palsu, tanpa internet)
+cd e2e && npm install && npm test              # 106 skenario, termasuk alur manual Alt+Shift+K
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur waktu respons (RNF-05)
 ```
