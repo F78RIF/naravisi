@@ -80,9 +80,13 @@ export async function handleScanCommand(tab) {
   return tab?.id ? togglePanel(tab.id) : toggleActiveTab();
 }
 
-chrome.commands.onCommand.addListener((command, tab) => {
-  if (command === 'scan-page') handleScanCommand(tab);
-});
+/** Pintasan Chrome (manifest "commands"): Alt+Shift+K = "scan-page" → buka/tutup panel. */
+export function onCommand(command, tab) {
+  if (command === 'scan-page') return handleScanCommand(tab);
+  return undefined;
+}
+
+chrome.commands.onCommand.addListener(onCommand);
 
 // ---------------------------------------------------------------------------
 // Pengumuman jumlah gambar saat halaman dibuka (hanya menghitung, tidak ada yang dikirim ke server;
@@ -376,7 +380,17 @@ async function imageToBase64({ src, dataUrl }) {
 // ---------------------------------------------------------------------------
 // Memanggil REST API (RF-09, RF-10, RF-11, RF-13)
 // ---------------------------------------------------------------------------
-async function requestDescription({ src, dataUrl, pageUrl, auto }, sender) {
+/** Petunjuk halaman dari content script (kurang tepercaya): hanya teks pendek pada kunci yang dikenal. */
+function pageContext(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out = {};
+  for (const key of ['alt', 'caption', 'page_title']) {
+    if (typeof raw[key] === 'string' && raw[key].trim()) out[key] = raw[key].trim().slice(0, 300);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+async function requestDescription({ src, dataUrl, pageUrl, auto, context }, sender) {
   const session = await getSession();
   if (auto) {
     if (!['page', 'focus'].includes(auto)) throw new NvError('MESSAGE_REJECTED', 'Pesan tidak dikenal.');
@@ -398,6 +412,7 @@ async function requestDescription({ src, dataUrl, pageUrl, auto }, sender) {
         image_url: src && !src.startsWith('data:') && !src.startsWith('blob:') ? src : null,
         page_url: pageUrl,
         lang: tts.bahasa_deskripsi,
+        context: pageContext(context),
       },
     });
   } catch (err) {
@@ -545,6 +560,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Dipakai pengujian otomatis (Playwright) untuk memicu panel tanpa shortcut.
 globalThis.naraVisi = {
-  togglePanel, toggleActiveTab, openPage, handleScanCommand, announceImageCount, spokenLog, rejectReason,
+  togglePanel, toggleActiveTab, openPage, handleScanCommand, onCommand, announceImageCount, spokenLog, rejectReason,
   autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog,
 };

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { migrate } from './migrate.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +81,7 @@ export async function createSqliteDb(filename = ':memory:') {
     queue = job.catch(() => {});
     return job;
   };
+  await migrate(api); // berkas SQLite lama: tambah kolom baru
   return api;
 }
 
@@ -151,7 +153,12 @@ export async function createMysqlDb(cfg) {
 
 export async function createDb(dbConfig) {
   if (dbConfig.driver === 'sqlite') return createSqliteDb(dbConfig.sqlitePath);
-  if (dbConfig.driver === 'mysql') return createMysqlDb(dbConfig);
+  if (dbConfig.driver === 'mysql') {
+    const db = await createMysqlDb(dbConfig);
+    const added = await migrate(db); // MySQL lama: tambah kolom baru (boleh NULL), data tetap
+    if (added.length) console.log(`✔ Migrasi: kolom ${added.join(', ')} ditambahkan.`);
+    return db;
+  }
   throw new Error(`DB_DRIVER tidak dikenal: ${dbConfig.driver} (pilih mysql atau sqlite)`);
 }
 

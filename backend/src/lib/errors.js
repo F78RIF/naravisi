@@ -84,6 +84,14 @@ export const Errors = {
     new AppError(504, 'AI_TIMEOUT', 'Layanan AI terlalu lama merespons. Coba lagi.'),
   aiFailed: (msg) =>
     new AppError(502, 'AI_FAILED', msg || 'Layanan AI gagal memproses gambar ini.'),
+  aiBusy: () =>
+    new AppError(503, 'AI_BUSY', 'Layanan AI sedang sibuk atau kuotanya habis. Coba lagi beberapa saat lagi.'),
+  aiBlocked: () =>
+    new AppError(
+      422,
+      'AI_BLOCKED',
+      'Gambar ini tidak dapat dideskripsikan karena ditahan filter keamanan AI. Kuota Anda tidak terpakai.',
+    ),
 
   // Pembayaran
   paymentGateway: () =>

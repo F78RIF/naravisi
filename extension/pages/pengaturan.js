@@ -75,13 +75,25 @@ async function renderServer() {
     say('Alamat API disimpan.', 'ok');
     check();
   });
-  $('server').replaceChildren(form);
+  $('server').replaceChildren(form, privacyCard());
   check();
+}
+
+// --- Pemberitahuan privasi (ADR-22): selalu tampil, juga sebelum masuk.
+function privacyCard() {
+  return el(
+    'section',
+    { class: 'card stack', id: 'privasi', 'aria-labelledby': 'sec-privasi' },
+    el('h2', { id: 'sec-privasi' }, 'Privasi'),
+    el('p', {}, 'Gambar yang Anda pilih dikirim ke server NaraVisi, lalu ke Google Gemini untuk dideskripsikan. File gambar tidak disimpan; yang disimpan hanya teks deskripsi, alamat gambar, dan alamat halaman di riwayat Anda.'),
+    el('p', {}, 'Pada layanan Gemini tingkat gratis, Google dapat memakai data yang dikirim untuk meningkatkan produknya. Jangan mendeskripsikan gambar yang berisi data pribadi atau rahasia.'),
+    el('p', {}, 'Bila Gemini tidak dapat dipakai (kuota habis atau tidak ada internet), server memakai model cadangan BLIP yang berjalan di komputer server sendiri.'),
+  );
 }
 
 // --- Otomatis: semua tersimpan di perangkat ini (chrome.storage.sync) dan langsung berlaku.
 const CONSENT_TEXT =
-  'Gambar dari halaman yang Anda buka akan dikirim ke server NaraVisi untuk dideskripsikan dan memakai kuota harian. Lanjutkan?';
+  'Gambar dari halaman yang Anda buka akan dikirim ke server NaraVisi untuk dideskripsikan dan memakai kuota harian. Server meneruskannya ke Google Gemini. Lanjutkan?';
 
 /** Dialog persetujuan (modal, dibacakan). Fokus awal di "Batal" agar tidak tersetujui tanpa sengaja. */
 function askConsent() {

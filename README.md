@@ -78,9 +78,19 @@ cp .env.example .env        # Windows: copy .env.example .env
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file .env
 ```
 
-Start pertama mengunduh model BLIP (±1 GB) dan model terjemahan (±300 MB). Tunggu log **"Layanan AI siap"**.
-Untuk mencoba alur tanpa model, set `CAPTION_PROVIDER=mock`.
-Untuk menggunakan **Google Gemini (Google AI Studio)**: set `CAPTION_PROVIDER=gemini`, isi `GEMINI_API_KEY`, dan opsional tentukan `GEMINI_MODEL` (bawaan: `gemini-2.5-flash`). Model Gemini mendeskripsikan langsung dalam bahasa Indonesia dengan latensi rendah. BLIP tetap menjadi cadangan offline (lihat ADR-21).
+**Provider utama: Google Gemini** (ADR-22). Di `ai-service/.env` isi:
+
+```ini
+CAPTION_PROVIDER=gemini
+GEMINI_API_KEY=<kunci dari https://aistudio.google.com/apikey>   # hanya di .env, jangan di-commit
+GEMINI_MODEL=<model Flash/Flash-Lite gratis yang tersedia di AI Studio>
+FALLBACK_PROVIDER=blip      # cadangan otomatis bila Gemini gagal/kuota habis/offline (blip | mock | none)
+```
+
+Gemini menjawab dalam JSON terstruktur (jenis gambar, ringkasan, detail, teks di gambar, keyakinan) yang dirangkai menjadi kalimat siap baca, mis. *"Grafik: Penjualan naik tiap bulan. … Tulisan di gambar: …"*. Saat start, BLIP dimuat di latar sebagai cadangan (unduhan pertama ±1,3 GB); layanan sudah siap memakai Gemini sebelum BLIP selesai dimuat. Log **"Layanan AI siap"** menandai layanan bisa dipakai.
+Tanpa internet/kunci: `CAPTION_PROVIDER=blip` (model lokal). Untuk mencoba alur tanpa model sama sekali: `CAPTION_PROVIDER=mock`.
+
+> **Privasi.** Dengan `CAPTION_PROVIDER=gemini`, gambar yang dipilih pengguna diteruskan server ke Google. Pada tingkat gratis Google AI Studio, **data tersebut dapat dipakai Google untuk meningkatkan produknya**; Gemini juga butuh internet dan punya batas kuota. File gambar tidak disimpan di server NaraVisi. Pemberitahuan yang sama tampil di halaman Pengaturan extension. Pilih `CAPTION_PROVIDER=blip` bila gambar sama sekali tidak boleh keluar dari server.
 
 ### 2. Backend (terminal 2)
 

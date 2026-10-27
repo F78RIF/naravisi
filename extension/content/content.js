@@ -120,6 +120,13 @@
     return t.toLowerCase() !== fileName(src).toLowerCase();
   }
 
+  // Alt asli sebelum disuntik NaraVisi (alt yang kita ubah tidak dikirim balik sebagai petunjuk).
+  const originalAlts = new WeakMap();
+  function originalAlt(item) {
+    if (originalAlts.has(item.el)) return originalAlts.get(item.el);
+    return item.el.hasAttribute('data-naravisi') ? '' : clip(item.alt, 300);
+  }
+
   function isNoise(el, src) {
     if (NOISE_RE.test(fileName(src))) return true;
     for (let n = el, depth = 0; n && depth < 3; n = n.parentElement, depth += 1) {
@@ -420,7 +427,7 @@
         <button type="button" class="action" id="nv-action" hidden></button>
         <ul id="nv-list" role="listbox" tabindex="0" aria-label="Daftar gambar pada halaman"></ul>
         <section class="result" id="nv-result" aria-labelledby="nv-result-title" hidden>
-          <h3 id="nv-result-title">Deskripsi gambar</h3>
+          <h3 id="nv-result-title">Deskripsi gambar<span id="nv-kind"></span></h3>
           <p class="text" id="nv-text" tabindex="-1"></p>
           <div class="controls" role="group" aria-label="Kontrol suara">
             <button type="button" data-act="play">Putar</button>
@@ -623,9 +630,17 @@
     return msg || 'Terjadi kesalahan saat mendeskripsikan gambar.';
   }
 
-  function showResult(text) {
+  // Jenis gambar dari Gemini (ADR-22); kosong bila provider cadangan tidak mengenali jenis.
+  const JENIS_LABEL = {
+    foto: 'Foto', ilustrasi: 'Ilustrasi', grafik: 'Grafik', infografis: 'Infografis', tangkapan_layar: 'Tangkapan layar',
+    diagram: 'Diagram', logo: 'Logo', meme: 'Meme', dokumen: 'Dokumen', lainnya: 'Lainnya',
+  };
+
+  function showResult(text, jenis) {
     $('#nv-result').hidden = false;
     $('#nv-text').textContent = text;
+    $('#nv-kind').textContent = JENIS_LABEL[jenis] ? ` · ${JENIS_LABEL[jenis]}` : '';
+    state.host.dataset.jenis = jenis || '';
   }
 
   /** Mengirim satu gambar ke service worker. `auto` = 'page' | 'focus' (mode otomatis) atau kosong (manual). */
@@ -638,6 +653,8 @@
       src: item.kind === 'inline-svg' ? null : item.src,
       dataUrl,
       pageUrl: location.href,
+      // Petunjuk untuk AI (bukan untuk disalin): alt asli, keterangan terdekat, judul halaman.
+      context: { alt: originalAlt(item), caption: captionOf(item.el), page_title: clip(document.title, 300) },
       auto,
     });
     if (!res?.ok) {
@@ -647,7 +664,7 @@
       throw e;
     }
     state.lang = res.data.lang || state.lang;
-    state.cache.set(item.src, { text: res.data.text, riwayatId: res.data.riwayat_id });
+    state.cache.set(item.src, { text: res.data.text, riwayatId: res.data.riwayat_id, jenis: res.data.jenis });
     return res.data;
   }
 
@@ -659,7 +676,7 @@
     const cached = state.cache.get(item.src);
     if (cached) {
       state.current = cached;
-      showResult(cached.text);
+      showResult(cached.text, cached.jenis);
       setStatus(`Deskripsi gambar ${number}.`);
       speak(cached.text);
       return;
@@ -671,11 +688,11 @@
     setStatus(`Mendeskripsikan gambar ${number}… mohon tunggu.`);
 
     try {
-      const { text, riwayat_id: riwayatId, kuota } = await fetchDescription(item);
+      const { text, riwayat_id: riwayatId, kuota, jenis } = await fetchDescription(item);
       if (!state.open) return; // panel ditutup saat menunggu
 
-      state.current = { text, riwayatId };
-      showResult(text);
+      state.current = { text, riwayatId, jenis };
+      showResult(text, jenis);
       state.host.dataset.state = 'done';
       setAction(null);
       const sisa = kuota && kuota.batas != null ? ` Sisa kuota hari ini: ${kuota.sisa}.` : '';

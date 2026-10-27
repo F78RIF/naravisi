@@ -16,14 +16,18 @@ export function createHistoryService({ db, config, clock }) {
     url_halaman: r.url_halaman,
     url_gambar: r.url_gambar,
     teks_deskripsi: r.teks_deskripsi,
+    jenis_gambar: r.jenis_gambar ?? null,
+    provider: r.provider ?? null,
     waktu_dibuat: sqlToIso(r.waktu_dibuat),
   });
+  const COLUMNS = 'riwayat_id, url_halaman, url_gambar, teks_deskripsi, jenis_gambar, provider, waktu_dibuat';
 
   // UC-RWY-01
-  async function save(userId, { urlHalaman, urlGambar, teks }) {
+  async function save(userId, { urlHalaman, urlGambar, teks, jenis = null, provider = null }) {
     const res = await db.run(
-      'INSERT INTO riwayat_deskripsi (user_id, url_halaman, url_gambar, teks_deskripsi, waktu_dibuat) VALUES (?, ?, ?, ?, ?)',
-      [userId, urlHalaman, urlGambar, teks, toSqlDateTime(clock.now())],
+      `INSERT INTO riwayat_deskripsi (user_id, url_halaman, url_gambar, teks_deskripsi, jenis_gambar, provider, waktu_dibuat)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [userId, urlHalaman, urlGambar, teks, jenis, provider, toSqlDateTime(clock.now())],
     );
     return res.insertId;
   }
@@ -35,7 +39,7 @@ export function createHistoryService({ db, config, clock }) {
     const where = c ? 'user_id = ? AND waktu_dibuat >= ?' : 'user_id = ?';
     const params = c ? [userId, c] : [userId];
     const rows = await db.all(
-      `SELECT riwayat_id, url_halaman, url_gambar, teks_deskripsi, waktu_dibuat FROM riwayat_deskripsi
+      `SELECT ${COLUMNS} FROM riwayat_deskripsi
         WHERE ${where} ORDER BY waktu_dibuat DESC, riwayat_id DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     );
@@ -60,7 +64,7 @@ export function createHistoryService({ db, config, clock }) {
     const id = v.id(riwayatId, 'Riwayat');
     const c = cutoff(premium);
     const row = await db.get(
-      `SELECT riwayat_id, url_halaman, url_gambar, teks_deskripsi, waktu_dibuat FROM riwayat_deskripsi
+      `SELECT ${COLUMNS} FROM riwayat_deskripsi
         WHERE riwayat_id = ? AND user_id = ?${c ? ' AND waktu_dibuat >= ?' : ''}`,
       c ? [id, userId, c] : [id, userId],
     );

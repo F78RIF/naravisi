@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS riwayat_deskripsi (
   url_halaman        TEXT NULL,
   url_gambar         TEXT NULL,
   teks_deskripsi     TEXT NOT NULL,
+  jenis_gambar       TEXT NULL,
+  provider           TEXT NULL,
   waktu_dibuat       TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_riwayat_user_waktu ON riwayat_deskripsi (user_id, waktu_dibuat);

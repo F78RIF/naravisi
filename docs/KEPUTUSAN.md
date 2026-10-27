@@ -24,7 +24,8 @@ Setiap keputusan yang mengubah atau melengkapi SRS/SDD v1.0 dicatat di sini, lal
 | ADR-18 | 2026-10-09 | **Mode simulasi pembayaran** bila `MIDTRANS_SERVER_KEY` kosong; status pembayaran juga dicek langsung ke Midtrans saat pengguna membuka halaman Premium (webhook tidak bisa menjangkau localhost). | Final | UC-PRM-03. |
 | ADR-19 | 2026-10-09 | **Hapus akun mewajibkan kata sandi** sebagai konfirmasi (UC-AKUN-04 langkah 2–3). | Final | UC-AKUN-04. |
 | ADR-20 | 2026-10-09 | **Kolom `langganan.status_langganan` dihapus** dari ERD karena status dihitung dari tanggal (ADR-09); `paket_premium.aktif` ditambahkan untuk menyembunyikan paket tanpa menghapusnya. | Final | ERD. |
-| ADR-21 | 2026-10-23 | **Provider Gemini sebagai opsi**: menambahkan opsi penyedia model cloud Google Gemini (Google AI Studio) lewat SDK `google-genai` tanpa menghapus model lokal BLIP. | Diterapkan | `ai-service`: `CAPTION_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL`. Backend dan extension tidak berubah. |
+| ADR-21 | 2026-10-23 | **Provider Gemini sebagai opsi**: menambahkan opsi penyedia model cloud Google Gemini (Google AI Studio) lewat SDK `google-genai` tanpa menghapus model lokal BLIP. | Digantikan ADR-22 | `ai-service`: `CAPTION_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL`. Backend dan extension tidak berubah. |
+| ADR-22 | 2026-10-27 | **Gemini sebagai provider utama** dengan keluaran JSON terstruktur (jenis, ringkasan, detail, teks dalam gambar, keyakinan); **BLIP sebagai cadangan** otomatis (`FALLBACK_PROVIDER`). | Diterapkan | `ai-service` (`gemini.py`, `prompts.py`, `service.py`); kolom `riwayat_deskripsi.jenis_gambar` & `provider`; panel & Pengaturan. |
 
 ## Detail Keputusan Tambahan
 
@@ -40,3 +41,19 @@ Setiap keputusan yang mengubah atau melengkapi SRS/SDD v1.0 dicatat di sini, lal
   - *Batas Kuota (Rate Limit)*: Tingkat gratis memiliki kuota permintaan per menit (RPM) dan per hari (RPD). Jika terlampaui (429), sistem memetakan galat ke kode `MODEL_BUSY` dengan pesan yang ramah pengguna.
 - **BLIP sebagai Cadangan Offline:**
   - Provider BLIP + MarianMT tetap dipertahankan penuh dan dapat dipilih kapan saja (`CAPTION_PROVIDER=blip`) untuk skenario luring (offline), lingkungan tanpa koneksi internet, atau pengguna yang memprioritaskan privasi lokal secara mutlak (data gambar tidak pernah keluar dari mesin lokal).
+
+### ADR-22: Gemini sebagai Provider Utama, BLIP sebagai Cadangan
+
+- **Konteks:** ADR-21 menambahkan Gemini sebagai *opsi*. Gemini jauh lebih cocok untuk pengguna tunanetra: langsung berbahasa Indonesia, bisa membaca teks di gambar, mengenali grafik/infografis, dan cepat (±1–3 dtk). BLIP di CPU ±7 dtk dan hanya menghasilkan satu kalimat pendek berbahasa Inggris yang lalu diterjemahkan.
+- **Keputusan:**
+  1. `CAPTION_PROVIDER=gemini` menjadi konfigurasi bawaan di `.env.example`. Nama model (`GEMINI_MODEL`) tidak ditulis di kode; pilih model Flash/Flash-Lite gratis di Google AI Studio.
+  2. Gemini diminta menjawab dengan **skema JSON** (`response_schema`): `jenis`, `ringkasan` (≤ 20 kata), `detail`, `teks_dalam_gambar` (urut atas→bawah, kiri→kanan), `keyakinan`. Server merangkainya menjadi satu kalimat siap baca: *"Grafik: Penjualan naik tiap bulan. … Tulisan di gambar: …"*. Kontrak `/caption` lama tetap (field baru hanya ditambahkan).
+  3. Aturan menulis (bahasa sederhana, sebut jenis dulu, jangan menebak identitas/usia/ras/kesehatan, jangan "Gambar ini menunjukkan", jujur bila tidak jelas) ada di `ai-service/app/prompts.py`. Alt asli, figcaption, dan judul halaman dikirim sebagai **petunjuk berlabel data**, bukan perintah. Bila `eval/data/fewshot.json` ada, 3–5 contoh dari dataset kita ikut disertakan.
+  4. **Keandalan:** batas tunggu 15 dtk; 1× ulang untuk gangguan jaringan/5xx; `429` → `MODEL_BUSY`; JSON rusak, kunci salah, atau offline → otomatis ke `FALLBACK_PROVIDER` (bawaan `blip`, dimuat di latar agar tidak menunda start). Provider yang benar-benar dipakai dicatat di log dan di kolom `riwayat_deskripsi.provider`. Respons yang ditahan filter keamanan **tidak** dialihkan ke cadangan; pengguna mendapat pesan jelas (`AI_BLOCKED`, 422) dan kuota dikembalikan.
+  5. **Keamanan kunci:** `GEMINI_API_KEY` hanya di `ai-service/.env` (tidak di kode, extension, atau git). Kunci disamarkan di semua log (`RedactSecrets`) dan pesan galat, dan tidak ikut `repr(Settings)`.
+- **Kekurangan & risiko:**
+  - *Privasi:* pada tingkat gratis Google AI Studio, **data yang dikirim (gambar & prompt) dapat dipakai Google untuk meningkatkan produknya**. Pengguna diberi tahu di halaman Pengaturan (kartu "Privasi"), di dialog persetujuan mode baca berurutan, dan di README.
+  - *Butuh internet:* tanpa koneksi, deskripsi dibuat oleh BLIP (kualitas lebih rendah, tanpa jenis gambar).
+  - *Batas kuota:* tingkat gratis punya batas permintaan per menit/hari; saat habis (429) sistem pindah ke BLIP.
+  - *Ketergantungan vendor:* skema JSON bersifat umum, jadi provider lain bisa ditambahkan di `service.py` tanpa mengubah backend/extension.
+- **BLIP tetap dipertahankan** sebagai cadangan offline dan sebagai pilihan bagi yang mengutamakan privasi mutlak (`CAPTION_PROVIDER=blip`: gambar tidak pernah keluar dari server).

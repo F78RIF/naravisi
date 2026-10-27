@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS riwayat_deskripsi (
   url_halaman        TEXT NULL,
   url_gambar         TEXT NULL,
   teks_deskripsi     TEXT NOT NULL,
+  jenis_gambar       VARCHAR(30) NULL,
+  provider           VARCHAR(30) NULL,
   waktu_dibuat       DATETIME NOT NULL,
   KEY idx_riwayat_user_waktu (user_id, waktu_dibuat),
   CONSTRAINT fk_riwayat_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE

@@ -17,7 +17,36 @@ describe('aiClient.caption', () => {
     const out = await client.caption({ imageBase64: 'AAAA', lang: 'id' });
     assert.equal(captured.url, 'http://ai.test/caption');
     assert.deepEqual(captured.body, { image_base64: 'AAAA', lang: 'id' });
-    assert.deepEqual(out, { text: 'Seekor anjing.', textEn: 'a dog', lang: 'id', model: 'blip', latencyMs: 900 });
+    assert.deepEqual(out, {
+      text: 'Seekor anjing.', textEn: 'a dog', lang: 'id', model: 'blip', latencyMs: 900,
+      jenis: null, ringkasan: '', detail: '', teksDalamGambar: '', keyakinan: null, provider: null, fallback: false,
+    });
+  });
+
+  it('Tahap 1: meneruskan petunjuk halaman dan memetakan field terstruktur Gemini', async () => {
+    let captured;
+    const client = clientWith(async (url, init) => {
+      captured = JSON.parse(init.body);
+      return fakeResponse(200, {
+        text: 'Grafik: Penjualan naik.', text_en: '', lang: 'id', model: 'flash', latency_ms: 800,
+        jenis: 'grafik', ringkasan: 'Penjualan naik.', detail: 'Batang biru.', teks_dalam_gambar: 'Q1\nQ2',
+        keyakinan: 'tinggi', provider: 'gemini', fallback: false,
+      });
+    });
+    const out = await client.caption({ imageBase64: 'AAAA', lang: 'id', context: { caption: 'Penjualan 2026' } });
+    assert.deepEqual(captured.context, { caption: 'Penjualan 2026' });
+    assert.equal(out.jenis, 'grafik');
+    assert.equal(out.teksDalamGambar, 'Q1\nQ2');
+    assert.equal(out.provider, 'gemini');
+  });
+
+  it('Tahap 1: filter keamanan → AI_BLOCKED 422; sibuk/kuota Gemini → AI_BUSY 503 (bukan 500)', async () => {
+    const blocked = clientWith(async () => fakeResponse(422, { detail: { code: 'MODEL_SAFETY', message: 'ditahan' } }));
+    await assert.rejects(blocked.caption({ imageBase64: 'AAAA', lang: 'id' }), { code: 'AI_BLOCKED', status: 422 });
+    const busy = clientWith(async () => fakeResponse(429, { detail: { code: 'MODEL_BUSY', message: 'sibuk' } }));
+    await assert.rejects(busy.caption({ imageBase64: 'AAAA', lang: 'id' }), { code: 'AI_BUSY', status: 503 });
+    const slow = clientWith(async () => fakeResponse(504, { detail: { code: 'MODEL_TIMEOUT', message: 'lama' } }));
+    await assert.rejects(slow.caption({ imageBase64: 'AAAA', lang: 'id' }), { code: 'AI_TIMEOUT', status: 504 });
   });
 
   it('AI_UNAVAILABLE saat koneksi gagal', async () => {

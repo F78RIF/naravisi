@@ -24,14 +24,23 @@ Request:
 | `image_url` | string | tidak | URL asli gambar (untuk riwayat). |
 | `page_url` | string | tidak | URL halaman asal (untuk riwayat). |
 | `lang` | `"id"` \| `"en"` | tidak | Default `"id"`. |
+| `context` | object | tidak | Petunjuk dari halaman untuk AI: `{alt, caption, page_title}`, masing-masing teks ≤ 300 karakter; kunci lain dibuang. |
 
-Response `201`:
+Response `201` (field `jenis` … `fallback` baru di Tahap 1; field lama tetap):
 ```json
 {
-  "text": "Seekor kucing duduk di atas sofa.",
-  "text_en": "A cat sitting on a couch.",
+  "riwayat_id": 42,
+  "text": "Grafik: Penjualan toko naik setiap bulan. Batang biru tertinggi di bulan Juni. Tulisan di gambar: Penjualan 2026, Jan, Feb, Mar.",
+  "text_en": "",
   "lang": "id",
-  "model": "Salesforce/blip-image-captioning-base + Helsinki-NLP/opus-mt-en-id",
+  "model": "<GEMINI_MODEL>",
+  "jenis": "grafik",
+  "ringkasan": "Penjualan toko naik setiap bulan.",
+  "detail": "Batang biru tertinggi di bulan Juni.",
+  "teks_dalam_gambar": "Penjualan 2026\nJan\nFeb\nMar",
+  "keyakinan": "tinggi",
+  "provider": "gemini",
+  "fallback": false,
   "image_mime": "image/jpeg",
   "image_bytes": 48211,
   "page_url": "https://contoh.id/berita",
@@ -48,14 +57,21 @@ Kode error:
 | 400 | `IMAGE_MISSING`, `IMAGE_INVALID` | Gambar kosong / base64 rusak |
 | 413 | `IMAGE_TOO_LARGE` | Melebihi 5 MB |
 | 415 | `IMAGE_UNSUPPORTED` | Bukan format gambar yang didukung |
+| 422 | `AI_BLOCKED` | Gambar ditahan filter keamanan AI (kuota dikembalikan) |
 | 502 | `AI_FAILED` | Model gagal memproses gambar |
+| 503 | `AI_BUSY` | Gemini sibuk/kuota habis dan cadangan belum siap |
 | 503 | `AI_UNAVAILABLE` | Layanan AI mati / model masih dimuat |
 | 504 | `AI_TIMEOUT` | Layanan AI melebihi batas waktu |
 
 ## Layanan AI internal (FastAPI, hanya dipanggil backend)
 
-`POST /caption` `{ "image_base64": "...", "lang": "id" }` → `{ "text", "text_en", "lang", "model", "latency_ms" }`
-`GET /health` → `{ "status": "ok" | "loading", "provider", "model" }`
+`POST /caption` `{ "image_base64": "...", "lang": "id", "context"?: {alt, caption, page_title} }`
+→ `{ "text", "text_en", "lang", "model", "latency_ms", "jenis", "ringkasan", "detail", "teks_dalam_gambar", "keyakinan", "provider", "fallback" }`
+(kontrak lama tetap; field baru berisi `null`/kosong untuk BLIP). `text` = kalimat siap baca `"<Jenis>: <ringkasan>. <detail> Tulisan di gambar: <teks>."`.
+
+Galat: `415` gambar tak terbaca · `422 MODEL_SAFETY` ditahan filter · `429 MODEL_BUSY` · `502 MODEL_AUTH | MODEL_BAD_OUTPUT | MODEL_ERROR` · `503 MODEL_UNAVAILABLE | MODEL_LOADING` · `504 MODEL_TIMEOUT`. Selain `MODEL_SAFETY`, galat Gemini otomatis dialihkan ke `FALLBACK_PROVIDER` bila sudah siap.
+
+`GET /health` → `{ "status": "ok" | "loading", "provider", "model", "fallback", "fallback_ready" }`
 
 ## Endpoint lain (Fase 2–5, sudah diimplementasikan)
 

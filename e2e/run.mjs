@@ -31,11 +31,12 @@ const { startTestApp, ADMIN } = await import('../backend/test/support/testApp.js
 // ---------------------------------------------------------------------------
 const backend = await startTestApp();
 backend.clock.set(new Date().toISOString()); // jam nyata agar token & tanggal wajar
-backend.ai.caption = async ({ lang, imageBase64 }) => {
+backend.ai.caption = async ({ lang, imageBase64, context }) => {
   backend.ai.calls += 1;
   backend.ai.lastImage = imageBase64;
+  backend.ai.lastContext = context;
   const mime = Buffer.from(imageBase64, 'base64')[0] === 0xff ? 'JPEG' : 'PNG';
-  return { text: `Deskripsi uji untuk gambar ${mime}.`, textEn: null, lang, model: 'fake', latencyMs: 1 };
+  return { text: `Deskripsi uji untuk gambar ${mime}.`, textEn: null, lang, model: 'fake', latencyMs: 1, jenis: 'foto', provider: 'fake' };
 };
 const API = `${backend.base}/api/v1`;
 backend.services.config.publicUrl = backend.base; // halaman bayar simulasi di server uji
@@ -590,6 +591,54 @@ try {
   await ann.close();
 
   // =========================================================================
+  section('Alur manual Alt+Shift+K (tidak boleh berubah)');
+  await step('ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc', async () => {
+    // 1. Pintasan di manifest tetap Alt+Shift+K dengan teks yang sama.
+    const manifest = JSON.parse(readFileSync(path.join(extensionDir, 'manifest.json'), 'utf8'));
+    assert.deepEqual(manifest.commands['scan-page'], {
+      suggested_key: { default: 'Alt+Shift+K', mac: 'Alt+Shift+K' },
+      description: 'Pindai gambar pada halaman ini',
+    });
+    const active = await sw.evaluate(async () => (await chrome.commands.getAll()).find((c) => c.name === 'scan-page'));
+    assert.equal(active.description, 'Pindai gambar pada halaman ini');
+    if (active.shortcut) assert.equal(active.shortcut, 'Alt+Shift+K');
+
+    const manual = await context.newPage();
+    watch(manual);
+    await manual.goto(`${SITE}/berita.html`);
+    await manual.focus('#page-link');
+    const before = { calls: backend.ai.calls, last: (await backend.db.get('SELECT MAX(riwayat_id) AS id FROM riwayat_deskripsi')).id ?? 0 };
+    // 2. Alt+Shift+K: Chrome memanggil chrome.commands.onCommand('scan-page', tab) → panel terbuka.
+    //    (Playwright tidak bisa menekan pintasan level browser; yang dipanggil adalah pendengar yang sama.)
+    await sw.evaluate(async (u) => {
+      const [tab] = await chrome.tabs.query({ url: u });
+      return globalThis.naraVisi.onCommand('scan-page', tab);
+    }, `${SITE}/berita.html`);
+    const st = manual.locator('#nv-status');
+    await st.filter({ hasText: 'gambar ditemukan' }).waitFor();
+    assert.equal(await manual.evaluate(() => document.querySelector('#naravisi-host').shadowRoot.activeElement?.id), 'nv-list');
+    const selected = () => manual.evaluate(() => document.querySelector('#naravisi-host').shadowRoot.querySelector('[aria-selected="true"]')?.id);
+    assert.equal(await selected(), 'nv-opt-0');
+    // 3. Panah bawah/atas memilih gambar.
+    await manual.keyboard.press('ArrowDown');
+    assert.equal(await selected(), 'nv-opt-1');
+    await manual.keyboard.press('ArrowUp');
+    assert.equal(await selected(), 'nv-opt-0');
+    // 4. Enter → dideskripsikan → teks tampil & dibacakan.
+    await manual.keyboard.press('Enter');
+    await manual.locator('#nv-text').filter({ hasText: 'Deskripsi uji untuk gambar' }).waitFor({ timeout: 10000 });
+    assert.match(await manual.locator('#naravisi-host').getAttribute('data-last-spoken'), /^Deskripsi uji untuk gambar (PNG|JPEG).$/);
+    assert.equal(backend.ai.calls - before.calls, 1);
+    // 5. Esc → panel tertutup, fokus kembali ke tempat semula.
+    await manual.keyboard.press('Escape');
+    assert.equal(await manual.locator('#naravisi-host').count(), 0);
+    assert.equal(await manual.evaluate(() => document.activeElement?.id), 'page-link');
+    await manual.close();
+    // Bersihkan agar hitungan kuota & riwayat skenario berikutnya tidak bergeser.
+    await backend.db.run('DELETE FROM riwayat_deskripsi WHERE riwayat_id > ?', [before.last]);
+    await backend.db.run('UPDATE kuota_harian SET jumlah_permintaan = 0');
+  });
+
   section('Panel deskripsi gambar (UC-GBR-01..07, UC-LAP-01)');
   const page = await context.newPage();
   watch(page);
@@ -632,6 +681,10 @@ try {
     await text.filter({ hasText: 'gambar PNG' }).waitFor({ timeout: 10000 });
     await status.filter({ hasText: 'Sisa kuota hari ini: 9.' }).waitFor();
     assert.equal(await host.getAttribute('data-last-spoken'), 'Deskripsi uji untuk gambar PNG.');
+    // Tahap 1: jenis gambar tampil di panel; petunjuk halaman ikut dikirim ke AI.
+    assert.equal(await page.locator('#nv-kind').textContent(), ' · Foto');
+    assert.equal(await host.getAttribute('data-jenis'), 'foto');
+    assert.ok(backend.ai.lastContext?.page_title, 'judul halaman dikirim sebagai petunjuk');
   });
   await page.screenshot({ path: path.join(uiDir, '07-panel-halaman.png') });
 
@@ -902,7 +955,7 @@ try {
     await toggle.click(); // centang baru berlaku setelah disetujui
     const dialog = set.getByRole('dialog', { name: 'Kirim gambar ke server?' });
     await dialog.waitFor();
-    assert.match(await dialog.innerText(), /akan dikirim ke server NaraVisi untuk dideskripsikan dan memakai kuota harian\. Lanjutkan\?/);
+    assert.match(await dialog.innerText(), /akan dikirim ke server NaraVisi untuk dideskripsikan dan memakai kuota harian\. Server meneruskannya ke Google Gemini\. Lanjutkan\?/);
     assert.equal(await set.evaluate(() => document.activeElement.textContent), 'Batal');
     assert.match((await spoken()).at(-1), /^Gambar dari halaman yang Anda buka akan dikirim ke server NaraVisi/);
     await set.screenshot({ path: path.join(uiDir, '10-persetujuan-otomatis.png') });

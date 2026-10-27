@@ -114,6 +114,42 @@ describe('Deskripsi + kuota + riwayat (UC-GBR-04/05, UC-RWY-01..04)', () => {
     assert.equal((await app.api('GET', '/api/v1/history/abc', { token: a.token })).status, 404);
   });
 
+  it('Tahap 1: jenis gambar & provider disimpan di riwayat; petunjuk halaman diteruskan ke AI', async () => {
+    const u = await app.register();
+    const original = app.ai.caption;
+    let seen;
+    app.ai.caption = async (args) => {
+      seen = args;
+      return { text: 'Grafik: Penjualan naik.', textEn: '', lang: 'id', model: 'flash', latencyMs: 1, jenis: 'grafik', provider: 'gemini' };
+    };
+    try {
+      const res = await app.describe(u.token, { context: { alt: 'IMG_1.jpg', caption: '  Penjualan\n2026 ', rahasia: 'x' } });
+      assert.equal(res.status, 201);
+      assert.equal(res.body.jenis, 'grafik');
+      assert.equal(res.body.provider, 'gemini');
+      assert.deepEqual(seen.context, { alt: 'IMG_1.jpg', caption: 'Penjualan 2026' });
+      const detail = await app.api('GET', `/api/v1/history/${res.body.riwayat_id}`, { token: u.token });
+      assert.equal(detail.body.jenis_gambar, 'grafik');
+      assert.equal(detail.body.provider, 'gemini');
+      // Nilai di luar daftar tidak disimpan
+      app.ai.caption = async () => ({ text: 'x', lang: 'id', model: 'm', jenis: 'lukisan<script>', provider: 'blip palsu!' });
+      const odd = await app.describe(u.token);
+      assert.equal(odd.body.jenis, null);
+      assert.equal(odd.body.provider, null);
+    } finally {
+      app.ai.caption = original;
+    }
+  });
+
+  it('Tahap 1: AI ditahan filter keamanan → 422 jelas, kuota dikembalikan', async () => {
+    const u = await app.register();
+    app.ai.fail = Errors.aiBlocked();
+    const res = await app.describe(u.token);
+    assert.equal(res.status, 422);
+    assert.equal(res.body.error.code, 'AI_BLOCKED');
+    assert.equal((await app.api('GET', '/api/v1/me/quota', { token: u.token })).body.terpakai, 0);
+  });
+
   it('paginasi riwayat', async () => {
     const u = await app.register();
     for (let i = 0; i < 5; i++) await app.describe(u.token, { page_url: `https://h${i}.id` });
