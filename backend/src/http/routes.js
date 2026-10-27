@@ -45,6 +45,7 @@ export function buildRoutes(s) {
       method: 'GET', path: '/api/v1/history', auth: 'user',
       handler: async ({ user, query }) => ok(await s.history.list(user.id, await unlimited(user), query)),
     },
+    { method: 'DELETE', path: '/api/v1/history', auth: 'user', handler: async ({ user, body }) => ok(await s.history.removeAll(user.id, body)) },
     {
       method: 'GET', path: '/api/v1/history/:id', auth: 'user',
       handler: async ({ user, params }) => ok(await s.history.get(user.id, await unlimited(user), params.id)),

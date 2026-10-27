@@ -84,5 +84,15 @@ export function createHistoryService({ db, config, clock }) {
     return { dihapus: true };
   }
 
-  return { save, list, get, remove, findVisible };
+  // UC-RWY-04 (semua) — wajib {"semua": true} agar tidak terhapus tanpa sengaja. Riwayat lama yang
+  // disembunyikan untuk akun Gratis (ADR-12) ikut terhapus: pengguna meminta SEMUA riwayatnya dihapus.
+  async function removeAll(userId, body) {
+    if (body?.semua !== true) {
+      throw Errors.validation('semua', 'Kirim {"semua": true} untuk menghapus seluruh riwayat.');
+    }
+    const res = await db.run('DELETE FROM riwayat_deskripsi WHERE user_id = ?', [userId]);
+    return { dihapus: res.changes };
+  }
+
+  return { save, list, get, remove, removeAll, findVisible };
 }

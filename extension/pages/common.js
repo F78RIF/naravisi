@@ -133,6 +133,16 @@ export function fmtDate(ymd) {
 
 export const rupiah = (n) => `Rp${Number(n).toLocaleString('id-ID')}`;
 
+/** Jenis gambar dari Gemini (ADR-22). */
+export const JENIS_LABEL = {
+  foto: 'Foto', ilustrasi: 'Ilustrasi', grafik: 'Grafik', infografis: 'Infografis', tangkapan_layar: 'Tangkapan layar',
+  diagram: 'Diagram', logo: 'Logo', meme: 'Meme', dokumen: 'Dokumen', lainnya: 'Lainnya',
+};
+export const jenisLabel = (jenis) => JENIS_LABEL[jenis] ?? 'Tidak diketahui';
+
+const PROVIDER_LABEL = { gemini: 'Google Gemini', blip: 'BLIP (model lokal)', mock: 'Mode uji (mock)' };
+export const providerLabel = (provider) => PROVIDER_LABEL[provider] ?? (provider || '-');
+
 /** Membacakan teks dengan pengaturan TTS pengguna (UC-GBR-07 / UC-RWY-03). */
 export async function speak(text, override) {
   if (!('speechSynthesis' in window)) return false;

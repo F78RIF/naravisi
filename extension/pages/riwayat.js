@@ -1,8 +1,10 @@
 // Riwayat deskripsi: RF-14..RF-16, RF-20 (UC-RWY-02..04, UC-LAP-01)
+// Daftar (Gratis 7 hari, Premium semua; berhalaman) · detail ?id=N · putar ulang · hapus satu & semua.
 import { apiFetch } from '../shared/config.js';
-import { $, el, fmtDateTime, requireSession, say, sayError, shell, speak, stopSpeaking } from './common.js';
+import { $, el, fmtDateTime, jenisLabel, providerLabel, requireSession, say, sayError, shell, speak, stopSpeaking } from './common.js';
 
-shell('riwayat', 'Riwayat deskripsi');
+const detailId = new URLSearchParams(location.search).get('id');
+shell('riwayat', detailId ? 'Detail riwayat' : 'Riwayat deskripsi');
 const state = { page: 1, limit: 10 };
 
 function reportForm(item, holder) {
@@ -39,16 +41,31 @@ function reportForm(item, holder) {
   area.focus();
 }
 
+/** Tombol bersama di daftar & detail. */
+function actions(item, holder, { inDetail = false, headingId } = {}) {
+  return el(
+    'div',
+    { class: 'row' },
+    el('button', { type: 'button', class: 'replay', onclick: () => speak(item.teks_deskripsi) }, 'Putar ulang'),
+    el('button', { type: 'button', onclick: stopSpeaking }, 'Berhenti'),
+    // aria-describedby: di daftar tautan NVDA, "Detail" tetap jelas milik deskripsi yang mana.
+    inDetail ? null : el('a', { class: 'btn', href: `riwayat.html?id=${item.riwayat_id}`, 'aria-describedby': headingId }, 'Detail'),
+    el('button', { type: 'button', onclick: () => reportForm(item, holder) }, 'Laporkan'),
+    el('button', { type: 'button', onclick: () => remove(item, inDetail) }, 'Hapus'),
+  );
+}
+
 function renderItem(item, index, total) {
   const holder = el('div');
   const headingId = `h-${item.riwayat_id}`;
-  const art = el(
+  return el(
     'li',
     { class: 'item' },
     el(
       'article',
       { 'aria-labelledby': headingId },
       el('h2', { id: headingId }, `Deskripsi ${index} dari ${total} · ${fmtDateTime(item.waktu_dibuat)}`),
+      item.jenis_gambar ? el('p', { class: 'meta jenis' }, `Jenis gambar: ${jenisLabel(item.jenis_gambar)}`) : null,
       el('p', { class: 'text' }, item.teks_deskripsi),
       el(
         'p',
@@ -56,21 +73,13 @@ function renderItem(item, index, total) {
         'Halaman: ',
         item.url_halaman ? el('a', { href: item.url_halaman, target: '_blank', rel: 'noopener' }, item.url_halaman) : '-',
       ),
-      el(
-        'div',
-        { class: 'row' },
-        el('button', { type: 'button', onclick: () => speak(item.teks_deskripsi) }, 'Putar ulang'),
-        el('button', { type: 'button', onclick: stopSpeaking }, 'Berhenti'),
-        el('button', { type: 'button', onclick: () => reportForm(item, holder) }, 'Laporkan'),
-        el('button', { type: 'button', onclick: () => remove(item) }, 'Hapus'),
-      ),
+      actions(item, holder, { headingId }),
       holder,
     ),
   );
-  return art;
 }
 
-async function remove(item) {
+async function remove(item, inDetail) {
   // UC-RWY-04: konfirmasi sebelum menghapus
   if (!window.confirm(`Hapus deskripsi "${item.teks_deskripsi}" dari riwayat?`)) {
     say('Penghapusan dibatalkan.');
@@ -78,8 +87,27 @@ async function remove(item) {
   }
   try {
     await apiFetch(`/history/${item.riwayat_id}`, { method: 'DELETE' });
+    if (inDetail) {
+      $('content').replaceChildren(el('p', { class: 'card' }, 'Riwayat ini sudah dihapus. ', el('a', { href: 'riwayat.html' }, 'Kembali ke daftar riwayat')));
+    } else {
+      await load();
+    }
     say('Riwayat berhasil dihapus.', 'ok');
+  } catch (err) {
+    say(err.message, 'error');
+  }
+}
+
+async function removeAll(total) {
+  if (!window.confirm(`Hapus SEMUA riwayat (${total} deskripsi)? Tindakan ini tidak dapat dibatalkan.`)) {
+    say('Penghapusan dibatalkan. Riwayat tetap tersimpan.');
+    return;
+  }
+  try {
+    const res = await apiFetch('/history', { method: 'DELETE', body: { semua: true } });
+    state.page = 1;
     await load();
+    say(`Semua riwayat dihapus (${res.dihapus} deskripsi).`, 'ok');
   } catch (err) {
     say(err.message, 'error');
   }
@@ -92,6 +120,12 @@ async function load() {
     data = await apiFetch(`/history?page=${state.page}&limit=${state.limit}`);
   } catch (err) {
     sayError(err, load);
+    return;
+  }
+  // Halaman terakhir kosong setelah menghapus → mundur satu halaman.
+  if (!data.items.length && state.page > 1) {
+    state.page -= 1;
+    await load();
     return;
   }
 
@@ -111,6 +145,8 @@ async function load() {
   if (!data.items.length) {
     parts.push(el('p', { class: 'card' }, 'Riwayat masih kosong. Deskripsikan gambar di halaman web untuk mengisinya.'));
   } else {
+    const all = data.total + (data.tersembunyi || 0);
+    parts.push(el('div', { class: 'row' }, el('button', { type: 'button', id: 'hapus-semua', class: 'danger', onclick: () => removeAll(all) }, 'Hapus semua riwayat')));
     const offset = (data.page - 1) * data.limit;
     parts.push(
       el('ul', { class: 'list', 'aria-label': `${data.total} riwayat deskripsi` }, data.items.map((it, i) => renderItem(it, offset + i + 1, data.total))),
@@ -136,7 +172,47 @@ function go(delta) {
   load().then(() => $('main').focus());
 }
 
+// UC-RWY-03: detail satu riwayat + putar ulang suara.
+async function loadDetail(id) {
+  let item;
+  try {
+    item = await apiFetch(`/history/${encodeURIComponent(id)}`);
+  } catch (err) {
+    if (err.status === 404) {
+      $('content').replaceChildren(el('p', { class: 'card' }, 'Riwayat tidak ditemukan. Mungkin sudah dihapus atau lebih dari 7 hari (akun Gratis). ', el('a', { href: 'riwayat.html' }, 'Kembali ke daftar riwayat')));
+      say(err.message, 'error');
+    } else {
+      sayError(err, () => loadDetail(id));
+    }
+    return;
+  }
+  const holder = el('div');
+  const link = (url) => (url ? el('a', { href: url, target: '_blank', rel: 'noopener' }, url) : '-');
+  $('content').replaceChildren(
+    el(
+      'article',
+      { class: 'card stack', 'aria-labelledby': 'detail-title' },
+      el('h2', { id: 'detail-title' }, `Deskripsi · ${fmtDateTime(item.waktu_dibuat)}`),
+      el('p', { class: 'text', id: 'detail-text' }, item.teks_deskripsi),
+      el(
+        'dl',
+        { class: 'kv' },
+        el('dt', {}, 'Jenis gambar'), el('dd', { id: 'detail-jenis' }, jenisLabel(item.jenis_gambar)),
+        el('dt', {}, 'Dibuat oleh'), el('dd', {}, providerLabel(item.provider)),
+        el('dt', {}, 'Waktu'), el('dd', {}, fmtDateTime(item.waktu_dibuat)),
+        el('dt', {}, 'Halaman'), el('dd', {}, link(item.url_halaman)),
+        el('dt', {}, 'Alamat gambar'), el('dd', {}, link(item.url_gambar)),
+      ),
+      actions(item, holder, { inDetail: true }),
+      holder,
+    ),
+    el('p', {}, el('a', { href: 'riwayat.html' }, 'Kembali ke daftar riwayat')),
+  );
+  document.querySelector('.replay').focus();
+}
+
 (async () => {
   if (!(await requireSession())) return;
-  await load();
+  if (detailId) await loadDetail(detailId);
+  else await load();
 })();

@@ -150,6 +150,33 @@ describe('Deskripsi + kuota + riwayat (UC-GBR-04/05, UC-RWY-01..04)', () => {
     assert.equal((await app.api('GET', '/api/v1/me/quota', { token: u.token })).body.terpakai, 0);
   });
 
+  it('RF-16: hapus semua riwayat wajib {semua: true}, hanya milik sendiri (termasuk yang disembunyikan)', async () => {
+    const a = await app.register();
+    const b = await app.register();
+    await app.describe(a.token);
+    await app.describe(a.token);
+    await app.describe(b.token);
+    const noFlag = await app.api('DELETE', '/api/v1/history', { token: a.token, body: {} });
+    assert.equal(noFlag.status, 400);
+    assert.equal(noFlag.body.error.details.field, 'semua');
+    assert.equal((await app.api('DELETE', '/api/v1/history', { token: a.token, body: { semua: 'true' } })).status, 400);
+    assert.equal((await app.api('DELETE', '/api/v1/history', { body: { semua: true } })).status, 401);
+    const ok = await app.api('DELETE', '/api/v1/history', { token: a.token, body: { semua: true } });
+    assert.deepEqual(ok.body, { dihapus: 2 });
+    assert.equal((await app.api('GET', '/api/v1/history', { token: a.token })).body.total, 0);
+    assert.equal((await app.api('GET', '/api/v1/history', { token: b.token })).body.total, 1); // milik orang lain tetap
+  });
+
+  it('RF-15: detail riwayat memuat jenis gambar & provider (null untuk riwayat lama)', async () => {
+    const u = await app.register();
+    const { body } = await app.describe(u.token);
+    const detail = await app.api('GET', `/api/v1/history/${body.riwayat_id}`, { token: u.token });
+    assert.equal(detail.status, 200);
+    assert.ok('jenis_gambar' in detail.body && 'provider' in detail.body);
+    const list = await app.api('GET', '/api/v1/history', { token: u.token });
+    assert.ok('jenis_gambar' in list.body.items[0]);
+  });
+
   it('paginasi riwayat', async () => {
     const u = await app.register();
     for (let i = 0; i < 5; i++) await app.describe(u.token, { page_url: `https://h${i}.id` });

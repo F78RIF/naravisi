@@ -775,10 +775,28 @@ try {
   watch(hist);
   await hist.goto(extPage('pages/riwayat.html'));
 
-  await step('UC-RWY-02: 4 riwayat tampil + info batas 7 hari untuk Gratis', async () => {
+  await step('UC-RWY-02: 4 riwayat tampil + info batas 7 hari untuk Gratis + jenis gambar', async () => {
     await hist.locator('.item').first().waitFor();
     assert.equal(await hist.locator('.item').count(), 4);
     assert.match(await hist.locator('.notice').innerText(), /7 hari terakhir/);
+    assert.equal(await hist.locator('.item .jenis').first().innerText(), 'Jenis gambar: Foto');
+  });
+
+  await step('RF-15: detail riwayat — jenis gambar, sumber, putar ulang, kembali ke daftar', async () => {
+    await hist.getByRole('link', { name: 'Detail', exact: true }).first().click();
+    await hist.waitForURL(/riwayat\.html\?id=\d+$/);
+    await hist.locator('#detail-jenis', { hasText: 'Foto' }).waitFor();
+    assert.equal(await hist.locator('h1').innerText(), 'Detail riwayat');
+    assert.equal(await hist.evaluate(() => document.activeElement.textContent), 'Putar ulang'); // fokus langsung di tombol putar ulang
+    await hist.keyboard.press('Enter');
+    assert.equal(await hist.locator('body').getAttribute('data-last-spoken'), await hist.locator('#detail-text').innerText());
+    assert.deepEqual(await a11yAudit(hist), []);
+    await hist.getByRole('link', { name: 'Kembali ke daftar riwayat' }).click();
+    await hist.locator('.item').first().waitFor();
+    const missing = await context.newPage();
+    await missing.goto(extPage('pages/riwayat.html?id=999999'));
+    await missing.locator('#content', { hasText: 'Riwayat tidak ditemukan' }).waitFor();
+    await missing.close();
   });
 
   await step('UC-RWY-03: putar ulang deskripsi', async () => {
@@ -787,10 +805,32 @@ try {
   });
 
   await step('UC-RWY-04: hapus riwayat (dengan konfirmasi)', async () => {
-    await hist.getByRole('button', { name: 'Hapus' }).first().click();
+    await hist.getByRole('button', { name: 'Hapus', exact: true }).first().click();
     await hist.locator('#msg', { hasText: 'Riwayat berhasil dihapus.' }).waitFor();
     await hist.locator('.item').nth(3).waitFor({ state: 'detached' }); // pesan tampil sebelum daftar dimuat ulang
     assert.equal(await hist.locator('.item').count(), 3);
+  });
+
+  await step('RF-16: hapus SEMUA riwayat (dengan konfirmasi) — hanya milik sendiri', async () => {
+    const saved = await sw.evaluate(() => chrome.storage.local.get(['nvSession', 'nvTts']));
+    const tmp = await backend.register({ nama: 'Riwayat Sementara', email: 'riwayat-sementara@uji.id' });
+    await backend.describe(tmp.token);
+    await backend.describe(tmp.token);
+    const othersBefore = await backend.db.get('SELECT COUNT(*) AS n FROM riwayat_deskripsi WHERE user_id <> ?', [tmp.user.user_id]);
+    const page2 = await context.newPage();
+    try {
+      await sw.evaluate((x) => chrome.storage.local.set({ nvSession: { token: x.token, user: x.user, savedAt: Date.now() } }), tmp);
+      await page2.goto(extPage('pages/riwayat.html'));
+      await page2.locator('.item').nth(1).waitFor();
+      await page2.getByRole('button', { name: 'Hapus semua riwayat' }).click(); // dialog konfirmasi diterima otomatis
+      await page2.locator('#msg', { hasText: 'Semua riwayat dihapus (2 deskripsi).' }).waitFor();
+      await page2.locator('#content', { hasText: 'Riwayat masih kosong' }).waitFor();
+      const othersAfter = await backend.db.get('SELECT COUNT(*) AS n FROM riwayat_deskripsi WHERE user_id <> ?', [tmp.user.user_id]);
+      assert.equal(Number(othersAfter.n), Number(othersBefore.n));
+    } finally {
+      await page2.close();
+      await sw.evaluate((x) => chrome.storage.local.set(x), saved);
+    }
   });
 
   await step('halaman riwayat lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(hist), []));

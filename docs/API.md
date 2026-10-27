@@ -87,7 +87,8 @@ Semua endpoint bertanda **user** wajib `Authorization: Bearer <JWT>` (didapat da
 | Kuota | `GET /me/quota` | user | RF-09 | `{tanggal, terpakai, batas, sisa}` (`batas` null = tanpa batas) |
 | Deskripsi | `POST /descriptions` | user | RF-09..11, 13 | + `riwayat_id`, `kuota`; `429 QUOTA_EXCEEDED` |
 | Riwayat | `GET /history?page&limit` | user | RF-14 | `{items, total, batas_hari, tersembunyi}` |
-| Riwayat | `GET /history/:id` · `DELETE /history/:id` | user | RF-15, RF-16 | |
+| Riwayat | `GET /history/:id` · `DELETE /history/:id` | user | RF-15, RF-16 | hanya milik sendiri (selain itu `404`); item memuat `jenis_gambar`, `provider` |
+| Riwayat | `DELETE /history` `{semua: true}` | user | RF-16 | hapus seluruh riwayat sendiri (termasuk yang disembunyikan untuk Gratis) → `{dihapus}` |
 | Pengaturan | `GET /settings` · `PUT /settings` | user | RF-17..19 | `403 PREMIUM_REQUIRED`, `409 SHORTCUT_CONFLICT` |
 | Laporan | `POST /reports` `{riwayat_id, alasan}` | user | RF-20 | |
 | Paket | `GET /plans` | – | RF-23 | `{items, mode_pembayaran}` |
