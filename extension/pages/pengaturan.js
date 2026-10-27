@@ -240,16 +240,27 @@ async function render(settings) {
   const pintasan = el('input', { id: 'pintasan', value: settings.pintasan_keyboard, 'aria-describedby': 'pintasan-hint', spellcheck: 'false' });
 
   // --- Suara (UC-AKS-03)
+  // aria-valuetext: NVDA membacakan "1,5 kali" alih-alih angka mentah saat panah kiri/kanan ditekan.
+  const decimal = (v) => String(v).replace('.', ',');
   const rateOut = el('output', { for: 'kecepatan', id: 'kecepatan-out' }, `${settings.kecepatan_suara}×`);
-  const kecepatan = el('input', { id: 'kecepatan', type: 'range', min: '0.5', max: '2', step: '0.1', value: settings.kecepatan_suara });
-  kecepatan.addEventListener('input', () => (rateOut.textContent = `${kecepatan.value}×`));
+  const kecepatan = el('input', {
+    id: 'kecepatan', type: 'range', min: '0.5', max: '2', step: '0.1', value: settings.kecepatan_suara,
+    'aria-valuetext': `${decimal(settings.kecepatan_suara)} kali`,
+  });
+  kecepatan.addEventListener('input', () => {
+    rateOut.textContent = `${kecepatan.value}×`;
+    kecepatan.setAttribute('aria-valuetext', `${decimal(kecepatan.value)} kali`);
+  });
 
   const pitchOut = el('output', { for: 'nada', id: 'nada-out' }, `${settings.nada_suara}`);
   const nada = el('input', {
     id: 'nada', type: 'range', min: '0.5', max: '2', step: '0.1', value: settings.nada_suara,
-    disabled: !premium, 'aria-describedby': premium ? null : 'nada-hint',
+    disabled: !premium, 'aria-describedby': premium ? null : 'nada-hint', 'aria-valuetext': `nada ${decimal(settings.nada_suara)}`,
   });
-  nada.addEventListener('input', () => (pitchOut.textContent = nada.value));
+  nada.addEventListener('input', () => {
+    pitchOut.textContent = nada.value;
+    nada.setAttribute('aria-valuetext', `nada ${decimal(nada.value)}`);
+  });
 
   const suara = el('select', { id: 'suara', disabled: !premium, 'aria-describedby': premium ? null : 'suara-hint' }, el('option', { value: '' }, 'Suara default perangkat'));
   for (const v of await voicesFor(settings.bahasa_deskripsi)) {

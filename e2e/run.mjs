@@ -36,6 +36,7 @@ backend.ai.maxInFlight = 0;
 backend.ai.delayMs = 0;
 backend.ai.caption = async ({ lang, imageBase64, context }) => {
   backend.ai.calls += 1;
+  backend.ai.lastLang = lang;
   backend.ai.lastImage = imageBase64;
   backend.ai.lastContext = context;
   backend.ai.inFlight += 1; // dipakai uji "baca berurutan tidak pernah paralel"
@@ -938,6 +939,34 @@ try {
     assert.equal(row.pintasan_keyboard, 'Alt+Shift+Y');
     const tts = await sw.evaluate(async () => (await chrome.storage.local.get('nvTts')).nvTts);
     assert.equal(tts.kecepatan_suara, 1.5);
+    assert.equal(await set.locator('#kecepatan').getAttribute('aria-valuetext'), '1,5 kali'); // dibacakan NVDA
+  });
+
+  await step('RF-18: bahasa English disimpan → deskripsi berikutnya diminta dalam bahasa Inggris', async () => {
+    await set.getByLabel('Bahasa deskripsi').selectOption('en');
+    await set.getByRole('button', { name: 'Simpan pengaturan' }).click();
+    await set.locator('#msg', { hasText: 'Pengaturan berhasil disimpan.' }).waitFor();
+    assert.equal(await sw.evaluate(async () => (await chrome.storage.local.get('nvTts')).nvTts.bahasa_deskripsi), 'en');
+    const lastId = (await backend.db.get('SELECT MAX(riwayat_id) AS id FROM riwayat_deskripsi')).id ?? 0;
+    const tab = await context.newPage();
+    const url = `${SITE}/`; // halaman berita yang sama, URL unik → toggleOn memilih tab ini
+    try {
+      await tab.goto(url);
+      await toggleOn(url);
+      await tab.locator('#nv-status', { hasText: 'gambar ditemukan' }).waitFor();
+      await tab.keyboard.press('Enter');
+      await tab.locator('#nv-text').filter({ hasText: 'Deskripsi uji' }).waitFor({ timeout: 10000 });
+      assert.equal(backend.ai.lastLang, 'en');
+    } finally {
+      await tab.close();
+      await backend.db.run('DELETE FROM riwayat_deskripsi WHERE riwayat_id > ?', [lastId]);
+      await backend.db.run('UPDATE kuota_harian SET jumlah_permintaan = jumlah_permintaan - 1 WHERE jumlah_permintaan > 0');
+      await set.bringToFront();
+      await set.reload();
+      await set.getByLabel('Bahasa deskripsi').selectOption('id');
+      await set.getByRole('button', { name: 'Simpan pengaturan' }).click();
+      await set.locator('#msg', { hasText: 'Pengaturan berhasil disimpan.' }).waitFor();
+    }
   });
 
   await step('tombol "Coba suara" membacakan contoh', async () => {

@@ -34,6 +34,17 @@ describe('Pengaturan (UC-AKS-01..03)', () => {
     assert.equal(res.body.pintasan_keyboard, 'Alt+Shift+Y');
   });
 
+  it('RF-17: pengaturan milik masing-masing pengguna; tanpa login → 401', async () => {
+    const a = await app.register();
+    const b = await app.register();
+    await app.api('PUT', '/api/v1/settings', { token: a.token, body: { bahasa_deskripsi: 'en', kecepatan_suara: 1.8 } });
+    const other = await app.api('GET', '/api/v1/settings', { token: b.token });
+    assert.equal(other.body.bahasa_deskripsi, 'id');
+    assert.equal(other.body.kecepatan_suara, 1);
+    assert.equal((await app.api('GET', '/api/v1/settings')).status, 401);
+    assert.equal((await app.api('PUT', '/api/v1/settings', { body: { kecepatan_suara: 1 } })).status, 401);
+  });
+
   it('UC-AKS-02 alt: pintasan bentrok → 409; format salah → 400', async () => {
     const u = await app.register();
     const clash = await app.api('PUT', '/api/v1/settings', { token: u.token, body: { pintasan_keyboard: 'Ctrl+T' } });
