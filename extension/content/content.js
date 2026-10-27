@@ -1,16 +1,19 @@
 // Content script NaraVisi — memindai gambar, menampilkan panel aksesibel,
 // dan membacakan deskripsi dengan Web Speech API.
-// Disuntik sesuai permintaan (Alt+Shift+K / popup) atau oleh mode otomatis; aman bila disuntik berulang.
-// Mode otomatis hanya menyentuh atribut alt dan data-naravisi pada gambar halaman.
+// Disuntik sesuai permintaan (Alt+Shift+K / popup) atau oleh mode baca berurutan; aman bila disuntik berulang.
+// Pada gambar halaman hanya atribut nama (alt / aria-label) dan data-naravisi yang disentuh; pengumuman
+// untuk pembaca layar memakai satu live region tersembunyi (#naravisi-live).
 
 (() => {
   if (window.__naraVisiLoaded) return;
   window.__naraVisiLoaded = true;
 
   const MIN_SIDE = 100; // sisi terpendek < 100 px = ikon/hiasan, bukan konten
+  const ROW_PX = 24; // urutan visual: posisi atas dibulatkan per baris 24 px
   const AUTO_RESERVE = 2; // sama dengan shared/config.js: sisakan kuota untuk pilihan manual
   const AUTO_PREFIX = 'Deskripsi NaraVisi: ';
   const HOST_ID = 'naravisi-host';
+  const LIVE_ID = 'naravisi-live';
   const MARK_ATTR = 'data-naravisi-mark';
 
   const state = {
@@ -49,6 +52,9 @@
     } else if (message?.type === 'NV_AUTO_START') {
       autoDescribe(Number(message.max) || 0).then(sendResponse, () => sendResponse({ described: 0, stopped: 'error' }));
       return true; // respons asinkron
+    } else if (message?.type === 'NV_LIVE' && typeof message.text === 'string') {
+      announce(message.text.slice(0, 300));
+      sendResponse({ ok: true });
     } else if (message?.type === 'NV_FOCUS_ENABLE') {
       if (!state.focusOn) {
         state.focusOn = true;
@@ -171,7 +177,7 @@
    * aria-hidden, role presentation/none), tidak terlihat, atau ikon/logo/avatar/iklan.
    */
   function inspect(el) {
-    if (el.id === HOST_ID || el.closest(`#${HOST_ID}`)) return null;
+    if (el.id === HOST_ID || el.id === LIVE_ID || el.closest(`#${HOST_ID}`)) return null;
     if (el.closest('[aria-hidden="true"]') || ['presentation', 'none'].includes(el.getAttribute('role'))) return null;
     const tag = el.localName;
     let kind;
@@ -209,10 +215,41 @@
       inMain: Boolean(el.closest('main, article, [role="main"]')),
       width: Math.round(rect.width),
       height: Math.round(rect.height),
+      // Posisi visual di dokumen: baris dibulatkan per 24 px, lalu kiri → kanan.
+      row: Math.round((rect.top + window.scrollY) / ROW_PX),
+      left: Math.round(rect.left + window.scrollX),
     };
   }
 
-  /** Gambar konten tanpa duplikat src; yang di <main>/<article> dulu, lalu yang terbesar. */
+  /**
+   * Apakah CSS mengubah urutan tampilan elemen ini dari urutan DOM? (flex/grid `order`,
+   * arah terbalik, `grid-auto-flow: dense`, atau penempatan grid dengan nomor garis.)
+   */
+  function cssReordered(el) {
+    for (let n = el, depth = 0; n?.parentElement && depth < 6; n = n.parentElement, depth += 1) {
+      const parent = getComputedStyle(n.parentElement);
+      if (!/flex|grid/.test(parent.display)) continue;
+      const own = getComputedStyle(n);
+      if (own.order !== '0') return true;
+      if (parent.display.includes('flex') && /reverse/.test(`${parent.flexDirection} ${parent.flexWrap}`)) return true;
+      if (parent.display.includes('grid')
+        && (parent.gridAutoFlow.includes('dense') || /^-?\d/.test(own.gridRowStart) || /^-?\d/.test(own.gridColumnStart))) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Urutan baca = urutan DOM (urutan NVDA/JAWS membaca halaman). Bila CSS menyusun ulang tampilan,
+   * pakai posisi visual (atas → bawah, kiri → kanan). Gambar di <main>/<article> didahulukan, tetap berurutan.
+   */
+  function readingOrder(items) {
+    const ordered = items.some((it) => cssReordered(it.el))
+      ? items.map((it, dom) => ({ it, dom })).sort((a, b) => a.it.row - b.it.row || a.it.left - b.it.left || a.dom - b.dom).map(({ it }) => it)
+      : items;
+    return [...ordered.filter((it) => it.inMain), ...ordered.filter((it) => !it.inMain)];
+  }
+
+  /** Gambar konten tanpa duplikat src, dalam urutan baca. querySelectorAll sudah mengikuti urutan DOM. */
   function scanImages() {
     const seen = new Set();
     const found = [];
@@ -222,11 +259,7 @@
       seen.add(item.src);
       found.push(item);
     }
-    const area = (it) => it.width * it.height;
-    return found
-      .map((item, order) => ({ item, order }))
-      .sort((a, b) => Number(b.item.inMain) - Number(a.item.inMain) || area(b.item) - area(a.item) || a.order - b.order)
-      .map(({ item }) => item);
+    return readingOrder(found);
   }
 
   // -------------------------------------------------------------------------
@@ -484,21 +517,22 @@
 
   const KIND_LABEL = { svg: 'Gambar vektor', 'inline-svg': 'Gambar vektor', background: 'Gambar latar' };
 
-  /** "Gambar 1 dari 6" + "di artikel · keterangan: Banjir di Samarinda · 400×250 px" */
+  /**
+   * "Gambar 2 dari 6" + keterangan terdekat (figcaption/caption). Tanpa keterangan: alt asli, title,
+   * atau nama file. Pendek supaya cepat didengar saat menelusuri daftar dengan panah.
+   */
   function describeItemLabel(item, i) {
     const parts = [];
     if (KIND_LABEL[item.kind]) parts.push(KIND_LABEL[item.kind]);
-    if (item.inMain) parts.push('di artikel');
     const caption = captionOf(item.el);
-    if (caption) parts.push(`keterangan: ${caption}`);
-    if (item.alt) parts.push(`teks alternatif: “${clip(item.alt)}”`);
-    if (!caption && !item.alt) {
-      const name = cleanFileName(item.src);
-      if (item.title) parts.push(`keterangan: ${clip(item.title)}`);
-      else if (name) parts.push(`nama file: ${name}`);
-      else parts.push('Gambar tanpa keterangan');
-    }
-    parts.push(`${item.width}×${item.height} px`);
+    const alt = originalAlt(item);
+    const name = cleanFileName(item.src);
+    if (caption) parts.push(caption);
+    else if (alt) parts.push(`teks alternatif: “${clip(alt)}”`);
+    else if (item.title) parts.push(clip(item.title));
+    else if (name) parts.push(`nama file: ${name}`);
+    else parts.push('tanpa keterangan');
+    if (state.cache.has(item.src)) parts.push('sudah dideskripsikan');
     return { title: `Gambar ${i + 1} dari ${state.images.length}`, meta: parts.join(' · ') };
   }
 
@@ -661,6 +695,7 @@
       const e = new Error(res?.message || 'Server gagal memproses gambar.');
       e.code = res?.code;
       e.spoken = res?.spoken;
+      e.sisa = res?.sisa;
       throw e;
     }
     state.lang = res.data.lang || state.lang;
@@ -676,6 +711,7 @@
     const cached = state.cache.get(item.src);
     if (cached) {
       state.current = cached;
+      applyAlt(item, cached.text);
       showResult(cached.text, cached.jenis);
       setStatus(`Deskripsi gambar ${number}.`);
       speak(cached.text);
@@ -692,6 +728,8 @@
       if (!state.open) return; // panel ditutup saat menunggu
 
       state.current = { text, riwayatId, jenis };
+      // Deskripsi juga masuk ke gambar asli → terbaca NVDA saat menelusuri halaman (tombol G).
+      applyAlt(item, text);
       showResult(text, jenis);
       state.host.dataset.state = 'done';
       setAction(null);
@@ -723,14 +761,26 @@
       () => new Promise((resolve) => ('requestIdleCallback' in window ? requestIdleCallback(resolve, { timeout: 2000 }) : resolve())),
     );
 
-  const canHoldAlt = (item) => item.kind === 'img' || item.kind === 'svg'; // <img>/<input type=image>
+  // <img>, <input type=image>, dan <svg> inline bisa membawa nama untuk pembaca layar; gambar latar CSS tidak.
+  const canHoldAlt = (item) => item.kind === 'img' || item.kind === 'svg' || item.kind === 'inline-svg';
 
-  /** Hanya alt dan data-naravisi yang disentuh; alt yang sudah bermakna tidak pernah ditimpa. */
+  /**
+   * Suntikkan deskripsi ke gambar asli supaya NVDA/JAWS membacanya saat menelusuri halaman (panah, H, G):
+   * - tanpa alt              → alt="<deskripsi>"
+   * - alt pendek/generik      → alt="<alt asli>. Deskripsi NaraVisi: <deskripsi>"
+   * - alt bermakna            → TIDAK disentuh
+   * Hanya atribut nama (alt, atau aria-label bila gambar memakainya / SVG inline) dan data-naravisi="1".
+   */
   function applyAlt(item, text) {
     const el = item.el;
-    if (!el.isConnected || isMeaningfulAlt(el.getAttribute('alt'), item.src)) return false;
-    el.setAttribute('alt', `${AUTO_PREFIX}${text}`);
-    el.setAttribute('data-naravisi', 'auto');
+    if (!el.isConnected || !canHoldAlt(item) || el.hasAttribute('aria-labelledby')) return false;
+    const attr = item.kind === 'inline-svg' || el.hasAttribute('aria-label') ? 'aria-label' : 'alt';
+    const base = originalAlts.has(el) ? originalAlts.get(el) : item.kind === 'inline-svg' ? item.alt : (el.getAttribute(attr) || '').trim();
+    if (isMeaningfulAlt(base, item.src)) return false;
+    originalAlts.set(el, base);
+    el.setAttribute(attr, base ? `${base.replace(/[\s.]+$/, '')}. ${AUTO_PREFIX}${text}` : text);
+    if (item.kind === 'inline-svg' && !el.hasAttribute('role')) el.setAttribute('role', 'img');
+    el.setAttribute('data-naravisi', '1');
     return true;
   }
 
@@ -741,42 +791,127 @@
     return { text: data.text, kuota: data.kuota, fresh: true };
   }
 
+  // --- Pengumuman sopan (aria-live="polite") untuk pembaca layar: tidak menyela NVDA yang sedang membaca.
+  let liveRegion = null;
+  function ensureLive() {
+    if (liveRegion?.isConnected) return liveRegion;
+    const host = document.createElement('div');
+    host.id = LIVE_ID;
+    // Tersembunyi secara visual, tetap terbaca pembaca layar.
+    host.style.cssText = 'position:fixed!important;width:1px!important;height:1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;margin:-1px!important;';
+    const root = host.attachShadow({ mode: 'open' });
+    const region = document.createElement('div');
+    region.setAttribute('role', 'status');
+    region.setAttribute('aria-live', 'polite');
+    root.append(region);
+    (document.body || document.documentElement).appendChild(host);
+    liveRegion = region;
+    return region;
+  }
+
+  function announce(text) {
+    const region = ensureLive();
+    region.textContent = '';
+    region.getRootNode().host.dataset.last = text; // dipakai uji otomatis
+    setTimeout(() => {
+      region.textContent = text;
+    }, 100);
+  }
+
+  // -------------------------------------------------------------------------
+  // Mode "Baca berurutan": gambar tanpa alt bermakna diproses SATU PER SATU dari atas ke bawah,
+  // yang terlihat/hampir terlihat lebih dulu, lalu lanjut saat pengguna menggulir/membaca. Maks. N per halaman.
+  // -------------------------------------------------------------------------
+  const seq = { near: new Set(), observer: null, candidates: [], total: 0, described: 0, running: false, stopped: null, kuota: null, onIdle: null };
+
+  const STOP_TEXT = {
+    quota: (sisa) => `Baca berurutan berhenti: sisa kuota hari ini ${sisa}, disisakan untuk pilihan Anda.`,
+    daily: () => 'Baca berurutan berhenti: batas harian tercapai.',
+    password: () => 'Baca berurutan berhenti karena halaman ini memiliki kolom kata sandi.',
+  };
+
+  function finishSequence(stopped) {
+    seq.stopped = seq.stopped || stopped;
+    seq.observer?.disconnect();
+    seq.observer = null;
+  }
+
+  function settleIdle() {
+    const done = seq.onIdle;
+    seq.onIdle = null;
+    done?.({ described: seq.described, stopped: seq.stopped, kuota: seq.kuota, candidates: seq.total });
+  }
+
+  /** Ambil gambar berikutnya (urutan baca) yang sedang/hampir terlihat; tidak ada → menunggu guliran. */
+  async function pump() {
+    if (seq.running) return;
+    const budgetLeft = seq.described < seq.total && !seq.stopped;
+    const next = budgetLeft ? seq.candidates.find((it) => !state.autoDone.has(it.src) && seq.near.has(it.el)) : null;
+    if (!next) {
+      if (!budgetLeft) finishSequence();
+      settleIdle(); // jawaban pertama ke service worker; proses tetap lanjut saat pengguna menggulir
+      return;
+    }
+    seq.running = true;
+    state.autoDone.add(next.src);
+    try {
+      if (hasPasswordField()) {
+        finishSequence('password');
+        announce(STOP_TEXT.password());
+        return;
+      }
+      const result = await describeFor(next, 'page');
+      if (result.fresh) {
+        state.autoUsed += 1;
+        seq.kuota = result.kuota ?? seq.kuota;
+      }
+      if (applyAlt(next, result.text)) {
+        seq.described += 1;
+        announce(`Gambar ${seq.described} dari ${seq.total} sudah dideskripsikan.`);
+      }
+      const k = seq.kuota;
+      if (seq.described < seq.total && k && k.batas != null && k.sisa <= AUTO_RESERVE) {
+        finishSequence('quota');
+        setTimeout(() => announce(STOP_TEXT.quota(k.sisa)), 1500); // setelah pengumuman progres
+      }
+    } catch (err) {
+      const reason = { AUTO_RESERVE: 'quota', AUTO_DAILY_LIMIT: 'daily' }[err.code] || 'error';
+      finishSequence(reason);
+      if (reason === 'quota') announce(STOP_TEXT.quota(err.sisa ?? AUTO_RESERVE));
+      else if (reason === 'daily') announce(STOP_TEXT.daily());
+    } finally {
+      seq.running = false;
+    }
+    pump();
+  }
+
   async function autoDescribe(max) {
     await settle();
     if (hasPasswordField()) return { described: 0, skipped: 'password' };
+    if (seq.observer) return { described: 0, stopped: 'running', candidates: seq.total }; // sudah berjalan di dokumen ini
     const budget = Math.max(0, max - state.autoUsed);
-    const queue = scanImages()
-      .filter((it) => canHoldAlt(it) && !it.el.hasAttribute('data-naravisi') && !isMeaningfulAlt(it.alt, it.src) && !state.autoDone.has(it.src))
-      .slice(0, budget);
+    seq.candidates = scanImages().filter(
+      (it) => canHoldAlt(it) && !it.el.hasAttribute('data-naravisi') && !isMeaningfulAlt(it.alt, it.src) && !state.autoDone.has(it.src),
+    );
+    seq.total = Math.min(budget, seq.candidates.length);
+    seq.described = 0;
+    seq.stopped = null;
+    seq.kuota = null;
+    if (!seq.total) return { described: 0, stopped: null, candidates: 0 };
 
-    let described = 0;
-    let kuota = null;
-    let stopped = null;
-    // Berurutan, satu per satu — bukan paralel.
-    for (const [i, item] of queue.entries()) {
-      if (hasPasswordField()) {
-        stopped = 'password';
-        break;
-      }
-      state.autoDone.add(item.src);
-      try {
-        const result = await describeFor(item, 'page');
-        if (result.fresh) {
-          state.autoUsed += 1;
-          kuota = result.kuota ?? kuota;
+    ensureLive(); // live region dibuat sebelum pengumuman pertama
+    return new Promise((resolve) => {
+      seq.onIdle = resolve;
+      // "Hampir terlihat" = sampai satu layar di bawah/atas viewport.
+      seq.observer = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) seq.near.add(e.target);
+          else seq.near.delete(e.target);
         }
-        if (applyAlt(item, result.text)) described += 1;
-      } catch (err) {
-        stopped = { AUTO_RESERVE: 'quota', AUTO_DAILY_LIMIT: 'daily' }[err.code] || 'error';
-        break;
-      }
-      const more = i < queue.length - 1;
-      if (more && kuota && kuota.batas != null && kuota.sisa <= AUTO_RESERVE) {
-        stopped = 'quota';
-        break;
-      }
-    }
-    return { described, stopped, kuota, candidates: queue.length };
+        pump();
+      }, { rootMargin: '100% 0px' });
+      seq.candidates.forEach((it) => seq.observer.observe(it.el));
+    });
   }
 
   /** Fokus Tab jatuh ke <img> atau tautan/tombol yang isinya hanya gambar tanpa alt bermakna. */

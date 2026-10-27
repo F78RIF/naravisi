@@ -31,10 +31,17 @@ const { startTestApp, ADMIN } = await import('../backend/test/support/testApp.js
 // ---------------------------------------------------------------------------
 const backend = await startTestApp();
 backend.clock.set(new Date().toISOString()); // jam nyata agar token & tanggal wajar
+backend.ai.inFlight = 0;
+backend.ai.maxInFlight = 0;
+backend.ai.delayMs = 0;
 backend.ai.caption = async ({ lang, imageBase64, context }) => {
   backend.ai.calls += 1;
   backend.ai.lastImage = imageBase64;
   backend.ai.lastContext = context;
+  backend.ai.inFlight += 1; // dipakai uji "baca berurutan tidak pernah paralel"
+  backend.ai.maxInFlight = Math.max(backend.ai.maxInFlight, backend.ai.inFlight);
+  if (backend.ai.delayMs) await new Promise((r) => setTimeout(r, backend.ai.delayMs));
+  backend.ai.inFlight -= 1;
   const mime = Buffer.from(imageBase64, 'base64')[0] === 0xff ? 'JPEG' : 'PNG';
   return { text: `Deskripsi uji untuk gambar ${mime}.`, textEn: null, lang, model: 'fake', latencyMs: 1, jenis: 'foto', provider: 'fake' };
 };
@@ -81,6 +88,33 @@ const articleBody = `
   </article></main>`;
 const articlePage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Artikel Uji</title></head>
 <body style="font-family:sans-serif;padding:20px">${articleBody}</body></html>`;
+// Tahap 2: urutan baca (DOM vs CSS grid order), alt generik digabung, baca berurutan + IntersectionObserver.
+for (const [name, rgb] of [
+  ['kucing.jpg', '#c08040'], ['anjing.jpg', '#4080c0'], ['burung.jpg', '#40c080'],
+  ['g1.jpg', '#802020'], ['g2.jpg', '#208020'], ['g3.jpg', '#202080'], ['g4.jpg', '#808020'],
+  ['p1.jpg', '#a02060'], ['p2.jpg', '#2060a0'], ['p3.jpg', '#60a020'], ['p4.jpg', '#a0a0a0'],
+]) fixtures[`/img/${name}`] = { type: 'image/jpeg', body: await solid(300, 200, rgb).jpeg().toBuffer() };
+const html = (title, body) => `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>${title}</title></head><body style="margin:0;padding:20px">${body}</body></html>`;
+// DOM: kucing, anjing (lebih besar & tampil di atas lewat position:absolute — bukan reorder CSS), burung.
+const orderDomPage = html('Urutan DOM', `<main style="position:relative;padding-top:260px">
+  <img id="kucing" src="/img/kucing.jpg" width="200" height="140">
+  <img id="anjing" src="/img/anjing.jpg" width="400" height="240" style="position:absolute;top:0;left:0">
+  <img id="burung" src="/img/burung.jpg" width="200" height="140"></main>`);
+// Grid dengan order CSS: DOM kucing, anjing, burung → tampil anjing, burung, kucing.
+const orderGridPage = html('Urutan Grid', `<main><div style="display:grid;grid-template-columns:repeat(3,220px);gap:8px">
+  <img id="kucing" src="/img/kucing.jpg" width="200" height="140" style="order:3">
+  <img id="anjing" src="/img/anjing.jpg" width="200" height="140" style="order:1">
+  <img id="burung" src="/img/burung.jpg" width="200" height="140" style="order:2"></div></main>`);
+const altPage = html('Alt Uji', `<main>
+  <img id="g1" src="/img/g1.jpg" alt="image" width="300" height="200">
+  <img id="g2" src="/img/g2.jpg" alt="IMG_2041.jpg" width="300" height="200">
+  <img id="g3" src="/img/g3.jpg" alt="Petugas membagikan masker di pasar" width="300" height="200">
+  <img id="g4" src="/img/g4.jpg" width="300" height="200"></main>`);
+// p3 & p4 jauh di bawah layar: baru diproses setelah digulir.
+const longPage = html('Panjang', `<main>
+  <img id="p1" src="/img/p1.jpg" width="300" height="200"><img id="p2" src="/img/p2.jpg" width="300" height="200">
+  <div style="height:4000px"></div>
+  <img id="p3" src="/img/p3.jpg" width="300" height="200"><img id="p4" src="/img/p4.jpg" width="300" height="200"></main>`);
 const passwordPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Masuk Bank Uji</title></head>
 <body>${articleBody}<form><label>Sandi <input type="password"></label></form></body></html>`;
 const linkPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Tautan Uji</title></head>
@@ -127,7 +161,7 @@ const site = http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(testPage);
   }
-  const pages = { '/artikel.html': articlePage, '/artikel-2.html': articlePage, '/artikel-3.html': articlePage, '/masuk.html': passwordPage, '/tautan.html': linkPage };
+  const pages = { '/urutan-dom.html': orderDomPage, '/urutan-grid.html': orderGridPage, '/alt.html': altPage, '/panjang.html': longPage, '/artikel.html': articlePage, '/artikel-2.html': articlePage, '/artikel-3.html': articlePage, '/masuk.html': passwordPage, '/tautan.html': linkPage };
   if (pages[req.url]) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(pages[req.url]);
@@ -627,7 +661,7 @@ try {
     // 4. Enter → dideskripsikan → teks tampil & dibacakan.
     await manual.keyboard.press('Enter');
     await manual.locator('#nv-text').filter({ hasText: 'Deskripsi uji untuk gambar' }).waitFor({ timeout: 10000 });
-    assert.match(await manual.locator('#naravisi-host').getAttribute('data-last-spoken'), /^Deskripsi uji untuk gambar (PNG|JPEG).$/);
+    assert.match(await manual.locator('#naravisi-host').getAttribute('data-last-spoken'), /^Deskripsi uji untuk gambar (PNG|JPEG)\.$/);
     assert.equal(backend.ai.calls - before.calls, 1);
     // 5. Esc → panel tertutup, fokus kembali ke tempat semula.
     await manual.keyboard.press('Escape');
@@ -787,20 +821,37 @@ try {
     return rgb.every((v, i) => Math.abs(v - want[i]) < 40);
   };
 
-  await step('4 gambar ditemukan, terbesar dulu: latar foto, latar SVG, 2 SVG inline (ikon dekoratif, sprite & gradien diabaikan)', async () => {
+  await step('4 gambar ditemukan dalam urutan DOM: 2 SVG inline, latar foto, latar SVG (ikon dekoratif, sprite & gradien diabaikan)', async () => {
     const res = await toggleOn(`${SITE}/infografik.html`);
     assert.equal(res.count, 4);
     const items = await vec.locator('#nv-list [role="option"]').allInnerTexts();
-    assert.match(items[0], /Gambar latar · teks alternatif: “Pemandangan pantai” · 300×150 px/);
-    assert.match(items[1], /Gambar latar · nama file: grafik · 200×200 px/);
-    assert.match(items[2], /Gambar vektor · teks alternatif: “Grafik penjualan”/);
-    assert.match(items[3], /Gambar vektor · teks alternatif: “Peta lokasi”/);
+    assert.match(items[0], /Gambar 1 dari 4\s+Gambar vektor · teks alternatif: “Grafik penjualan”/);
+    assert.match(items[1], /Gambar vektor · teks alternatif: “Peta lokasi”/);
+    assert.match(items[2], /Gambar latar · teks alternatif: “Pemandangan pantai”/);
+    assert.match(items[3], /Gambar latar · nama file: grafik/);
     assert.equal(await vec.locator('[data-naravisi-mark]').count(), 4);
   });
 
-  await step('gambar latar foto dideskripsikan', async () => {
+  await step('SVG inline dikirim sebagai JPEG dengan warna dari CSS halaman', async () => {
     await vec.keyboard.press('Enter');
     await vecStatus.filter({ hasText: 'Deskripsi gambar 1 siap.' }).waitFor({ timeout: 10000 });
+    assert.equal(await vecText.innerText(), 'Deskripsi uji untuk gambar JPEG.');
+    assert.ok(near(await pixelAt(0.5, 0.5), '#e03030'), `warna ${await pixelAt(0.5, 0.5)}`);
+    // <title> SVG sudah bermakna → tidak ditimpa
+    assert.equal(await vec.locator('#grafik').getAttribute('data-naravisi'), null);
+  });
+
+  await step('SVG inline dengan <use> ke sprite di luar elemennya tetap tergambar', async () => {
+    await vec.keyboard.press('ArrowDown');
+    await vec.keyboard.press('Enter');
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 2 siap.' }).waitFor({ timeout: 10000 });
+    assert.ok(near(await pixelAt(0.5, 0.5), '#20a040'), `warna ${await pixelAt(0.5, 0.5)}`);
+  });
+
+  await step('gambar latar foto dideskripsikan', async () => {
+    await vec.keyboard.press('ArrowDown');
+    await vec.keyboard.press('Enter');
+    await vecStatus.filter({ hasText: 'Deskripsi gambar 3 siap.' }).waitFor({ timeout: 10000 });
     assert.ok(near(await pixelAt(0.5, 0.5), '#20a0c0'));
     const last = await backend.db.get('SELECT url_gambar FROM riwayat_deskripsi ORDER BY riwayat_id DESC LIMIT 1');
     assert.equal(last.url_gambar, `${SITE}/img/pantai.jpg`);
@@ -809,23 +860,8 @@ try {
   await step('gambar latar SVG diubah ke JPEG & dideskripsikan', async () => {
     await vec.keyboard.press('ArrowDown');
     await vec.keyboard.press('Enter');
-    await vecStatus.filter({ hasText: 'Deskripsi gambar 2 siap.' }).waitFor({ timeout: 10000 });
-    assert.ok(near(await pixelAt(0.5, 0.5), '#ffa500')); // lingkaran oranye
-  });
-
-  await step('SVG inline dikirim sebagai JPEG dengan warna dari CSS halaman', async () => {
-    await vec.keyboard.press('ArrowDown');
-    await vec.keyboard.press('Enter');
-    await vecStatus.filter({ hasText: 'Deskripsi gambar 3 siap.' }).waitFor({ timeout: 10000 });
-    assert.equal(await vecText.innerText(), 'Deskripsi uji untuk gambar JPEG.');
-    assert.ok(near(await pixelAt(0.5, 0.5), '#e03030'), `warna ${await pixelAt(0.5, 0.5)}`);
-  });
-
-  await step('SVG inline dengan <use> ke sprite di luar elemennya tetap tergambar', async () => {
-    await vec.keyboard.press('ArrowDown');
-    await vec.keyboard.press('Enter');
     await vecStatus.filter({ hasText: 'Deskripsi gambar 4 siap.' }).waitFor({ timeout: 10000 });
-    assert.ok(near(await pixelAt(0.5, 0.5), '#20a040'), `warna ${await pixelAt(0.5, 0.5)}`);
+    assert.ok(near(await pixelAt(0.5, 0.5), '#ffa500')); // lingkaran oranye
   });
 
   await step('panel di halaman infografik lolos audit aksesibilitas', async () => {
@@ -912,23 +948,77 @@ try {
   const autoTab = await context.newPage();
   watch(autoTab);
 
-  await step('filter: ikon 50×50, alt="", logo situs dibuang; <main> dulu lalu terbesar; label memakai figcaption', async () => {
+  await step('filter: ikon 50×50, alt="", logo situs dibuang; <main> dulu (tetap urutan DOM); label "Gambar n dari N · keterangan"', async () => {
     await setUsed(0);
     await autoTab.goto(`${SITE}/artikel.html`);
     const res = await toggleOn(`${SITE}/artikel.html`);
     assert.equal(res.count, 6);
     const options = autoTab.locator('#nv-list [role="option"]');
     const labels = await options.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
-    assert.equal(labels[0], 'Gambar 1 dari 6 · di artikel · keterangan: Banjir di Samarinda · 400×250 px');
-    assert.match(labels[1], /^Gambar 2 dari 6 · di artikel · Gambar tanpa keterangan · 300×200 px$/); // foto-1.jpg: nama file tidak bermakna
-    assert.match(labels[2], /teks alternatif: “Peta jalur evakuasi”/);
-    assert.match(labels[5], /^Gambar 6 dari 6 · nama file: samping · 500×300 px$/); // di luar <main> → terakhir walau terbesar
+    assert.equal(labels[0], 'Gambar 1 dari 6 · Banjir di Samarinda'); // figcaption
+    assert.equal(labels[1], 'Gambar 2 dari 6 · tanpa keterangan'); // foto-1.jpg: nama file tidak bermakna
+    assert.equal(labels[2], 'Gambar 3 dari 6 · teks alternatif: “Peta jalur evakuasi”');
+    assert.equal(labels[5], 'Gambar 6 dari 6 · nama file: samping'); // di luar <main> → terakhir walau lebih dulu di DOM
     const all = labels.join('\n');
     assert.doesNotMatch(all, /ikon|logo|dekor/);
     assert.equal(await autoTab.locator('#nv-list .thumb[aria-hidden="true"]').count(), 6);
     assert.deepEqual(await a11yAudit(autoTab, '#naravisi-host'), []);
     await autoTab.screenshot({ path: path.join(uiDir, '11-panel-daftar-gambar.png') });
     await autoTab.keyboard.press('Escape');
+  });
+
+  // --- Tahap 2: urutan baca & terhubung ke pembaca layar ---------------------
+  /** Nama aksesibel menurut pohon aksesibilitas Chrome (yang dibaca NVDA/JAWS), lewat CDP. */
+  async function axNames(tab) {
+    const cdp = await context.newCDPSession(tab);
+    try {
+      const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+      return nodes.filter((n) => n.role?.value === 'image' && !n.ignored).map((n) => n.name?.value ?? '');
+    } finally {
+      await cdp.detach();
+    }
+  }
+  const optionLabels = (tab) => tab.locator('#nv-list [role="option"]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+
+  await step('urutan baca = urutan DOM (bukan ukuran, bukan posisi absolut)', async () => {
+    await autoTab.goto(`${SITE}/urutan-dom.html`);
+    await toggleOn(`${SITE}/urutan-dom.html`);
+    assert.deepEqual(await optionLabels(autoTab), [
+      'Gambar 1 dari 3 · nama file: kucing', 'Gambar 2 dari 3 · nama file: anjing', 'Gambar 3 dari 3 · nama file: burung',
+    ]);
+    await autoTab.keyboard.press('Escape');
+  });
+
+  await step('layout grid dengan order CSS → urutan visual (atas→bawah, kiri→kanan)', async () => {
+    await autoTab.goto(`${SITE}/urutan-grid.html`);
+    await toggleOn(`${SITE}/urutan-grid.html`);
+    assert.deepEqual(await optionLabels(autoTab), [
+      'Gambar 1 dari 3 · nama file: anjing', 'Gambar 2 dari 3 · nama file: burung', 'Gambar 3 dari 3 · nama file: kucing',
+    ]);
+    await autoTab.keyboard.press('Escape');
+  });
+
+  await step('setelah dideskripsikan: alt asli bermakna tidak ditimpa, alt generik digabung, tanpa alt diisi; terbaca di pohon aksesibilitas', async () => {
+    await setUsed(0);
+    await autoTab.goto(`${SITE}/alt.html`);
+    await toggleOn(`${SITE}/alt.html`);
+    const st = autoTab.locator('#nv-status');
+    for (let i = 1; i <= 4; i++) {
+      if (i > 1) await autoTab.keyboard.press('ArrowDown');
+      await autoTab.keyboard.press('Enter');
+      await st.filter({ hasText: `Deskripsi gambar ${i} siap.` }).waitFor({ timeout: 10000 });
+    }
+    await autoTab.keyboard.press('Escape');
+    const a = await alts(autoTab);
+    const d = 'Deskripsi uji untuk gambar JPEG.';
+    assert.equal(a.g1, `image. Deskripsi NaraVisi: ${d}`);
+    assert.equal(a.g2, `IMG_2041.jpg. Deskripsi NaraVisi: ${d}`);
+    assert.equal(a.g3, 'Petugas membagikan masker di pasar');
+    assert.equal(a.g4, d);
+    const marks = await autoTab.evaluate(() => Object.fromEntries([...document.images].map((i) => [i.id, i.getAttribute('data-naravisi')])));
+    assert.deepEqual(marks, { g1: '1', g2: '1', g3: null, g4: '1' });
+    // Inilah yang dibaca NVDA saat menekan G (gambar berikutnya), berurutan sesuai posisi gambar.
+    assert.deepEqual(await axNames(autoTab), [`image. Deskripsi NaraVisi: ${d}`, `IMG_2041.jpg. Deskripsi NaraVisi: ${d}`, 'Petugas membagikan masker di pasar', d]);
   });
 
   await step('mode otomatis mati (bawaan) → tidak ada permintaan ke server', async () => {
@@ -940,15 +1030,17 @@ try {
     assert.equal(await autoTab.locator('[data-naravisi]').count(), 0);
   });
 
-  await step('Pengaturan "Otomatis": persetujuan dibacakan; Batal → tetap mati, Ya → aktif', async () => {
+  await step('Pengaturan "Baca berurutan": persetujuan dibacakan; Batal → tetap mati, Ya → aktif; jumlah 1–10', async () => {
     await set.bringToFront();
     await set.reload();
-    const toggle = set.getByLabel('Deskripsikan otomatis gambar utama tanpa teks alternatif');
+    const toggle = set.getByLabel('Baca berurutan: deskripsikan otomatis gambar tanpa teks alternatif');
     await toggle.waitFor();
     assert.equal(await toggle.isChecked(), false);
     assert.equal(await set.getByLabel('Umumkan jumlah gambar saat halaman dibuka').count(), 1);
     assert.equal(await set.getByLabel('Sapaan saat Chrome dibuka').isChecked(), true);
-    assert.equal(await set.getByLabel('Jumlah gambar per halaman (mode otomatis)').inputValue(), '3');
+    const jumlah = set.getByLabel('Jumlah gambar per halaman (baca berurutan)');
+    assert.equal(await jumlah.inputValue(), '3');
+    assert.deepEqual(await jumlah.locator('option').evaluateAll((o) => o.map((x) => x.value)), ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
     assert.match(await set.getByLabel('Situs yang tidak pernah diproses otomatis (satu per baris)').inputValue(), /^klikbca\.com\n.*web\.whatsapp\.com$/s);
     await set.locator('#otomatis-section').screenshot({ path: path.join(uiDir, '09-pengaturan-otomatis.png') });
 
@@ -965,7 +1057,7 @@ try {
 
     await toggle.click();
     await dialog.getByRole('button', { name: 'Ya, aktifkan' }).click();
-    await set.locator('#msg', { hasText: 'Deskripsi otomatis diaktifkan.' }).waitFor();
+    await set.locator('#msg', { hasText: 'Baca berurutan diaktifkan.' }).waitFor();
     assert.equal(await toggle.isChecked(), true);
     assert.equal(await sw.evaluate(async () => (await chrome.storage.sync.get('autoDescribe')).autoDescribe), true);
     assert.deepEqual(await a11yAudit(set), []);
@@ -980,19 +1072,22 @@ try {
     assert.equal(hit.described, 3);
     assert.equal(backend.ai.calls - before, 3);
     const a = await alts(autoTab);
-    for (const id of ['banjir', 'foto1', 'foto2']) assert.match(a[id], /^Deskripsi NaraVisi: Deskripsi uji untuk gambar JPEG\.$/, id);
+    for (const id of ['banjir', 'foto1', 'foto2']) assert.equal(a[id], 'Deskripsi uji untuk gambar JPEG.', id);
     assert.equal(a.peta, 'Peta jalur evakuasi'); // alt bermakna tidak ditimpa
     assert.equal(a.foto3, null); // di luar batas 3
     assert.equal(a.samping, null);
     assert.equal(a.dekor, ''); // dekoratif tidak disentuh
-    assert.equal(await autoTab.locator('[data-naravisi="auto"]').count(), 3);
-    // Hanya alt & data-naravisi yang disuntik: tidak ada elemen/atribut lain, tidak ada token di DOM.
+    assert.equal(await autoTab.locator('[data-naravisi="1"]').count(), 3);
+    // Hanya alt & data-naravisi + satu live region tersembunyi yang disuntik; tidak ada panel, tidak ada token di DOM.
     assert.equal(await autoTab.locator('#naravisi-host').count(), 0);
+    assert.equal(await autoTab.locator('#naravisi-live').count(), 1);
     const html = await autoTab.content();
     const token = await sw.evaluate(async () => (await chrome.storage.local.get('nvSession')).nvSession.token);
     assert.ok(!html.includes(token));
     assert.equal(hit.summary, '3 gambar sudah dideskripsikan. Sisa kuota hari ini 7.');
-    assert.equal((await spoken()).at(-1), '3 gambar sudah dideskripsikan. Sisa kuota hari ini 7.');
+    // Progres diumumkan lewat aria-live (sopan, tidak menyela NVDA), bukan suara chrome.tts.
+    assert.equal(await autoTab.locator('#naravisi-live').getAttribute('data-last'), 'Gambar 3 dari 3 sudah dideskripsikan.');
+    assert.notEqual((await spoken()).at(-1), hit.summary);
   });
 
   await step('rute SPA / pemicu ulang di dokumen yang sama → tidak memproses ulang', async () => {
@@ -1012,6 +1107,35 @@ try {
     await autoTab.locator('#nv-status', { hasText: 'Deskripsi gambar 1.' }).waitFor();
     assert.equal(backend.ai.calls, before);
     await autoTab.keyboard.press('Escape');
+  });
+
+  await step('baca berurutan: maks. N gambar, SATU PER SATU, yang terlihat dulu, lanjut saat digulir; progres via aria-live', async () => {
+    await setUsed(0);
+    await sw.evaluate(() => chrome.storage.sync.set({ autoMax: 3 }));
+    backend.ai.delayMs = 150; // agar permintaan paralel (bila ada) pasti tumpang tindih
+    backend.ai.maxInFlight = 0;
+    const before = backend.ai.calls;
+    const lastId = (await backend.db.get('SELECT MAX(riwayat_id) AS id FROM riwayat_deskripsi')).id ?? 0;
+    const hit = await visitAndWaitAuto(autoTab, `${SITE}/panjang.html`);
+    assert.equal(hit.result, 'done');
+    assert.equal(hit.described, 2); // p3, p4 jauh di bawah layar → belum diproses
+    assert.equal(backend.ai.calls - before, 2);
+    const live = autoTab.locator('#naravisi-live');
+    assert.equal(await live.getAttribute('data-last'), 'Gambar 2 dari 3 sudah dideskripsikan.');
+    // Pengguna menggulir/membaca ke bawah → gambar berikutnya diproses, berhenti di N = 3.
+    await autoTab.evaluate(() => document.getElementById('p3').scrollIntoView());
+    await autoTab.waitForFunction(() => document.getElementById('p3').getAttribute('data-naravisi') === '1', null, { timeout: 10000 });
+    await autoTab.waitForFunction(() => document.getElementById('naravisi-live').dataset.last === 'Gambar 3 dari 3 sudah dideskripsikan.');
+    await new Promise((r) => setTimeout(r, 800));
+    assert.equal(backend.ai.calls - before, 3);
+    assert.equal(await autoTab.locator('#p4').getAttribute('data-naravisi'), null);
+    assert.equal(backend.ai.maxInFlight, 1, 'tidak pernah paralel');
+    const order = await backend.db.all('SELECT url_gambar FROM riwayat_deskripsi WHERE riwayat_id > ? ORDER BY riwayat_id', [lastId]);
+    assert.deepEqual(order.map((r) => r.url_gambar.split('/').pop()), ['p1.jpg', 'p2.jpg', 'p3.jpg']);
+    // Live region sopan (polite), tersembunyi visual, di luar panel; tidak ada suara chrome.tts yang menyela.
+    assert.equal(await live.evaluate((h) => h.shadowRoot.querySelector('[role="status"]').getAttribute('aria-live')), 'polite');
+    assert.ok(!(await spoken()).some((t) => /sudah dideskripsikan/.test(t)));
+    backend.ai.delayMs = 0;
   });
 
   await step('domain dikecualikan (diedit di Pengaturan) → tidak ada permintaan', async () => {
@@ -1047,7 +1171,7 @@ try {
     const hit = await visitAndWaitAuto(autoTab, `${SITE}/artikel-3.html`);
     assert.equal(hit.result, 'quota');
     assert.equal(backend.ai.calls, before);
-    assert.equal((await spoken()).at(-1), 'Mode otomatis berhenti: sisa kuota hari ini 2, disisakan untuk pilihan Anda.');
+    assert.equal(await autoTab.locator('#naravisi-live').getAttribute('data-last'), 'Baca berurutan berhenti: sisa kuota hari ini 2, disisakan untuk pilihan Anda.');
   });
 
   await step('kuota tersisa 4 → berhenti setelah 2 gambar (sisa 2) & alasan dibacakan', async () => {
@@ -1057,7 +1181,8 @@ try {
     assert.equal(backend.ai.calls - before, 2);
     assert.equal(hit.described, 2);
     assert.equal(hit.stopped, 'quota');
-    assert.equal((await spoken()).at(-1), '2 gambar sudah dideskripsikan. Sisa kuota hari ini 2. Mode otomatis berhenti agar 2 kuota tersisa untuk pilihan Anda.');
+    assert.equal(hit.summary, '2 gambar sudah dideskripsikan. Sisa kuota hari ini 2. Baca berurutan berhenti agar 2 kuota tersisa untuk pilihan Anda.');
+    await autoTab.waitForFunction(() => document.getElementById('naravisi-live')?.dataset.last === 'Baca berurutan berhenti: sisa kuota hari ini 2, disisakan untuk pilihan Anda.');
   });
 
   await step('fokus keyboard pada tautan bergambar tanpa alt → dideskripsikan & dibacakan', async () => {
@@ -1076,9 +1201,9 @@ try {
     await autoTab.focus('#awal');
     await autoTab.keyboard.press('Tab');
     assert.equal(await autoTab.evaluate(() => document.activeElement.id), 'tautan-gambar');
-    await autoTab.locator('#tautan-gambar img[data-naravisi="auto"]').waitFor({ state: 'attached', timeout: 10000 });
+    await autoTab.locator('#tautan-gambar img[data-naravisi="1"]').waitFor({ state: 'attached', timeout: 10000 });
     assert.equal(backend.ai.calls - before, 1);
-    assert.match(await autoTab.locator('#tautan-gambar img').getAttribute('alt'), /^Deskripsi NaraVisi: /);
+    assert.equal(await autoTab.locator('#tautan-gambar img').getAttribute('alt'), 'Deskripsi uji untuk gambar JPEG.');
     assert.equal((await spoken()).at(-1), 'Deskripsi NaraVisi: Deskripsi uji untuk gambar JPEG.');
     await sw.evaluate(() => chrome.storage.sync.set({ describeOnFocus: false }));
   });

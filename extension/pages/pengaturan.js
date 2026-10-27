@@ -1,6 +1,6 @@
 // Pengaturan aksesibilitas & TTS: RF-17..RF-19 (UC-AKS-01..03)
-import { apiFetch, apiHost, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
-import { currentShortcut, openShortcutsPage, speakGuide } from '../shared/guide.js';
+import { apiFetch, apiHost, AUTO_MAX_PER_PAGE, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
+import { currentShortcut, openShortcutsPage, SHORTCUTS_URL, speakGuide } from '../shared/guide.js';
 import { $, el, requireSession, say, sayError, shell, speak } from './common.js';
 
 shell('pengaturan', 'Pengaturan aksesibilitas');
@@ -151,13 +151,13 @@ async function autoSection() {
     'Contoh: "NaraVisi aktif. Sisa kuota hari ini 10." Juga memberi tahu bila pintasan belum diatur.');
   const umumkan = check('umumkan', 'announceImages', 'Umumkan jumlah gambar saat halaman dibuka',
     'Contoh: "Ada 5 gambar." Gambar tidak dideskripsikan, jadi kuota tidak terpakai dan tidak ada yang dikirim ke server.');
-  const otomatis = check('otomatis', 'autoDescribe', 'Deskripsikan otomatis gambar utama tanpa teks alternatif',
-    `Mengirim gambar ke server dan memakai kuota. Deskripsi dimasukkan ke teks alternatif gambar agar terbaca pembaca layar. Berhenti saat sisa kuota ${AUTO_RESERVE}.`);
+  const otomatis = check('otomatis', 'autoDescribe', 'Baca berurutan: deskripsikan otomatis gambar tanpa teks alternatif',
+    `Gambar diproses satu per satu dari atas ke bawah, yang terlihat lebih dulu, lalu lanjut saat Anda menggulir atau membaca. Deskripsi dimasukkan ke teks alternatif gambar, jadi NVDA atau JAWS membacanya saat menelusuri halaman (mis. tombol G). Mengirim gambar ke server dan Google Gemini serta memakai kuota; berhenti saat sisa kuota ${AUTO_RESERVE}.`);
   const fokus = check('fokus', 'describeOnFocus', 'Deskripsikan saat gambar mendapat fokus keyboard',
     'Saat Tab berhenti di gambar, atau tautan yang isinya hanya gambar, tanpa teks alternatif.');
 
   const jumlah = el('select', { id: 'otomatis-jumlah', 'aria-describedby': 'otomatis-jumlah-hint' },
-    [1, 2, 3, 4, 5].map((n) => el('option', { value: String(n) }, `${n} gambar`)));
+    Array.from({ length: AUTO_MAX_PER_PAGE }, (_, i) => el('option', { value: String(i + 1) }, `${i + 1} gambar`)));
   jumlah.value = String(stored.autoMax);
 
   const sites = el('textarea', { id: 'kecuali', rows: 7, spellcheck: 'false', 'aria-describedby': 'kecuali-hint' });
@@ -174,7 +174,7 @@ async function autoSection() {
     save({ announceImages: umumkan.input.checked }, umumkan.input.checked ? 'Pengumuman jumlah gambar diaktifkan.' : 'Pengumuman jumlah gambar dimatikan.'));
 
   // Mengirim gambar ke server → hanya aktif setelah persetujuan.
-  for (const [{ input }, key, name] of [[otomatis, 'autoDescribe', 'Deskripsi otomatis'], [fokus, 'describeOnFocus', 'Deskripsi saat fokus']]) {
+  for (const [{ input }, key, name] of [[otomatis, 'autoDescribe', 'Baca berurutan'], [fokus, 'describeOnFocus', 'Deskripsi saat fokus']]) {
     input.addEventListener('change', async () => {
       if (!input.checked) return save({ [key]: false }, `${name} dimatikan.`);
       input.checked = false;
@@ -207,7 +207,7 @@ async function autoSection() {
     sapa.node,
     umumkan.node,
     otomatis.node,
-    field('otomatis-jumlah', 'Jumlah gambar per halaman (mode otomatis)', jumlah, 'Diproses satu per satu setelah halaman tenang.'),
+    field('otomatis-jumlah', 'Jumlah gambar per halaman (baca berurutan)', jumlah, `1 sampai ${AUTO_MAX_PER_PAGE} gambar. Diproses satu per satu setelah halaman tenang.`),
     fokus.node,
     field(
       'kecuali',
@@ -225,7 +225,9 @@ function field(id, label, control, hint) {
 
 async function render(settings) {
   const premium = settings.fitur_premium;
+  // Pintasan yang benar-benar berlaku dibaca dari chrome.commands.getAll(), bukan dari teks tetap.
   const activeShortcut = (await currentShortcut()) || 'belum diatur';
+  const noShortcut = activeShortcut === 'belum diatur';
 
   // --- Bahasa & pintasan (UC-AKS-02)
   const bahasa = el(
@@ -273,6 +275,7 @@ async function render(settings) {
         pintasan,
         `Pintasan aktif saat ini: ${activeShortcut}. Chrome hanya mengizinkan pintasan diubah dari halaman pintasan Chrome — simpan pilihan Anda di sini, lalu terapkan di sana.`,
       ),
+      noShortcut ? el('p', { class: 'notice', id: 'no-shortcut' }, `Pintasan belum diatur. Atur di ${SHORTCUTS_URL} lewat tombol di bawah.`) : null,
       el('div', { class: 'row' }, el('button', { type: 'button', id: 'open-shortcuts', onclick: () => openShortcutsPage() }, 'Buka halaman pintasan Chrome')),
     ),
     el(
@@ -337,6 +340,7 @@ async function render(settings) {
   });
 
   $('content').replaceChildren(form, await autoSection());
+  if (noShortcut && location.hash !== '#pintasan') speakGuide(`Pintasan belum diatur. Atur di halaman pintasan Chrome, ${SHORTCUTS_URL}.`);
   if (location.hash === '#pintasan') {
     // Dibuka saat Chrome dimulai dan pintasan belum diatur.
     $('open-shortcuts').focus();

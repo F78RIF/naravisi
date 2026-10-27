@@ -3,7 +3,7 @@
 // dan pemandu suara (chrome.tts) yang tetap bekerja tanpa halaman terbuka.
 
 import {
-  ApiError, apiFetch, AUTO_DAILY_MAX, AUTO_RESERVE, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession,
+  ApiError, apiFetch, AUTO_DAILY_MAX, AUTO_MAX_PER_PAGE, AUTO_RESERVE, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession,
 } from './shared/config.js';
 import { imageCountText, spokenShortcut, welcomeText } from './shared/guide.js';
 
@@ -13,10 +13,11 @@ const MAX_SIDE = 1280; // gambar lebih besar diperkecil sebelum dikirim
 const REENCODE_ABOVE_BYTES = 1.5 * 1024 * 1024;
 
 class NvError extends Error {
-  constructor(code, message, { spoken = false } = {}) {
+  constructor(code, message, { spoken = false, sisa } = {}) {
     super(message);
     this.code = code;
     this.spoken = spoken; // sudah dibacakan oleh chrome.tts → panel tidak perlu membacakan ulang
+    if (sisa !== undefined) this.sisa = sisa; // sisa kuota saat mode baca berurutan berhenti
   }
 }
 
@@ -126,7 +127,7 @@ export async function announceImageCount(tabId) {
 }
 
 // ---------------------------------------------------------------------------
-// Mode otomatis (bawaan MATI, wajib persetujuan di Pengaturan).
+// Mode "Baca berurutan" (bawaan MATI, wajib persetujuan di Pengaturan).
 // Semua syarat diperiksa di sini, bukan di halaman: http/https saja, bukan Incognito,
 // bukan situs dikecualikan, sudah masuk, sisa kuota > AUTO_RESERVE, dan batas harian.
 // ---------------------------------------------------------------------------
@@ -176,12 +177,17 @@ async function countAutoUse() {
   await chrome.storage.local.set({ nvAutoDaily: { date: todayWita(), count: (await autoDailyCount()) + 1 } });
 }
 
-/** Alasan berhenti karena kuota dibacakan sekali per hari, tidak di setiap halaman. */
-async function noticeReserve(sisa) {
+/**
+ * Alasan berhenti karena kuota diumumkan sekali per hari, tidak di setiap halaman. Dengan `page`, pengumuman
+ * masuk ke live region halaman (aria-live polite, tidak menyela NVDA); tanpa itu dibacakan chrome.tts.
+ */
+async function noticeReserve(sisa, page) {
   const { nvAutoReserveNotice } = await chrome.storage.local.get('nvAutoReserveNotice');
   if (nvAutoReserveNotice === todayWita()) return;
   await chrome.storage.local.set({ nvAutoReserveNotice: todayWita() });
-  await speakGuide(`Mode otomatis berhenti: sisa kuota hari ini ${sisa}, disisakan untuk pilihan Anda.`);
+  const text = `Baca berurutan berhenti: sisa kuota hari ini ${sisa}, disisakan untuk pilihan Anda.`;
+  if (page) await chrome.tabs.sendMessage(page.tabId, { type: 'NV_LIVE', text }, { documentId: page.documentId });
+  else await speakGuide(text);
 }
 
 /** Dipanggil untuk setiap NV_DESCRIBE bertanda auto; melempar NvError bila tidak boleh. */
@@ -194,8 +200,9 @@ async function autoGate(auto, sender, session) {
   // Kuota tersimpan bisa basi (mis. sudah lewat 00.00 WITA): pastikan ke server sebelum menolak.
   if (quotaLow(kuota)) kuota = (await refreshProfile().catch(() => null))?.kuota ?? kuota;
   if (quotaLow(kuota)) {
-    await noticeReserve(kuota.sisa);
-    throw new NvError('AUTO_RESERVE', `Sisa kuota ${kuota.sisa} disisakan untuk pilihan Anda.`, { spoken: true });
+    // Baca berurutan mengumumkan alasannya lewat aria-live di halaman (tidak menyela NVDA); mode fokus lewat suara.
+    if (auto === 'focus') await noticeReserve(kuota.sisa);
+    throw new NvError('AUTO_RESERVE', `Sisa kuota ${kuota.sisa} disisakan untuk pilihan Anda.`, { spoken: auto === 'focus', sisa: kuota.sisa });
   }
   if ((await autoDailyCount()) >= AUTO_DAILY_MAX) throw new NvError('AUTO_DAILY_LIMIT', 'Batas harian mode otomatis tercapai.');
 }
@@ -205,12 +212,15 @@ function autoSummary({ described = 0, stopped, kuota }) {
   const parts = [];
   if (described) parts.push(`${described} gambar sudah dideskripsikan.`);
   if (kuota && kuota.batas != null) parts.push(`Sisa kuota hari ini ${kuota.sisa}.`);
-  if (stopped === 'quota') parts.push(`Mode otomatis berhenti agar ${AUTO_RESERVE} kuota tersisa untuk pilihan Anda.`);
-  if (stopped === 'daily') parts.push('Batas harian mode otomatis tercapai.');
+  if (stopped === 'quota') parts.push(`Baca berurutan berhenti agar ${AUTO_RESERVE} kuota tersisa untuk pilihan Anda.`);
+  if (stopped === 'daily') parts.push('Batas harian baca berurutan tercapai.');
   return parts.join(' ');
 }
 
-/** Setelah halaman selesai dimuat: deskripsikan maks. N gambar utama tanpa alt, satu per satu. */
+/**
+ * Setelah halaman selesai dimuat: deskripsikan maks. N gambar tanpa alt bermakna, satu per satu dari atas ke bawah.
+ * Progres & alasan berhenti diumumkan content script lewat aria-live; di sini hanya dicatat (autoLog).
+ */
 export async function autoDescribePage(tabId) {
   const tab = await chrome.tabs.get(tabId);
   const base = { tabId, url: tab.url };
@@ -226,18 +236,17 @@ export async function autoDescribePage(tabId) {
   } catch {
     return logAuto({ ...base, result: 'error' });
   }
+  const dailyLeft = AUTO_DAILY_MAX - (await autoDailyCount());
+  const [injected] = await chrome.scripting.executeScript({ target: { tabId }, files: [CONTENT_FILE] });
   if (quotaLow(user.kuota)) {
-    await noticeReserve(user.kuota.sisa);
+    await noticeReserve(user.kuota.sisa, { tabId, documentId: injected.documentId });
     return logAuto({ ...base, result: 'quota' });
   }
-  const dailyLeft = AUTO_DAILY_MAX - (await autoDailyCount());
   if (dailyLeft <= 0) return logAuto({ ...base, result: 'daily' });
 
-  const [injected] = await chrome.scripting.executeScript({ target: { tabId }, files: [CONTENT_FILE] });
-  const max = Math.min(Math.max(1, Math.min(5, Number(settings.autoMax) || 3)), dailyLeft);
+  const max = Math.min(Math.max(1, Math.min(AUTO_MAX_PER_PAGE, Number(settings.autoMax) || 3)), dailyLeft);
   const res = await chrome.tabs.sendMessage(tabId, { type: 'NV_AUTO_START', max }, { documentId: injected.documentId });
   const summary = autoSummary(res ?? {});
-  if (summary) await speakGuide(summary);
   return logAuto({ ...base, result: res?.skipped || 'done', described: res?.described ?? 0, stopped: res?.stopped ?? null, summary });
 }
 
@@ -553,6 +562,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         code: err.code || 'UNKNOWN',
         message: err.message || 'Terjadi kesalahan.',
         spoken: Boolean(err.spoken),
+        sisa: err.sisa,
       }),
     );
   return true; // respons asinkron

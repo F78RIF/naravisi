@@ -10,14 +10,15 @@ export const DEFAULTS = Object.freeze({
   apiBase: 'http://localhost:3000/api/v1',
   announceImages: true, // umumkan jumlah gambar saat halaman dibuka (disimpan lokal, tidak ke server)
   greetOnStartup: true, // sapaan singkat saat Chrome dibuka
-  autoDescribe: false, // mode otomatis: kirim gambar utama tanpa alt → wajib persetujuan
-  autoMax: 3, // maks. gambar per halaman (1–5)
+  autoDescribe: false, // "Baca berurutan": kirim gambar tanpa alt bermakna, satu per satu → wajib persetujuan
+  autoMax: 3, // maks. gambar per halaman (1–AUTO_MAX_PER_PAGE)
   describeOnFocus: false, // deskripsikan gambar yang mendapat fokus Tab → wajib persetujuan
   autoExclude: DEFAULT_AUTO_EXCLUDE,
 });
 
 export const AUTO_RESERVE = 2; // mode otomatis berhenti bila sisa kuota ≤ 2 (disisakan untuk pilihan manual)
 export const AUTO_DAILY_MAX = 30; // batas deskripsi otomatis per hari, apa pun kuotanya
+export const AUTO_MAX_PER_PAGE = 10; // batas atas pilihan "jumlah gambar per halaman"
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 

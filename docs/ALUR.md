@@ -110,3 +110,123 @@ flowchart LR
 - `backend/test/aiClient.test.js`, `describeQuotaHistory.test.js`, `migrate.test.js` — field baru tersimpan, galat dipetakan
   ke pesan jelas (bukan 500), migrasi basis data lama aman.
 - `e2e/run.mjs` — panel menampilkan jenis gambar; **alur manual Alt+Shift+K → panel → panah → Enter → dibacakan → Esc** tetap lulus.
+
+---
+
+## Tahap 2 — Urutan baca dari atas ke bawah + terhubung ke pembaca layar
+
+### Ide besarnya
+
+Pengguna tunanetra "membaca" halaman web lewat pembaca layar (NVDA, JAWS). Pembaca layar membaca halaman
+**berurutan dari atas ke bawah** menurut struktur HTML-nya (DOM). Supaya tidak membingungkan, NaraVisi
+harus mengikuti urutan yang sama, dan hasil deskripsinya harus bisa ditemukan **di tempat gambar itu berada**,
+bukan hanya di panel NaraVisi.
+
+### 1. Urutan daftar gambar
+
+```mermaid
+flowchart TD
+    A[Pindai semua elemen di halaman<br/>querySelectorAll = urutan DOM] --> B{Gambar konten?}
+    B -- sisi < 100 px, alt kosong, aria-hidden,<br/>role=presentation, tersembunyi,<br/>ikon/logo/iklan, src ganda --> X[Abaikan]
+    B -- ya --> C[Simpan + posisi visual<br/>baris = atas/24 px, lalu kiri]
+    C --> D{Ada CSS yang menyusun ulang?<br/>flex/grid order, arah terbalik,<br/>grid dense / nomor garis}
+    D -- tidak --> E[Urutan DOM]
+    D -- ya --> F[Urutan visual:<br/>baris atas → bawah, lalu kiri → kanan]
+    E --> G[Gambar di main/article didahulukan,<br/>urutan di dalam kelompok tetap]
+    F --> G
+    G --> H["Label: Gambar 2 dari 6 · figcaption terdekat"]
+```
+
+Contoh: di sebuah grid, HTML-nya kucing → anjing → burung, tetapi CSS `order` menampilkan anjing → burung → kucing.
+Karena tampilan sengaja disusun ulang, NaraVisi memakai urutan tampilan. Tanpa CSS semacam itu, urutan HTML yang dipakai
+— walaupun ada gambar yang dipindah posisinya dengan `position: absolute`.
+
+### 2. Deskripsi "disuntikkan" ke gambar asli
+
+Setelah sebuah gambar dideskripsikan (dari panel maupun dari mode baca berurutan), deskripsinya dimasukkan ke atribut
+`alt` gambar itu sendiri. Pembaca layar membaca `alt`, jadi saat pengguna menekan **G** (lompat ke gambar berikutnya) atau
+panah bawah di NVDA, yang terdengar adalah deskripsi NaraVisi — di posisi gambar yang benar.
+
+```mermaid
+flowchart TD
+    A[Deskripsi siap] --> B{Alt asli gambar}
+    B -- tidak ada --> C["alt = deskripsi"]
+    B -- pendek/generik:<br/>'image', 'IMG_2041.jpg' --> D["alt = alt asli. Deskripsi NaraVisi: deskripsi"]
+    B -- bermakna:<br/>'Petugas membagikan masker' --> E[Tidak disentuh<br/>penulis halaman lebih tahu]
+    C --> F["data-naravisi = 1"]
+    D --> F
+    F --> G[Pohon aksesibilitas Chrome berubah]
+    G --> H[NVDA: tombol G / panah bawah<br/>membacakan deskripsi]
+```
+
+Tes e2e memeriksa ini langsung di **pohon aksesibilitas Chrome** (lewat Chrome DevTools Protocol) — yaitu data yang
+sama yang diambil NVDA/JAWS dari Chrome.
+
+### 3. Mode "Baca berurutan"
+
+Mode ini otomatis mendeskripsikan gambar tanpa alt bermakna, **tanpa** pengguna harus membuka panel. Karena memakai kuota
+dan mengirim gambar ke server (dan ke Google Gemini), mode ini **mati** sampai pengguna menyetujui dialog yang dibacakan.
+
+```mermaid
+flowchart TD
+    A[Halaman selesai dimuat] --> B{Service worker memeriksa}
+    B -- mode mati / chrome:// / halaman extension /<br/>Incognito / domain dikecualikan / belum masuk --> X[Tidak jalan]
+    B -- sisa kuota ≤ 2 --> Q[Umumkan via aria-live:<br/>berhenti, kuota disisakan]
+    B -- boleh --> C[Content script: tunggu halaman tenang ±2 dtk]
+    C --> P{Ada kolom kata sandi?}
+    P -- ya --> X
+    P -- tidak --> D[Calon = gambar tanpa alt bermakna<br/>dalam urutan baca; total = min N, jumlah calon]
+    D --> E[IntersectionObserver:<br/>tandai gambar yang terlihat / hampir terlihat]
+    E --> F{Gambar berikutnya yang dekat layar?}
+    F -- ada --> G[Deskripsikan SATU gambar<br/>tunggu sampai selesai]
+    G --> H[Suntik alt + umumkan sopan:<br/>Gambar 1 dari 3 sudah dideskripsikan.]
+    H --> I{Sudah N? Kuota ≤ 2?}
+    I -- belum --> F
+    I -- kuota ≤ 2 --> Q
+    I -- sudah N --> Z[Selesai]
+    F -- tidak ada --> W[Menunggu pengguna menggulir/membaca ke bawah]
+    W --> E
+```
+
+- **Satu per satu**: gambar berikutnya baru dikirim setelah yang sebelumnya selesai. Tes e2e mencatat jumlah permintaan
+  yang berjalan bersamaan ke AI — nilainya selalu 1.
+- **Yang terlihat dulu**: gambar di layar (dan satu layar di atas/bawahnya) diproses lebih dulu. Gambar yang jauh di bawah
+  baru diproses saat pengguna sampai ke sana — NVDA menggulir halaman mengikuti kursor bacanya, jadi ini juga terjadi saat
+  pengguna hanya membaca dengan panah bawah.
+- **Pengumuman sopan**: progres dan alasan berhenti diumumkan lewat satu *live region* tersembunyi dengan
+  `aria-live="polite"`. Pembaca layar menyampaikannya setelah selesai membaca kalimat yang sedang dibaca, jadi **tidak menyela**.
+  (Sebelumnya ringkasan dibacakan dengan suara `chrome.tts` yang bisa bertabrakan dengan suara NVDA.)
+
+### 4. Pintasan
+
+Pintasan yang berlaku selalu dibaca dari `chrome.commands.getAll()`, bukan dari teks tetap. Bila kosong (mis. bentrok
+dengan extension lain), popup dan halaman Pengaturan menyatakan "Pintasan belum diatur" dan menyediakan tombol ke
+`chrome://extensions/shortcuts`. Pintasan utama tetap **Alt+Shift+K** ("Pindai gambar pada halaman ini").
+
+### Alur manual tetap sama
+
+```mermaid
+sequenceDiagram
+    actor P as Pengguna (NVDA)
+    participant C as Chrome
+    participant SW as Service worker
+    participant Pa as Panel (halaman)
+    P->>C: Alt+Shift+K
+    C->>SW: commands.onCommand("scan-page")
+    SW->>Pa: suntik content script + NV_TOGGLE
+    Pa-->>P: "6 gambar ditemukan…" (fokus di daftar)
+    P->>Pa: ↓ / ↑ pilih gambar
+    P->>Pa: Enter
+    Pa->>SW: NV_DESCRIBE
+    SW-->>Pa: deskripsi
+    Pa-->>P: tampil + dibacakan + alt gambar asli diisi
+    P->>Pa: Esc
+    Pa-->>P: panel tertutup, fokus kembali ke tempat semula
+```
+
+### Bukti (tes e2e)
+
+`urutan baca = urutan DOM` · `layout grid dengan order CSS → urutan visual` · `alt asli bermakna tidak ditimpa, alt generik
+digabung, tanpa alt diisi; terbaca di pohon aksesibilitas` · `baca berurutan: maks. N, satu per satu, yang terlihat dulu, lanjut
+saat digulir; progres via aria-live` · `halaman dengan kolom kata sandi / domain dikecualikan → tidak jalan` ·
+`ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc`.
