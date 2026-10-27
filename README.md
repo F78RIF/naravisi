@@ -22,11 +22,13 @@ Halaman web ──Alt+Shift+K──▶ Extension (scan, pilih, panel, TTS)
 | `e2e/` | Uji end-to-end di Chromium | Playwright |
 | `docs/` | API, keputusan desain, pengujian, log Agentic SDLC | – |
 
-## Progres Prototype: 21/30 RF (70%) — target tahap ini 50% (15/30) terlampaui
+## Progres Prototype: 21/30 RF (70%) — tahap 70% selesai
 
-Target penilaian tahap ini **15 RF (50%)**: 10 RF tahap 30% + RF-14, RF-15, RF-16, RF-17, RF-19, ditambah peningkatan AI
-(Gemini terstruktur + cadangan BLIP) dan urutan baca + alt text untuk NVDA. Semuanya **selesai dan lulus tes**.
-Enam RF lain (RF-02, RF-03, RF-04, RF-18, RF-20, RF-23) juga sudah jadi dan lulus tes — **sudah ada, belum termasuk penilaian tahap ini**.
+Semua **21 RF** di tabel ini **dihitung** di tahap 70%: 10 RF tahap 30%, 5 RF tahap 50% (RF-14..17, RF-19), dan 6 RF yang
+diverifikasi di tahap ini (RF-02, RF-03, RF-04, RF-18, RF-20, RF-23). Tahap ini juga menambahkan peningkatan AI (Gemini
+terstruktur + cadangan BLIP), urutan baca + alt text untuk NVDA, mode **Baca berurutan** beserta pengecualian privasinya,
+dan **dataset evaluasi sendiri** (`docs/DATASET.md`). Semuanya lulus tes otomatis. RF-21, RF-22, dan RF-24..RF-30 sudah ada
+di kode sejak fase awal, tetapi **bukan bagian penilaian 70%**.
 
 | RF | Fitur | Status | File & fungsi utama | Cara uji |
 |---|---|---|---|---|
@@ -40,22 +42,23 @@ Enam RF lain (RF-02, RF-03, RF-04, RF-18, RF-20, RF-23) juga sudah jadi dan lulu
 | RF-11 | Tampilkan teks | ✅ | `content.js` (`showResult`, area `aria-live`) | teks muncul di panel |
 | RF-12 | Bacakan + kontrol | ✅ otomatis · ⏳ dengar manual | `content.js` (`speak`, `togglePause`, `play`, `stopSpeech`) | tombol Putar/Jeda/Ulang/Berhenti, tombol Spasi/R/S |
 | RF-13 | Simpan riwayat | ✅ | `historyService.js` (dipanggil dari `describe`) | halaman Riwayat · `describeQuotaHistory.test.js` |
-| RF-14 | Daftar riwayat (Gratis 7 hari, Premium semua; berhalaman) | ✅ target 50% | `extension/pages/riwayat.js` (`load`) → `historyService.js` (`list`) | halaman Riwayat · e2e "UC-RWY-02" |
-| RF-15 | Detail riwayat + putar ulang (jenis gambar tampil) | ✅ target 50% | `riwayat.js` (`loadDetail`, `speak`) → `historyService.js` (`get`) | tombol Detail → Enter "Putar ulang" · e2e "RF-15" |
-| RF-16 | Hapus riwayat (satu & semua, dengan konfirmasi) | ✅ target 50% | `riwayat.js` (`remove`, `removeAll`) → `historyService.js` (`remove`, `removeAll`) | e2e "UC-RWY-04", "RF-16" · `describeQuotaHistory.test.js` |
-| RF-17 | Halaman pengaturan | ✅ target 50% | `extension/pages/pengaturan.js` → `settingsService.js` | e2e "UC-AKS-01" · `settingsReports.test.js` |
-| RF-19 | Kecepatan, nada, jenis suara + "Coba suara" | ✅ target 50% | `pengaturan.js` (penggeser ber-`aria-valuetext`), `settingsService.js` (`update`) | e2e "UC-AKS-02/03", "Coba suara" |
-| AI | Gemini terstruktur (jenis, ringkasan, detail, teks_dalam_gambar, keyakinan) + cadangan BLIP | ✅ target 50% | `ai-service/app/gemini.py`, `prompts.py`, `service.py` (`CaptionRouter`) | `ai-service/tests/test_gemini.py` (klien palsu) |
-| A11y | Urutan baca atas→bawah + deskripsi disuntik ke `alt` untuk NVDA; mode Baca berurutan | ✅ target 50% | `content.js` (`readingOrder`, `applyAlt`, `autoDescribe`) | e2e "urutan baca", "alt asli …", "baca berurutan" |
-| RF-02 | Lihat profil | ✅ sudah ada, belum dinilai | `pages/profil.js` → `accountService.js` (`profile`) | e2e "UC-AKUN-02" |
-| RF-03 | Ubah profil (nama, email, sandi dgn sandi lama) | ✅ sudah ada, belum dinilai | `profil.js` → `accountService.js` (`updateProfile`) | e2e "RF-03" · `auth.test.js` |
-| RF-04 | Hapus akun (ketik "HAPUS", token dicabut) | ✅ sudah ada, belum dinilai | `profil.js` → `accountService.js` (`deleteAccount`) | e2e "RF-04" · `auth.test.js` |
-| RF-18 | Bahasa & pintasan | ✅ sudah ada, belum dinilai | `pengaturan.js`, `shared/guide.js` (`currentShortcut`) | e2e "RF-18" |
-| RF-20 | Laporkan deskripsi (pilih alasan + catatan) | ✅ sudah ada, belum dinilai | panel `content.js`, `riwayat.js` → `reportService.js` | e2e "RF-20" · `settingsReports.test.js` |
-| RF-23 | Daftar paket Premium | ✅ sudah ada, belum dinilai | `pages/premium.js` → `paymentService.js` (`listPlans`) | e2e "UC-PRM-01" |
+| RF-14 | Daftar riwayat (Gratis 7 hari, Premium semua; berhalaman) | ✅ | `extension/pages/riwayat.js` (`load`) → `historyService.js` (`list`) | halaman Riwayat · e2e "UC-RWY-02" |
+| RF-15 | Detail riwayat + putar ulang (jenis gambar tampil) | ✅ | `riwayat.js` (`loadDetail`, `speak`) → `historyService.js` (`get`) | tombol Detail → Enter "Putar ulang" · e2e "RF-15" |
+| RF-16 | Hapus riwayat (satu & semua, dengan konfirmasi) | ✅ | `riwayat.js` (`remove`, `removeAll`) → `historyService.js` (`remove`, `removeAll`) | e2e "UC-RWY-04", "RF-16" · `describeQuotaHistory.test.js` |
+| RF-17 | Halaman pengaturan | ✅ | `extension/pages/pengaturan.js` → `settingsService.js` | e2e "UC-AKS-01" · `settingsReports.test.js` |
+| RF-19 | Kecepatan, nada, jenis suara + "Coba suara" | ✅ | `pengaturan.js` (penggeser ber-`aria-valuetext`), `settingsService.js` (`update`) | e2e "UC-AKS-02/03", "Coba suara" |
+| AI | Gemini terstruktur (jenis, ringkasan, detail, teks_dalam_gambar, keyakinan) + cadangan BLIP | ✅ | `ai-service/app/gemini.py`, `prompts.py`, `service.py` (`CaptionRouter`) | `ai-service/tests/test_gemini.py` (klien palsu) |
+| A11y | Urutan baca atas→bawah + deskripsi disuntik ke `alt` untuk NVDA; mode Baca berurutan (bawaan mati, persetujuan, satu per satu, berhenti di kuota ≤ 2, tidak jalan di chrome://, halaman extension, Incognito, halaman sandi, domain dikecualikan) | ✅ | `content.js` (`readingOrder`, `applyAlt`, `autoDescribe`), `background.js` (`autoBlockedReason`, `autoGate`) | e2e "urutan baca", "alt asli …", "baca berurutan …", "TIDAK jalan di …" |
+| Eval | Dataset evaluasi sendiri + alat anotasi + metrik + few-shot Gemini | ✅ | `ai-service/eval/` (`collect.py`, `annotate.py`, `run_eval.py`, `make_fewshot.py`) | `tests/test_eval_*.py` · `docs/DATASET.md` |
+| RF-02 | Lihat profil | ✅ | `pages/profil.js` → `accountService.js` (`profile`) | e2e "UC-AKUN-02" |
+| RF-03 | Ubah profil (nama, email, sandi dgn sandi lama; email unik) | ✅ | `profil.js` → `accountService.js` (`updateProfile`) | e2e "RF-03" · `auth.test.js` ("RF-03: …") |
+| RF-04 | Hapus akun (ketik "HAPUS" + sandi; riwayat, laporan, pengaturan, kuota ikut terhapus; token lama ditolak) | ✅ | `profil.js` → `accountService.js` (`deleteAccount`) | e2e "RF-04" · `auth.test.js` ("RF-04: …") |
+| RF-18 | Bahasa & pintasan (pintasan AKTIF dari `chrome.commands.getAll()`; kosong → "Pintasan belum diatur" + tautan `chrome://extensions/shortcuts`) | ✅ | `pengaturan.js`, `shared/guide.js` (`currentShortcut`, `openShortcutsPage`) | e2e "RF-18" (3 skenario) |
+| RF-20 | Laporkan deskripsi (alasan wajib dipilih, catatan opsional maks. 500 karakter, hanya riwayat milik sendiri) | ✅ | panel `content.js`, `riwayat.js` → `reportService.js` (`CATATAN_MAKS`) | e2e "RF-20" · `settingsReports.test.js` |
+| RF-23 | Daftar paket Premium (publik, hanya paket aktif; melihat paket tidak membuat transaksi) | ✅ | `pages/premium.js` → `paymentService.js` (`listPlans`) | e2e "UC-PRM-01", "RF-23" · `premiumAdmin.test.js` |
 | Kuota | Gratis 10/hari, reset 00.00 WITA | ✅ | `quotaService.js` (`increment`: `UPDATE … WHERE jumlah_permintaan < batas`) | gambar ke-11 ditolak · e2e "setelah 10 deskripsi" |
 
-Rencana uji manual lengkap: `docs/PENGUJIAN.md`.
+Rencana uji manual lengkap: `docs/PENGUJIAN.md`. Alur sistem bergambar: `docs/ALUR.md`. Dataset & evaluasi model: `docs/DATASET.md`, laporan evaluasi terbaru: `ai-service/eval/data/reports/laporan.md`, hasil uji Gemini vs BLIP: `docs/PENGUJIAN.md` bagian M-01.
 
 ### Keamanan yang sudah diterapkan
 
@@ -74,6 +77,21 @@ Rencana uji manual lengkap: `docs/PENGUJIAN.md`.
 | k | ai-service hanya listen di `127.0.0.1` | ✅ (lihat perintah `uvicorn` di bawah) |
 | + | **CORS** dibatasi ke `ALLOWED_ORIGINS` (bukan `*`) | ✅ `http/cors.js` |
 | + | Service worker menolak pesan dari pengirim asing & tipe pesan tak dikenal | ✅ `extension/background.js` (`rejectReason`) |
+| + | Data milik orang lain (riwayat, laporan atas riwayat orang lain) → **404**, keberadaannya tidak dibocorkan | ✅ `historyService.js` (`findVisible`) |
+| + | Kunci Gemini hanya ada di `ai-service/.env` (masuk `.gitignore`) dan disamarkan di semua log maupun berkas prediksi evaluasi | ✅ `app/main.py` (`RedactSecrets`), `eval/run_eval.py` |
+| + | Alat anotasi dataset hanya listen di `127.0.0.1`, menolak Host asing (DNS rebinding) dan POST lintas situs | ✅ `eval/annotate.py` |
+
+### Privasi
+
+- **Baca berurutan** bawaannya **mati**. Sebelum mode ini aktif, persetujuan dibacakan: gambar dikirim ke server (dan ke
+  Google bila memakai Gemini) dan memakai kuota. Mode ini tidak pernah jalan di `chrome://`, halaman extension, Incognito,
+  halaman dengan kolom kata sandi, atau domain pengecualian (bank, dompet digital, email; daftarnya bisa diedit di Pengaturan).
+- Deskripsi manual hanya dikirim untuk gambar yang **dipilih** pengguna. File gambar tidak disimpan di server; riwayat
+  hanya menyimpan teks deskripsinya.
+- **Gemini tingkat gratis**: data yang dikirim dapat dipakai Google untuk meningkatkan produknya. Pakai
+  `CAPTION_PROVIDER=blip` bila gambar tidak boleh keluar dari server.
+- **Dataset evaluasi**: gambar (`eval/data/images/`) dan keluaran model (`eval/data/predictions/`) tidak pernah di-commit
+  (hak cipta & privasi). Dataset dipakai untuk few-shot & evaluasi (prompt tuning), **bukan** untuk melatih ulang bobot model.
 
 Audit dependensi (15 Oktober 2026): `npm audit` backend **0 kerentanan**. `pip-audit` ai-service: **23 temuan** di `starlette` 0.46 (lewat `fastapi==0.115.*`) dan `transformers` 4.57 (dibatasi `<5`). Risiko diperkecil karena ai-service hanya listen di `127.0.0.1` dan hanya menerima gambar dari backend. Upgrade ke FastAPI/transformers versi baru dijadwalkan di tahap berikutnya karena perlu uji ulang model BLIP.
 
@@ -104,6 +122,12 @@ FALLBACK_PROVIDER=blip      # cadangan otomatis bila Gemini gagal/kuota habis/of
 
 Gemini menjawab dalam JSON terstruktur (jenis gambar, ringkasan, detail, teks di gambar, keyakinan) yang dirangkai menjadi kalimat siap baca, mis. *"Grafik: Penjualan naik tiap bulan. … Tulisan di gambar: …"*. Saat start, BLIP dimuat di latar sebagai cadangan (unduhan pertama ±1,3 GB); layanan sudah siap memakai Gemini sebelum BLIP selesai dimuat. Log **"Layanan AI siap"** menandai layanan bisa dipakai.
 Tanpa internet/kunci: `CAPTION_PROVIDER=blip` (model lokal). Untuk mencoba alur tanpa model sama sekali: `CAPTION_PROVIDER=mock`.
+
+**Memeriksa Gemini berjalan:** buka `http://127.0.0.1:8000/health`; harus muncul `"provider": "gemini"` dan `"model"` sesuai
+`GEMINI_MODEL`. Di panel extension, pembuat deskripsi tertulis "Google Gemini" (atau BLIP bila cadangan yang dipakai).
+Mutu dan latensinya bisa diukur pada dataset sendiri dengan `python -m eval.run_eval predict --provider gemini --run gemini-1 --limit 10`
+lalu `python -m eval.run_eval score --runs gemini-1` (lihat `docs/DATASET.md`). Bila `eval/data/fewshot.json` ada, log start
+menyebut *"(n contoh few-shot)"*.
 
 > **Privasi.** Dengan `CAPTION_PROVIDER=gemini`, gambar yang dipilih pengguna diteruskan server ke Google. Pada tingkat gratis Google AI Studio, **data tersebut dapat dipakai Google untuk meningkatkan produknya**; Gemini juga butuh internet dan punya batas kuota. File gambar tidak disimpan di server NaraVisi. Pemberitahuan yang sama tampil di halaman Pengaturan extension. Pilih `CAPTION_PROVIDER=blip` bila gambar sama sekali tidak boleh keluar dari server.
 
@@ -185,9 +209,9 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 ## Pengujian
 
 ```bash
-cd backend && npm test                         # 97 tes unit + integrasi API (SQLite di memori)
-cd ai-service && python -m pytest              # 47 tes (Gemini dengan klien palsu, tanpa internet)
-cd e2e && npm install && npm test              # 106 skenario, termasuk alur manual Alt+Shift+K
+cd backend && npm test                         # 101 tes unit + integrasi API (SQLite di memori)
+cd ai-service && python -m pytest              # 83 tes (Gemini dengan klien palsu, metrik & dataset evaluasi; tanpa internet)
+cd e2e && npm install && npm test              # 112 skenario, termasuk alur manual Alt+Shift+K
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur waktu respons (RNF-05)
 ```
@@ -204,6 +228,7 @@ Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`.
 - [x] Fase 5 — Dashboard Admin (RF-21, 22, 27..30)
 - [x] Fase 6 — Pengujian otomatis lengkap; uji manual M-01..M-06 menunggu dijalankan
 - [x] Fase 7 — Evaluasi (`docs/EVALUASI.md`), perbaikan keamanan, video demo, naskah demo & checklist gladi (`docs/NASKAH_DEMO.md`), laporan akhir & slide
+- [x] Tahap 70% — verifikasi RF-02..04, RF-18, RF-20, RF-23; uji privasi Baca berurutan; dataset evaluasi & few-shot (`docs/DATASET.md`)
 
 ## Batasan yang diketahui
 

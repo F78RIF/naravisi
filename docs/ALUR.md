@@ -330,3 +330,118 @@ sungguhan berada di luar target 70% (mode simulasi tetap tersedia untuk demo).
 | RF-17..19 | `UC-AKS-01..03`, `RF-17: pengaturan milik masing-masing …` | `UC-AKS-01..03`, `RF-18: bahasa English …`, `Coba suara` |
 | RF-20 | `UC-LAP-01`, `RF-20: pilih alasan + catatan …` | `RF-20: kirim laporan dari panel`, `RF-20 dari halaman Riwayat` |
 | RF-23 | `GET /plans` (premiumAdmin.test.js) | `UC-PRM-01: paket Bulanan Rp15.000 / 30 hari tampil` |
+
+---
+
+## Tahap 4 — Penutup 70%: verifikasi, privasi, dan dataset evaluasi
+
+Di tahap ini tidak ada RF baru. Enam RF yang sudah ada (RF-02, RF-03, RF-04, RF-18, RF-20, RF-23) diperiksa ulang satu per
+satu terhadap empat aturan di Tahap 3. Celah yang ditemukan ditutup, lalu mode Baca berurutan diuji untuk setiap kondisi
+privasinya. Terakhir, dibuat dataset evaluasi sendiri untuk mengukur mutu Gemini dan BLIP dengan jujur.
+
+### Akun: lihat, ubah, hapus
+
+```mermaid
+flowchart TD
+    P[Halaman Profil dibuka] --> G[GET /me]
+    G --> V[Tampil: nama, email, Gratis/Premium/Admin,<br/>kuota hari ini, tanggal daftar]
+    V --> U{Pengguna mengubah apa?}
+    U -- nama saja --> N[PATCH /me nama<br/>tanpa kata sandi]
+    U -- email / kata sandi --> L{Kata sandi saat ini diisi & benar?}
+    L -- tidak --> E1[400 / WRONG_PASSWORD<br/>fokus ke kolom sandi saat ini<br/>TIDAK ADA yang berubah, termasuk nama]
+    L -- ya --> M{Email dipakai akun lain?}
+    M -- ya --> E2[409 Email sudah terdaftar]
+    M -- tidak --> S[Simpan → profil baru diumumkan<br/>lewat aria-live]
+    N --> S
+    U -- hapus akun --> H{Ketik HAPUS persis + kata sandi benar?}
+    H -- tidak --> E3[400 + fokus ke kolom yang salah<br/>akun tetap ada]
+    H -- ya --> D[DELETE users → CASCADE:<br/>riwayat, laporan, pengaturan, kuota]
+    D --> T[Sesi extension dihapus;<br/>token lama → 401]
+```
+
+Celah yang ditutup / dibuktikan di tahap ini: input yang bukan teks (mis. objek JSON) ditolak dengan pesan Indonesia, sandi
+lama yang salah tidak mengubah apa pun, dan penghapusan akun terbukti ikut menghapus laporan, pengaturan, dan kuota, sementara
+data akun lain tetap utuh.
+
+### Laporan: alasan wajib dipilih
+
+Sebelumnya backend masih menerima teks bebas `alasan` tanpa pilihan (sisa klien lama) dan catatan sampai 1000 karakter.
+Sekarang backend, panel, dan halaman Riwayat memakai aturan yang sama:
+
+| Aturan | Backend (`reportService.js`) | Panel & Riwayat |
+|---|---|---|
+| Alasan wajib dipilih dari 6 pilihan | `kategori` kosong / tidak dikenal → 400 | pesan + fokus ke daftar pilihan |
+| Catatan opsional, 3–500 karakter (wajib bila "Lainnya") | `CATATAN_MAKS = 500` | `maxlength="500"` + batas disebut di label |
+| Hanya deskripsi milik sendiri | riwayat orang lain / tidak ada → 404, tidak ada baris tersimpan | – |
+
+### Premium (RF-23): hanya menampilkan paket
+
+```mermaid
+sequenceDiagram
+    actor P as Pengguna
+    participant H as Halaman Premium
+    participant B as Backend
+    P->>H: buka Premium
+    H->>B: GET /plans (tanpa login)
+    B-->>H: paket aktif saja: Bulanan Rp15.000 / 30 hari + manfaat
+    H-->>P: kartu paket berjudul, manfaat berupa daftar
+    Note over B: Melihat paket TIDAK membuat transaksi apa pun (diuji).<br/>Pembayaran (RF-24..26) di luar penilaian 70%.
+```
+
+### Mode Baca berurutan: pemeriksaan privasi
+
+Alur lengkapnya ada di Tahap 2. Yang ditambahkan di tahap ini adalah **bukti uji untuk setiap kondisi**:
+
+```mermaid
+flowchart LR
+    A[Pengaturan: centang Baca berurutan] --> B[Dialog persetujuan dibacakan:<br/>gambar dikirim ke server & Google,<br/>memakai kuota]
+    B -- Batal --> M[Tetap MATI]
+    B -- Ya, aktifkan --> ON[Aktif, maks. N = 3 per halaman]
+    ON --> C{autoBlockedReason}
+    C -- chrome:// / file:// / halaman extension --> X1[not-web]
+    C -- Incognito --> X2[incognito]
+    C -- bank / dompet digital / email<br/>daftar bisa diedit --> X3[excluded]
+    C -- boleh --> K{Kuota ≤ 2?}
+    K -- ya --> Q[Umumkan alasan SEKALI per hari<br/>lewat aria-live polite]
+    K -- tidak --> PW{Ada input password?}
+    PW -- ya --> X4[password: tidak jalan]
+    PW -- tidak --> R[Satu per satu, atas → bawah,<br/>yang terlihat dulu]
+```
+
+### Dataset → few-shot → evaluasi
+
+```mermaid
+flowchart TD
+    S[sources.txt: URL artikel dari ≥ 3 situs berita] --> C[collect.py<br/>robots.txt · jeda ≥ 1 dtk · ≥ 150 px ·<br/>bukan SVG/ikon · tanpa duplikat]
+    F[atau folder lokal] --> C
+    C --> I[(data/images/*.jpg ≤ 1280 px<br/>TIDAK di-commit)]
+    C --> MF[data/manifest.csv]
+    MF --> A1[annotate.py fase acuan<br/>tanpa melihat keluaran model]
+    A1 --> R[data/references.csv<br/>jenis + 1–2 acuan + teks di gambar]
+    R --> P[run_eval.py predict<br/>gemini / blip / mock / http]
+    P --> PR[(data/predictions/run.jsonl<br/>TIDAK di-commit)]
+    PR --> A2[annotate.py fase nilai<br/>1 Akurat · 2 Sebagian · 3 Salah]
+    A2 --> RT[data/ratings.csv]
+    RT --> SC[run_eval.py score]
+    R --> SC
+    PR --> SC
+    SC --> LP[data/reports/laporan.md<br/>akurasi + Wilson · jenis · p50/p95 · ≤ 5 dtk ·<br/>BLEU · ROUGE-L · CIDEr-D · perbandingan run]
+    R --> FS[make_fewshot.py → data/fewshot.json<br/>3–5 contoh, jenis beragam]
+    FS --> G[Prompt Gemini memuat contoh saat layanan start]
+    G --> P
+    FS -. ID contoh dikeluarkan dari penilaian .-> SC
+```
+
+Dataset ini dipakai untuk **few-shot dan evaluasi (prompt tuning)**, **bukan** untuk melatih ulang bobot model. Gambar yang
+sudah menjadi contoh few-shot otomatis tidak ikut dinilai, supaya skornya tidak terlihat lebih bagus dari kenyataan. Detail: `docs/DATASET.md`.
+
+### Bukti (tes tahap 4)
+
+| Bagian | Tes |
+|---|---|
+| RF-03/04 | `auth.test.js`: "RF-03: nama/sandi bukan teks …", "RF-04: laporan, pengaturan, dan kuota ikut terhapus …" |
+| RF-18 | e2e: "RF-18: pintasan AKTIF dibaca dari chrome.commands.getAll() …", "RF-18: pintasan kosong → … tautan …" |
+| RF-20 | `settingsReports.test.js`: "RF-20: catatan opsional maks. 500 karakter …", "tidak bisa melaporkan riwayat milik orang lain (404 …)" · e2e: "RF-20: catatan dibatasi 500 karakter …" |
+| RF-23 | `premiumAdmin.test.js`: "RF-23: daftar paket publik …" · e2e: "RF-23: membuka daftar paket tidak membuat transaksi …" |
+| Baca berurutan | e2e: "baca berurutan TIDAK jalan di chrome://, halaman extension, file://, Incognito, domain dikecualikan", "alasan kuota tidak diumumkan berulang …", ditambah skenario Tahap 2 |
+| Dataset | `tests/test_eval_metrics.py` (nilai yang dihitung tangan), `test_eval_collect.py` (parser HTML, filter, robots.txt, jeda), `test_eval_pipeline.py` (predict mock → score → few-shot → prompt; alat anotasi) |
