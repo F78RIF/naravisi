@@ -95,26 +95,36 @@ describe('Laporan (UC-LAP-01..03)', () => {
     const res = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId } });
     assert.equal(res.status, 400);
     assert.equal(res.body.error.details.field, 'kategori');
-    const old = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, alasan: 'x' } });
-    assert.equal(old.body.error.details.field, 'alasan'); // klien lama: teks bebas min. 3 karakter
+    // Teks bebas tanpa memilih alasan tidak lagi diterima (alasan wajib dipilih)
+    const free = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, alasan: 'Gambar sebenarnya anjing.' } });
+    assert.equal(free.status, 400);
+    assert.equal(free.body.error.details.field, 'kategori');
+    assert.equal(free.body.error.message, 'Pilih alasan pelaporan terlebih dahulu.');
   });
 
   it('UC-LAP-01: kirim laporan', async () => {
     const res = await app.api('POST', '/api/v1/reports', {
       token: user.token,
-      body: { riwayat_id: riwayatId, alasan: 'Gambar sebenarnya anjing, bukan kucing.' },
+      body: { riwayat_id: riwayatId, kategori: 'objek_salah', catatan: 'Gambar sebenarnya anjing, bukan kucing.' },
     });
     assert.equal(res.status, 201);
     assert.equal(res.body.status_laporan, 'baru');
   });
 
-  it('tidak bisa melaporkan riwayat milik orang lain', async () => {
+  it('tidak bisa melaporkan riwayat milik orang lain (404, tidak membocorkan keberadaannya)', async () => {
     const other = await app.register();
     const res = await app.api('POST', '/api/v1/reports', {
       token: other.token,
-      body: { riwayat_id: riwayatId, alasan: 'iseng saja' },
+      body: { riwayat_id: riwayatId, kategori: 'objek_salah' },
     });
     assert.equal(res.status, 404);
+    assert.equal(res.body.error.message, 'Riwayat tidak ditemukan.');
+    const missing = await app.api('POST', '/api/v1/reports', { token: other.token, body: { riwayat_id: 999999, kategori: 'objek_salah' } });
+    assert.deepEqual([missing.status, missing.body.error.message], [404, 'Riwayat tidak ditemukan.']);
+    const bad = await app.api('POST', '/api/v1/reports', { token: other.token, body: { riwayat_id: '1 OR 1=1', kategori: 'objek_salah' } });
+    assert.equal(bad.status, 404);
+    const n = await app.db.get('SELECT COUNT(*) AS n FROM laporan_deskripsi WHERE user_id = ?', [other.user.user_id]);
+    assert.equal(Number(n.n), 0);
   });
 
   it('RNF-10: pengguna biasa tidak bisa membuka daftar laporan Admin', async () => {
@@ -188,5 +198,18 @@ describe('Laporan dengan pilihan alasan (RF-20)', () => {
     assert.deepEqual({ ...row }, { kategori: 'objek_salah', alasan: 'Objek atau orang disebut salah: Itu anjing, bukan kucing.' });
     const list = await app.api('GET', '/api/v1/admin/reports', { token: adminToken });
     assert.ok(list.body.items.some((r) => r.kategori === 'objek_salah'));
+  });
+
+  it('RF-20: catatan opsional maks. 500 karakter; bukan teks → 400', async () => {
+    const max = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, kategori: 'kurang_lengkap', catatan: 'a'.repeat(500) } });
+    assert.equal(max.status, 201);
+    const tooLong = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, kategori: 'kurang_lengkap', catatan: 'a'.repeat(501) } });
+    assert.equal(tooLong.status, 400);
+    assert.equal(tooLong.body.error.details.field, 'catatan');
+    assert.equal(tooLong.body.error.message, 'Catatan maksimal 500 karakter.');
+    const notText = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, kategori: 'kurang_lengkap', catatan: { x: 1 } } });
+    assert.equal(notText.status, 400);
+    const notStringKategori = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, kategori: ['lainnya'] } });
+    assert.equal(notStringKategori.body.error.details.field, 'kategori');
   });
 });

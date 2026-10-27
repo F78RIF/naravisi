@@ -162,6 +162,41 @@ describe('Akun: UC-AKUN-01..05', () => {
     assert.equal(Number(rows.n), 0);
   });
 
+  it('RF-04: laporan, pengaturan, dan kuota ikut terhapus; data akun lain tetap; konfirmasi bukan teks → 400', async () => {
+    const u = await app.register();
+    const other = await app.register();
+    const riwayatId = (await app.describe(u.token)).body.riwayat_id;
+    await app.describe(other.token);
+    assert.equal((await app.api('POST', '/api/v1/reports', { token: u.token, body: { riwayat_id: riwayatId, kategori: 'teks_salah' } })).status, 201);
+    const notText = await app.api('DELETE', '/api/v1/me', { token: u.token, body: { konfirmasi: ['HAPUS'], kata_sandi: u.password } });
+    assert.equal(notText.status, 400);
+    assert.equal(notText.body.error.details.field, 'konfirmasi');
+    assert.match(notText.body.error.message, /Ketik HAPUS/);
+    assert.equal((await app.api('DELETE', '/api/v1/me', { token: u.token, body: { konfirmasi: 'HAPUS', kata_sandi: u.password } })).status, 200);
+    for (const table of ['laporan_deskripsi', 'pengaturan_aksesibilitas', 'kuota_harian', 'riwayat_deskripsi']) {
+      const mine = await app.db.get(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?`, [u.user.user_id]);
+      assert.equal(Number(mine.n), 0, table);
+    }
+    const theirs = await app.db.get('SELECT COUNT(*) AS n FROM riwayat_deskripsi WHERE user_id = ?', [other.user.user_id]);
+    assert.equal(Number(theirs.n), 1);
+    assert.equal((await app.api('GET', '/api/v1/me', { token: other.token })).status, 200);
+  });
+
+  it('RF-03: nama/sandi bukan teks → 400 berbahasa Indonesia; tanpa perubahan → 400', async () => {
+    const u = await app.register();
+    const nama = await app.api('PATCH', '/api/v1/me', { token: u.token, body: { nama: { $ne: 1 } } });
+    assert.deepEqual([nama.status, nama.body.error.message], [400, 'Nama harus berupa teks.']);
+    const sandi = await app.api('PATCH', '/api/v1/me', { token: u.token, body: { kata_sandi_lama: u.password, kata_sandi_baru: 12345678 } });
+    assert.deepEqual([sandi.status, sandi.body.error.message], [400, 'Kata sandi baru harus berupa teks.']);
+    const kosong = await app.api('PATCH', '/api/v1/me', { token: u.token, body: {} });
+    assert.deepEqual([kosong.status, kosong.body.error.message], [400, 'Tidak ada perubahan yang dikirim.']);
+    // Sandi lama salah tidak boleh mengubah apa pun, termasuk nama yang dikirim bersamaan
+    const wrong = await app.api('PATCH', '/api/v1/me', { token: u.token, body: { nama: 'Tidak Jadi', email: 'lain@uji.id', kata_sandi_lama: 'salah12345' } });
+    assert.equal(wrong.body.error.code, 'WRONG_PASSWORD');
+    const me = await app.api('GET', '/api/v1/me', { token: u.token });
+    assert.deepEqual([me.body.nama, me.body.email], [u.user.nama, u.email]);
+  });
+
   it('token akun terhapus tidak berlaku untuk akun lain yang kebetulan mendapat ID sama', async () => {
     const u = await app.register();
     await app.api('DELETE', '/api/v1/me', { token: u.token, body: { konfirmasi: 'HAPUS', kata_sandi: u.password } });

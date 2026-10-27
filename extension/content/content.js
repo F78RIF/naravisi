@@ -486,8 +486,8 @@
           <form class="report" id="nv-report" hidden>
             <label for="nv-kategori">Apa yang salah dari deskripsi ini?</label>
             <select id="nv-kategori">${REPORT_OPTIONS}</select>
-            <label for="nv-reason">Catatan (opsional; wajib bila memilih Lainnya)</label>
-            <textarea id="nv-reason" rows="3" maxlength="1000"></textarea>
+            <label for="nv-reason">Catatan (opsional, maks. 500 karakter; wajib bila memilih Lainnya)</label>
+            <textarea id="nv-reason" rows="3" maxlength="500"></textarea>
             <div class="controls">
               <button type="submit">Kirim laporan</button>
               <button type="button" data-act="report-cancel">Batal</button>

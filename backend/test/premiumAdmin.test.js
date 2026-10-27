@@ -20,6 +20,17 @@ describe('Premium — mode simulasi (UC-PRM-01..04)', () => {
     );
   });
 
+  it('RF-23: daftar paket publik (tanpa login), hanya paket aktif, tidak membuat transaksi', async () => {
+    await app.db.run('INSERT INTO paket_premium (nama_paket, harga, durasi_hari, manfaat, aktif) VALUES (?, ?, ?, ?, ?)', ['Lama', 5000, 7, '["x"]', 0]);
+    const before = Number((await app.db.get('SELECT COUNT(*) AS n FROM transaksi')).n);
+    const res = await app.api('GET', '/api/v1/plans');
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.items.map((p) => p.nama_paket), ['Bulanan']);
+    assert.ok(Array.isArray(res.body.items[0].manfaat) && res.body.items[0].manfaat.length > 0);
+    assert.equal(Number((await app.db.get('SELECT COUNT(*) AS n FROM transaksi')).n), before);
+    await app.db.run("DELETE FROM paket_premium WHERE nama_paket = 'Lama'");
+  });
+
   it('UC-PRM-02/03: bayar (simulasi) → akun Premium, kuota tanpa batas, nada suara terbuka', async () => {
     const u = await app.register();
     const paketId = (await app.api('GET', '/api/v1/plans')).body.items[0].paket_id;

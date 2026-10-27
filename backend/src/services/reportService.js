@@ -12,18 +12,18 @@ export const KATEGORI_LAPORAN = {
   lainnya: 'Lainnya',
 };
 
+/** Batas panjang catatan laporan (sama dengan maxlength di panel & halaman Riwayat). */
+export const CATATAN_MAKS = 500;
+
 /** Laporan deskripsi tidak akurat: RF-20..RF-22 (UC-LAP-01..03). */
 export function createReportService({ db, clock, history }) {
-  /** {kategori, catatan?} (baru) atau {alasan} (klien lama) → { kategori, alasan }. */
+  /** {kategori, catatan?} → { kategori, alasan }. Alasan wajib dipilih; teks bebas tanpa kategori ditolak. */
   function reason(body) {
-    if (body?.kategori === undefined && body?.alasan !== undefined) {
-      return { kategori: null, alasan: v.str(body, 'alasan', { label: 'Alasan pelaporan', min: 3, max: 1000 }) };
-    }
     if (body?.kategori === undefined || body.kategori === null || body.kategori === '') {
       throw Errors.validation('kategori', 'Pilih alasan pelaporan terlebih dahulu.');
     }
     const kategori = v.oneOf(body, 'kategori', Object.keys(KATEGORI_LAPORAN), { label: 'Alasan pelaporan' });
-    const catatan = v.str(body, 'catatan', { label: 'Catatan', min: 3, max: 1000, optional: true });
+    const catatan = v.str(body, 'catatan', { label: 'Catatan', min: 3, max: CATATAN_MAKS, optional: true });
     if (kategori === 'lainnya' && !catatan) {
       throw Errors.validation('catatan', 'Untuk alasan "Lainnya", tuliskan apa yang salah di catatan.');
     }

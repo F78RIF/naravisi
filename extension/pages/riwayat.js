@@ -16,13 +16,13 @@ function reportForm(item, holder) {
   const id = `alasan-${item.riwayat_id}`;
   const kategori = el('select', { id: `kategori-${item.riwayat_id}` },
     el('option', { value: '' }, 'Pilih alasan…'), REPORT_CATEGORIES.map(([v, l]) => el('option', { value: v }, l)));
-  const area = el('textarea', { id, rows: 3, maxlength: 1000 });
+  const area = el('textarea', { id, rows: 3, maxlength: 500 }); // = CATATAN_MAKS di backend
   const form = el(
     'form',
     { class: 'stack', novalidate: true },
     el('label', { for: kategori.id }, 'Apa yang salah dari deskripsi ini?'),
     kategori,
-    el('label', { for: id }, 'Catatan (opsional; wajib bila memilih Lainnya)'),
+    el('label', { for: id }, 'Catatan (opsional, maks. 500 karakter; wajib bila memilih Lainnya)'),
     area,
     el(
       'div',

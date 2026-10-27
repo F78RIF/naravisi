@@ -752,6 +752,16 @@ try {
     assert.deepEqual(options, Object.keys(KATEGORI_LAPORAN));
   });
 
+  await step('RF-20: catatan dibatasi 500 karakter (maxlength) dan batasnya disebut di label', async () => {
+    await page.keyboard.press('l');
+    await page.locator('#nv-reason').waitFor();
+    assert.equal(await page.locator('#nv-reason').getAttribute('maxlength'), '500');
+    await page.locator('#nv-reason').fill('a'.repeat(600));
+    assert.equal((await page.locator('#nv-reason').inputValue()).length, 500);
+    assert.equal(await page.getByLabel(/maks\. 500 karakter/).count(), 1);
+    await page.getByRole('button', { name: 'Batal' }).click();
+  });
+
   await step('AVIF dikonversi ke JPEG oleh extension', async () => {
     await page.locator('#nv-list').focus();
     await page.keyboard.press('ArrowDown');
@@ -997,6 +1007,41 @@ try {
   await step('tombol "Coba suara" membacakan contoh', async () => {
     await set.getByRole('button', { name: 'Coba suara' }).click();
     assert.match(await set.locator('body').getAttribute('data-last-spoken'), /contoh suara NaraVisi/);
+  });
+
+  await step('RF-18: pintasan AKTIF dibaca dari chrome.commands.getAll() dan dikaitkan ke kolom (aria-describedby)', async () => {
+    const active = await sw.evaluate(async () => (await chrome.commands.getAll()).find((c) => c.name === 'scan-page')?.shortcut || '');
+    const hint = set.locator('#pintasan-hint');
+    assert.ok((await hint.innerText()).includes(`Pintasan aktif saat ini: ${active || 'belum diatur'}.`));
+    assert.equal(await set.locator('#pintasan').getAttribute('aria-describedby'), 'pintasan-hint');
+    assert.equal(await set.locator('#no-shortcut').count(), active ? 0 : 1);
+  });
+
+  await step('RF-18: pintasan kosong → "Pintasan belum diatur" + tautan chrome://extensions/shortcuts (bisa dengan keyboard)', async () => {
+    const empty = await context.newPage();
+    watch(empty);
+    // Tiru Chrome tanpa pintasan untuk scan-page (mis. bentrok dengan extension lain).
+    await empty.addInitScript(() => {
+      const real = chrome.commands.getAll.bind(chrome.commands);
+      chrome.commands.getAll = async () => (await real()).map((c) => (c.name === 'scan-page' ? { ...c, shortcut: '' } : c));
+    });
+    try {
+      await empty.goto(extPage('pages/pengaturan.html'));
+      await empty.locator('#no-shortcut').waitFor();
+      assert.match(await empty.locator('#no-shortcut').innerText(), /^Pintasan belum diatur\./);
+      assert.match(await empty.locator('#pintasan-hint').innerText(), /Pintasan aktif saat ini: belum diatur\./);
+      const link = empty.getByRole('link', { name: 'chrome://extensions/shortcuts' });
+      assert.equal(await link.getAttribute('href'), 'chrome://extensions/shortcuts');
+      await empty.evaluate(() => {
+        chrome.tabs.create = async (opts) => { window.__opened = opts.url; return {}; };
+      });
+      await link.focus();
+      await empty.keyboard.press('Enter');
+      assert.equal(await empty.evaluate(() => window.__opened), 'chrome://extensions/shortcuts');
+      assert.deepEqual(await a11yAudit(empty), []);
+    } finally {
+      await empty.close();
+    }
   });
 
   await step('alamat API & status server ada di Pengaturan', async () => {
@@ -1352,6 +1397,12 @@ try {
     await prem.locator('.price').waitFor();
     assert.match(await prem.locator('.price').innerText(), /Rp15\.000/);
     assert.match(await prem.locator('.price').innerText(), /30 hari/);
+  });
+
+  await step('RF-23: membuka daftar paket tidak membuat transaksi apa pun; paket berjudul & manfaat berupa daftar', async () => {
+    assert.equal(Number((await backend.db.get('SELECT COUNT(*) AS n FROM transaksi')).n), 0);
+    await prem.getByRole('heading', { name: 'Paket Bulanan' }).waitFor();
+    assert.ok((await prem.locator('.plan .benefits li').count()) >= 1);
   });
 
   await step('UC-PRM-02/03: beli → halaman bayar terbuka → bayar → akun Premium', async () => {

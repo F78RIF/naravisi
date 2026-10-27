@@ -286,7 +286,16 @@ async function render(settings) {
         pintasan,
         `Pintasan aktif saat ini: ${activeShortcut}. Chrome hanya mengizinkan pintasan diubah dari halaman pintasan Chrome — simpan pilihan Anda di sini, lalu terapkan di sana.`,
       ),
-      noShortcut ? el('p', { class: 'notice', id: 'no-shortcut' }, `Pintasan belum diatur. Atur di ${SHORTCUTS_URL} lewat tombol di bawah.`) : null,
+      // Halaman extension tidak boleh membuka chrome:// lewat href biasa → tautan dibuka dengan chrome.tabs.create.
+      noShortcut
+        ? el(
+            'p',
+            { class: 'notice', id: 'no-shortcut' },
+            'Pintasan belum diatur. Atur di ',
+            el('a', { href: SHORTCUTS_URL, id: 'shortcuts-link', onclick: (e) => { e.preventDefault(); openShortcutsPage(); } }, SHORTCUTS_URL),
+            '.',
+          )
+        : null,
       el('div', { class: 'row' }, el('button', { type: 'button', id: 'open-shortcuts', onclick: () => openShortcutsPage() }, 'Buka halaman pintasan Chrome')),
     ),
     el(
