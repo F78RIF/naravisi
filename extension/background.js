@@ -572,5 +572,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Dipakai pengujian otomatis (Playwright) untuk memicu panel tanpa shortcut.
 globalThis.naraVisi = {
   togglePanel, toggleActiveTab, openPage, handleScanCommand, onCommand, announceImageCount, spokenLog, rejectReason,
-  autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog,
+  autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog, autoBlockedReason,
 };

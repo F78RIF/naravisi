@@ -1313,6 +1313,49 @@ try {
     assert.equal(await autoTab.locator('#naravisi-live').getAttribute('data-last'), 'Baca berurutan berhenti: sisa kuota hari ini 2, disisakan untuk pilihan Anda.');
   });
 
+  await step('alasan kuota tidak diumumkan berulang di halaman berikutnya (sekali per hari)', async () => {
+    const before = backend.ai.calls;
+    const hit = await visitAndWaitAuto(autoTab, `${SITE}/artikel-2.html`);
+    assert.equal(hit.result, 'quota');
+    assert.equal(backend.ai.calls, before);
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(await autoTab.locator('#naravisi-live').count(), 0); // tidak ada pengumuman baru
+  });
+
+  await step('baca berurutan TIDAK jalan di chrome://, halaman extension, file://, Incognito, domain dikecualikan', async () => {
+    await setUsed(0);
+    const reasons = await sw.evaluate(async (ext) => {
+      const settings = { autoExclude: ['klikbca.com', 'gopay', 'mail.google.com'] };
+      const r = (tab) => globalThis.naraVisi.autoBlockedReason(tab, settings);
+      return {
+        chrome: await r({ url: 'chrome://settings/' }),
+        shortcuts: await r({ url: 'chrome://extensions/shortcuts' }),
+        extension: await r({ url: ext }),
+        file: await r({ url: 'file:///C:/foto.html' }),
+        incognito: await r({ url: 'https://berita.contoh.id/', incognito: true }),
+        bank: await r({ url: 'https://ibank.klikbca.com/' }),
+        dompet: await r({ url: 'https://app.gopay.co.id/' }),
+        email: await r({ url: 'https://mail.google.com/mail/u/0/' }),
+        biasa: await r({ url: 'https://berita.contoh.id/' }),
+      };
+    }, extPage('pages/riwayat.html'));
+    assert.deepEqual(reasons, {
+      chrome: 'not-web', shortcuts: 'not-web', extension: 'not-web', file: 'not-web', incognito: 'incognito',
+      bank: 'excluded', dompet: 'excluded', email: 'excluded', biasa: null,
+    });
+    // Tab halaman extension sungguhan (Pengaturan) → tidak ada permintaan ke server
+    await set.bringToFront();
+    const before = backend.ai.calls;
+    const res = await sw.evaluate(async (u) => {
+      const tab = (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u));
+      await chrome.tabs.update(tab.id, { active: true });
+      return globalThis.naraVisi.autoDescribePage(tab.id);
+    }, set.url().split('#')[0]);
+    assert.equal(res?.result, 'not-web');
+    assert.equal(backend.ai.calls, before);
+    await autoTab.bringToFront();
+  });
+
   await step('kuota tersisa 4 → berhenti setelah 2 gambar (sisa 2) & alasan dibacakan', async () => {
     await setUsed(6);
     const before = backend.ai.calls;
