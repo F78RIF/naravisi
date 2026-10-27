@@ -140,6 +140,16 @@ export const JENIS_LABEL = {
 };
 export const jenisLabel = (jenis) => JENIS_LABEL[jenis] ?? 'Tidak diketahui';
 
+/** Pilihan alasan laporan (RF-20) — sama dengan KATEGORI_LAPORAN di backend. */
+export const REPORT_CATEGORIES = [
+  ['objek_salah', 'Objek atau orang disebut salah'],
+  ['teks_salah', 'Tulisan di gambar salah dibaca'],
+  ['kurang_lengkap', 'Deskripsi kurang lengkap'],
+  ['jenis_salah', 'Jenis gambar salah'],
+  ['tidak_pantas', 'Bahasa tidak pantas atau menyinggung'],
+  ['lainnya', 'Lainnya'],
+];
+
 const PROVIDER_LABEL = { gemini: 'Google Gemini', blip: 'BLIP (model lokal)', mock: 'Mode uji (mock)' };
 export const providerLabel = (provider) => PROVIDER_LABEL[provider] ?? (provider || '-');
 

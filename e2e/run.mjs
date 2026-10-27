@@ -723,19 +723,33 @@ try {
   });
   await page.screenshot({ path: path.join(uiDir, '07-panel-halaman.png') });
 
-  await step('UC-LAP-01 alt: laporan tanpa alasan ditolak', async () => {
+  await step('UC-LAP-01 alt: laporan tanpa memilih alasan ditolak; "Lainnya" wajib catatan', async () => {
     await page.keyboard.press('l');
-    await page.locator('#nv-reason').waitFor();
+    await page.locator('#nv-kategori').waitFor();
+    assert.equal(await page.evaluate(() => document.querySelector('#naravisi-host').shadowRoot.activeElement?.id), 'nv-kategori');
     await page.getByRole('button', { name: 'Kirim laporan' }).click();
-    await status.filter({ hasText: 'Alasan pelaporan wajib diisi' }).waitFor();
+    await status.filter({ hasText: 'Pilih alasan pelaporan terlebih dahulu.' }).waitFor();
+    await page.getByLabel('Apa yang salah dari deskripsi ini?').selectOption('lainnya');
+    await page.getByRole('button', { name: 'Kirim laporan' }).click();
+    await status.filter({ hasText: 'tuliskan apa yang salah di catatan' }).waitFor();
+    // Panah di dalam <select> memilih opsi, bukan berpindah gambar.
+    await page.getByLabel('Apa yang salah dari deskripsi ini?').focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.querySelector('#naravisi-host').shadowRoot.querySelector('[aria-selected="true"]')?.id), 'nv-opt-0');
   });
 
-  await step('UC-LAP-01: kirim laporan dari panel', async () => {
+  await step('RF-20: kirim laporan dari panel — pilih alasan + catatan', async () => {
+    await page.getByLabel('Apa yang salah dari deskripsi ini?').selectOption('objek_salah');
     await page.locator('#nv-reason').fill('Warnanya biru, bukan kucing.');
     await page.getByRole('button', { name: 'Kirim laporan' }).click();
     await status.filter({ hasText: 'Laporan Anda sudah dikirim' }).waitFor();
-    const n = await backend.db.get('SELECT COUNT(*) AS n FROM laporan_deskripsi');
-    assert.equal(Number(n.n), 1);
+    const rows = await backend.db.all('SELECT kategori, alasan FROM laporan_deskripsi');
+    assert.equal(rows.length, 1);
+    assert.deepEqual({ ...rows[0] }, { kategori: 'objek_salah', alasan: 'Objek atau orang disebut salah: Warnanya biru, bukan kucing.' });
+    // Pilihan di extension sama dengan daftar yang diterima backend.
+    const { KATEGORI_LAPORAN } = await import('../backend/src/services/reportService.js');
+    const options = await page.locator('#nv-kategori option').evaluateAll((o) => o.map((x) => x.value).filter(Boolean));
+    assert.deepEqual(options, Object.keys(KATEGORI_LAPORAN));
   });
 
   await step('AVIF dikonversi ke JPEG oleh extension', async () => {
@@ -812,7 +826,7 @@ try {
     assert.equal(await hist.locator('.item').count(), 3);
   });
 
-  await step('RF-16: hapus SEMUA riwayat (dengan konfirmasi) — hanya milik sendiri', async () => {
+  await step('RF-20 dari halaman Riwayat (pilih alasan) + RF-16: hapus SEMUA riwayat (dengan konfirmasi) — hanya milik sendiri', async () => {
     const saved = await sw.evaluate(() => chrome.storage.local.get(['nvSession', 'nvTts']));
     const tmp = await backend.register({ nama: 'Riwayat Sementara', email: 'riwayat-sementara@uji.id' });
     await backend.describe(tmp.token);
@@ -823,6 +837,17 @@ try {
       await sw.evaluate((x) => chrome.storage.local.set({ nvSession: { token: x.token, user: x.user, savedAt: Date.now() } }), tmp);
       await page2.goto(extPage('pages/riwayat.html'));
       await page2.locator('.item').nth(1).waitFor();
+      // RF-20: laporkan dari riwayat — fokus langsung ke pilihan alasan.
+      await page2.getByRole('button', { name: 'Laporkan' }).first().click();
+      assert.equal(await page2.evaluate(() => document.activeElement.localName), 'select');
+      await page2.getByRole('button', { name: 'Kirim laporan' }).click();
+      await page2.locator('#msg', { hasText: 'Pilih alasan pelaporan terlebih dahulu.' }).waitFor();
+      await page2.getByLabel('Apa yang salah dari deskripsi ini?').selectOption('teks_salah');
+      await page2.getByRole('button', { name: 'Kirim laporan' }).click();
+      await page2.locator('#msg', { hasText: 'Laporan Anda sudah dikirim' }).waitFor();
+      const rep = await backend.db.get('SELECT kategori, alasan FROM laporan_deskripsi WHERE user_id = ?', [tmp.user.user_id]);
+      assert.deepEqual({ ...rep }, { kategori: 'teks_salah', alasan: 'Tulisan di gambar salah dibaca' });
+
       await page2.getByRole('button', { name: 'Hapus semua riwayat' }).click(); // dialog konfirmasi diterima otomatis
       await page2.locator('#msg', { hasText: 'Semua riwayat dihapus (2 deskripsi).' }).waitFor();
       await page2.locator('#content', { hasText: 'Riwayat masih kosong' }).waitFor();

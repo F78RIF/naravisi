@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS laporan_deskripsi (
   riwayat_id         INTEGER NOT NULL REFERENCES riwayat_deskripsi(riwayat_id) ON DELETE CASCADE,
   user_id            INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
   admin_id           INTEGER NULL REFERENCES users(user_id) ON DELETE SET NULL,
+  kategori           TEXT NULL,
   alasan             TEXT NOT NULL,
   status_laporan     TEXT NOT NULL DEFAULT 'baru' CHECK (status_laporan IN ('baru','ditinjau')),
   tindak_lanjut      TEXT NULL,

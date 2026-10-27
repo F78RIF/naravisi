@@ -7,6 +7,8 @@ export const ADDED_COLUMNS = [
   // Tahap 1 (ADR-22): jenis gambar dari Gemini & provider yang benar-benar dipakai.
   { table: 'riwayat_deskripsi', column: 'jenis_gambar', mysql: 'VARCHAR(30) NULL', sqlite: 'TEXT NULL' },
   { table: 'riwayat_deskripsi', column: 'provider', mysql: 'VARCHAR(30) NULL', sqlite: 'TEXT NULL' },
+  // Tahap 3 (RF-20): kategori alasan laporan yang dipilih pengguna.
+  { table: 'laporan_deskripsi', column: 'kategori', mysql: 'VARCHAR(30) NULL', sqlite: 'TEXT NULL' },
 ];
 
 async function existingColumns(db, table) {

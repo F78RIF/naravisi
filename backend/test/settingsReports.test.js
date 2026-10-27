@@ -91,10 +91,12 @@ describe('Laporan (UC-LAP-01..03)', () => {
   });
   after(() => app.close());
 
-  it('UC-LAP-01 alt: alasan wajib diisi', async () => {
+  it('UC-LAP-01 alt: alasan wajib dipilih', async () => {
     const res = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId } });
     assert.equal(res.status, 400);
-    assert.equal(res.body.error.details.field, 'alasan');
+    assert.equal(res.body.error.details.field, 'kategori');
+    const old = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, alasan: 'x' } });
+    assert.equal(old.body.error.details.field, 'alasan'); // klien lama: teks bebas min. 3 karakter
   });
 
   it('UC-LAP-01: kirim laporan', async () => {
@@ -152,5 +154,39 @@ describe('Laporan (UC-LAP-01..03)', () => {
     await app.api('DELETE', `/api/v1/history/${riwayatId}`, { token: user.token });
     const res = await app.api('GET', '/api/v1/admin/reports', { token: adminToken });
     assert.equal(res.body.total, 0);
+  });
+});
+
+describe('Laporan dengan pilihan alasan (RF-20)', () => {
+  let app;
+  let user;
+  let adminToken;
+  let riwayatId;
+  before(async () => {
+    app = await startTestApp();
+    user = await app.register({ nama: 'Pelapor RF-20' });
+    adminToken = await app.loginAdmin();
+    riwayatId = (await app.describe(user.token)).body.riwayat_id;
+  });
+  after(() => app.close());
+
+  it('RF-20: pilih alasan + catatan; "lainnya" wajib catatan; kategori tak dikenal ditolak', async () => {
+    const bad = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, kategori: 'iseng' } });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.error.details.field, 'kategori');
+    const other = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, kategori: 'lainnya' } });
+    assert.equal(other.body.error.details.field, 'catatan');
+    const noNote = await app.api('POST', '/api/v1/reports', { token: user.token, body: { riwayat_id: riwayatId, kategori: 'teks_salah' } });
+    assert.equal(noNote.status, 201);
+    assert.equal(noNote.body.kategori, 'teks_salah');
+    const withNote = await app.api('POST', '/api/v1/reports', {
+      token: user.token,
+      body: { riwayat_id: riwayatId, kategori: 'objek_salah', catatan: ' Itu anjing, bukan kucing. ' },
+    });
+    assert.equal(withNote.status, 201);
+    const row = await app.db.get('SELECT kategori, alasan FROM laporan_deskripsi WHERE laporan_id = ?', [withNote.body.laporan_id]);
+    assert.deepEqual({ ...row }, { kategori: 'objek_salah', alasan: 'Objek atau orang disebut salah: Itu anjing, bukan kucing.' });
+    const list = await app.api('GET', '/api/v1/admin/reports', { token: adminToken });
+    assert.ok(list.body.items.some((r) => r.kategori === 'objek_salah'));
   });
 });

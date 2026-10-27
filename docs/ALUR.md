@@ -230,3 +230,103 @@ sequenceDiagram
 digabung, tanpa alt diisi; terbaca di pohon aksesibilitas` · `baca berurutan: maks. N, satu per satu, yang terlihat dulu, lanjut
 saat digulir; progres via aria-live` · `halaman dengan kolom kata sandi / domain dikecualikan → tidak jalan` ·
 `ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc`.
+
+---
+
+## Tahap 3 — Fitur menuju 70% (11 RF tambahan → 21/30)
+
+### Prinsip yang sama untuk setiap fitur
+
+Setiap fitur akun, riwayat, pengaturan, dan laporan mengikuti empat aturan yang sama di backend:
+
+1. **Validasi input** di server (bukan hanya di halaman): panjang teks, format email, pilihan yang diizinkan.
+2. **Query berparameter** (`?`), tidak pernah menyambung teks pengguna ke SQL.
+3. **Cek kepemilikan**: setiap query memakai `WHERE user_id = <pengguna yang login>`. Data milik orang lain
+   diperlakukan seolah tidak ada (`404`), jadi orang lain bahkan tidak tahu data itu ada.
+4. **Pesan galat berbahasa Indonesia** yang aman dibacakan, plus nama kolom yang salah (`details.field`) supaya halaman
+   bisa memindahkan fokus keyboard ke kolom itu.
+
+```mermaid
+flowchart LR
+    A[Halaman extension] -->|token JWT| B[authenticate:<br/>token sah? akun masih ada?<br/>waktu registrasi cocok?]
+    B -- tidak --> X[401 Silakan login]
+    B -- ya --> C[Validasi input]
+    C -- salah --> Y[400 + details.field<br/>fokus pindah ke kolom itu]
+    C -- benar --> D[Query berparameter<br/>WHERE user_id = pengguna]
+    D -- bukan miliknya --> Z[404 tidak ditemukan]
+    D -- miliknya --> E[200 + data]
+```
+
+### Akun (RF-02, RF-03, RF-04)
+
+- **Lihat profil (RF-02):** nama, email, status (Gratis/Premium/Admin), kuota hari ini, tanggal daftar.
+- **Ubah profil (RF-03):** nama bebas diubah. Mengganti **email atau kata sandi wajib memasukkan kata sandi saat ini**,
+  supaya orang yang sempat memakai laptop pengguna tidak bisa mengambil alih akun. Email yang sudah dipakai → pesan jelas.
+- **Hapus akun permanen (RF-04):** pengguna mengetik **HAPUS** (huruf besar) dan kata sandinya. Bisa dilakukan sepenuhnya
+  dengan keyboard; tidak ada dialog yang sulit dijangkau pembaca layar.
+
+```mermaid
+sequenceDiagram
+    actor P as Pengguna
+    participant H as Halaman Profil
+    participant B as Backend
+    participant DB as MySQL
+    P->>H: ketik "HAPUS" + kata sandi, Enter
+    H->>H: bukan "HAPUS"? → pesan + fokus ke kolom
+    H->>B: DELETE /me {konfirmasi, kata_sandi}
+    B->>B: cek "HAPUS" & kata sandi
+    B->>DB: DELETE FROM users WHERE user_id = ?
+    DB-->>DB: ON DELETE CASCADE: riwayat, laporan,<br/>pengaturan, kuota ikut terhapus;<br/>transaksi dianonimkan
+    B-->>H: {dihapus: true}
+    H->>H: hapus sesi di extension
+    Note over B: Token lama → 401 (akunnya sudah tidak ada).<br/>Token juga membawa waktu registrasi, jadi tidak<br/>berlaku untuk akun baru yang mendapat ID sama.
+```
+
+### Riwayat (RF-14, RF-15, RF-16)
+
+- **Daftar (RF-14):** 10 per halaman (tombol Sebelumnya/Berikutnya). Akun Gratis melihat 7 hari terakhir; yang lebih lama
+  disembunyikan (bukan dihapus) dan muncul lagi setelah Premium.
+- **Detail (RF-15):** `riwayat.html?id=…` menampilkan teks, **jenis gambar**, pembuat deskripsi (Google Gemini atau BLIP), waktu,
+  alamat halaman & gambar. Fokus langsung di tombol **Putar ulang**, jadi cukup tekan Enter untuk mendengar lagi.
+- **Hapus (RF-16):** satu per satu, atau **Hapus semua riwayat** — keduanya dengan konfirmasi. Backend hanya menghapus semua
+  bila badan permintaan berisi `{"semua": true}`, untuk mencegah terhapus tanpa sengaja.
+
+### Pengaturan (RF-17, RF-18, RF-19)
+
+- **Bahasa (RF-18):** Indonesia atau English; dipakai untuk permintaan deskripsi berikutnya (tes e2e membuktikan AI menerima `lang=en`).
+- **Pintasan (RF-18):** yang berlaku dibaca dari Chrome. Chrome hanya mengizinkan pintasan diubah di
+  `chrome://extensions/shortcuts`, jadi halaman menyediakan tombol ke sana. Kombinasi yang bentrok dengan Chrome/NVDA ditolak.
+- **Suara (RF-19):** kecepatan (semua pengguna — pengguna pembaca layar sangat bergantung pada kecepatan), nada & jenis suara
+  (Premium), tombol **Coba suara**. Penggeser mengumumkan nilai yang mudah dipahami, mis. "1,5 kali".
+
+### Laporan (RF-20)
+
+```mermaid
+flowchart TD
+    A[Tombol L di panel / Laporkan di Riwayat] --> B[Pilih alasan:<br/>objek salah · tulisan salah dibaca ·<br/>kurang lengkap · jenis salah ·<br/>tidak pantas · lainnya]
+    B --> C[Catatan opsional<br/>wajib bila Lainnya]
+    C --> D[POST /reports]
+    D --> E{Riwayat milik pengguna<br/>& masih terlihat?}
+    E -- tidak --> F[404]
+    E -- ya --> G[Simpan: kategori + alasan<br/>status baru]
+    G --> H[Dashboard Admin: tinjau & tindak lanjut]
+```
+
+Pilihan alasan membuat laporan **bisa dihitung** (mis. "berapa persen laporan karena tulisan salah dibaca"), yang nanti berguna
+untuk mengevaluasi model di Tahap 4.
+
+### Premium (RF-23)
+
+Halaman Premium menampilkan paket Bulanan Rp15.000 / 30 hari beserta manfaatnya (`GET /plans`, tanpa login). Pembayaran
+sungguhan berada di luar target 70% (mode simulasi tetap tersedia untuk demo).
+
+### Bukti (tes)
+
+| RF | Backend (`npm test`) | E2E (`e2e/run.mjs`) |
+|---|---|---|
+| RF-02/03 | `UC-AKUN-02`, `UC-AKUN-03`, `RF-03: ubah email …` | `UC-AKUN-02`, `UC-AKUN-03`, `RF-03: ubah email …` |
+| RF-04 | `UC-AKUN-04: … "HAPUS" … token dicabut`, `token akun terhapus …` | `RF-04: hapus akun permanen …` |
+| RF-14..16 | `UC-RWY-02..04`, `RF-15`, `RF-16: hapus semua …` | `UC-RWY-02..04`, `RF-15: detail …`, `RF-16: hapus SEMUA …` |
+| RF-17..19 | `UC-AKS-01..03`, `RF-17: pengaturan milik masing-masing …` | `UC-AKS-01..03`, `RF-18: bahasa English …`, `Coba suara` |
+| RF-20 | `UC-LAP-01`, `RF-20: pilih alasan + catatan …` | `RF-20: kirim laporan dari panel`, `RF-20 dari halaman Riwayat` |
+| RF-23 | `GET /plans` (premiumAdmin.test.js) | `UC-PRM-01: paket Bulanan Rp15.000 / 30 hari tampil` |

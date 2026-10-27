@@ -90,7 +90,7 @@ Semua endpoint bertanda **user** wajib `Authorization: Bearer <JWT>` (didapat da
 | Riwayat | `GET /history/:id` · `DELETE /history/:id` | user | RF-15, RF-16 | hanya milik sendiri (selain itu `404`); item memuat `jenis_gambar`, `provider` |
 | Riwayat | `DELETE /history` `{semua: true}` | user | RF-16 | hapus seluruh riwayat sendiri (termasuk yang disembunyikan untuk Gratis) → `{dihapus}` |
 | Pengaturan | `GET /settings` · `PUT /settings` | user | RF-17..19 | `403 PREMIUM_REQUIRED`, `409 SHORTCUT_CONFLICT` |
-| Laporan | `POST /reports` `{riwayat_id, alasan}` | user | RF-20 | |
+| Laporan | `POST /reports` `{riwayat_id, kategori, catatan?}` | user | RF-20 | `kategori`: `objek_salah`, `teks_salah`, `kurang_lengkap`, `jenis_salah`, `tidak_pantas`, `lainnya` (wajib `catatan`). Klien lama `{riwayat_id, alasan}` tetap diterima. Hanya riwayat milik sendiri. |
 | Paket | `GET /plans` | – | RF-23 | `{items, mode_pembayaran}` |
 | Pembayaran | `POST /payments` `{paket_id}` | user | RF-24, RF-25 | → `{order_id, redirect_url, snap_token, mode_pembayaran}` |
 | Pembayaran | `GET /payments/:orderId` | user | RF-25 | bila masih menunggu, status dicek langsung ke Midtrans |

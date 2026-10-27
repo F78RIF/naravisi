@@ -1,19 +1,28 @@
 // Riwayat deskripsi: RF-14..RF-16, RF-20 (UC-RWY-02..04, UC-LAP-01)
 // Daftar (Gratis 7 hari, Premium semua; berhalaman) · detail ?id=N · putar ulang · hapus satu & semua.
 import { apiFetch } from '../shared/config.js';
-import { $, el, fmtDateTime, jenisLabel, providerLabel, requireSession, say, sayError, shell, speak, stopSpeaking } from './common.js';
+import { $, el, fmtDateTime, jenisLabel, providerLabel, REPORT_CATEGORIES, requireSession, say, sayError, shell, speak, stopSpeaking } from './common.js';
 
 const detailId = new URLSearchParams(location.search).get('id');
 shell('riwayat', detailId ? 'Detail riwayat' : 'Riwayat deskripsi');
 const state = { page: 1, limit: 10 };
 
+// UC-LAP-01 / RF-20: pilih alasan + catatan (wajib untuk "Lainnya").
 function reportForm(item, holder) {
+  if (holder.querySelector('form')) {
+    holder.querySelector('select').focus();
+    return;
+  }
   const id = `alasan-${item.riwayat_id}`;
+  const kategori = el('select', { id: `kategori-${item.riwayat_id}` },
+    el('option', { value: '' }, 'Pilih alasan…'), REPORT_CATEGORIES.map(([v, l]) => el('option', { value: v }, l)));
   const area = el('textarea', { id, rows: 3, maxlength: 1000 });
   const form = el(
     'form',
-    { class: 'stack' },
-    el('label', { for: id }, 'Apa yang tidak akurat dari deskripsi ini?'),
+    { class: 'stack', novalidate: true },
+    el('label', { for: kategori.id }, 'Apa yang salah dari deskripsi ini?'),
+    kategori,
+    el('label', { for: id }, 'Catatan (opsional; wajib bila memilih Lainnya)'),
     area,
     el(
       'div',
@@ -24,13 +33,21 @@ function reportForm(item, holder) {
   );
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!area.value.trim()) {
-      say('Alasan pelaporan wajib diisi.', 'error');
+    if (!kategori.value) {
+      say('Pilih alasan pelaporan terlebih dahulu.', 'error');
+      kategori.focus();
+      return;
+    }
+    if (kategori.value === 'lainnya' && area.value.trim().length < 3) {
+      say('Untuk alasan "Lainnya", tuliskan apa yang salah di catatan.', 'error');
       area.focus();
       return;
     }
     try {
-      await apiFetch('/reports', { method: 'POST', body: { riwayat_id: item.riwayat_id, alasan: area.value } });
+      await apiFetch('/reports', {
+        method: 'POST',
+        body: { riwayat_id: item.riwayat_id, kategori: kategori.value, catatan: area.value.trim() || undefined },
+      });
       form.remove();
       say('Terima kasih. Laporan Anda sudah dikirim dan akan ditinjau Admin.', 'ok');
     } catch (err) {
@@ -38,7 +55,7 @@ function reportForm(item, holder) {
     }
   });
   holder.append(form);
-  area.focus();
+  kategori.focus();
 }
 
 /** Tombol bersama di daftar & detail. */

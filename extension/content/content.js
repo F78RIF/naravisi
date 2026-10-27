@@ -408,8 +408,10 @@
     .action { margin: 10px 14px 4px; }
     .report { display: grid; gap: 6px; margin-top: 12px; }
     .report label { font-weight: 700; font-size: 15px; }
-    .report textarea { font: inherit; font-size: 15px; min-height: 88px; padding: 8px 10px; color: var(--nv-ink);
-      background: var(--nv-paper); border: 2px solid var(--nv-field); border-radius: 10px; resize: vertical; }
+    .report textarea, .report select { font: inherit; font-size: 15px; padding: 8px 10px; color: var(--nv-ink);
+      background: var(--nv-paper); border: 2px solid var(--nv-field); border-radius: 10px; }
+    .report textarea { min-height: 88px; resize: vertical; }
+    .report select { min-height: 44px; }
     .help { margin: 0; padding: 8px 14px; font-size: 13px; line-height: 1.7; color: var(--nv-ink-muted); border-top: 1px solid var(--nv-line); }
     kbd { font: 12px ui-monospace, Consolas, monospace; color: var(--nv-ink); border: 1px solid currentColor; border-bottom-width: 2px; border-radius: 5px; padding: 0 4px; }
     @media (forced-colors: active) {
@@ -417,6 +419,18 @@
       :focus-visible { outline-color: Highlight; box-shadow: none; }
     }
   `;
+
+  // Pilihan alasan laporan (RF-20) — sama dengan KATEGORI_LAPORAN di backend/src/services/reportService.js.
+  const REPORT_CATEGORIES = [
+    ['objek_salah', 'Objek atau orang disebut salah'],
+    ['teks_salah', 'Tulisan di gambar salah dibaca'],
+    ['kurang_lengkap', 'Deskripsi kurang lengkap'],
+    ['jenis_salah', 'Jenis gambar salah'],
+    ['tidak_pantas', 'Bahasa tidak pantas atau menyinggung'],
+    ['lainnya', 'Lainnya'],
+  ];
+  // Teks statis milik extension (bukan data halaman) → aman untuk kerangka innerHTML panel.
+  const REPORT_OPTIONS = ['<option value="">Pilih alasan…</option>', ...REPORT_CATEGORIES.map(([v, l]) => `<option value="${v}">${l}</option>`)].join('');
 
   // Logo & ikon tutup: SVG statis milik extension sendiri (tidak ada data halaman di dalamnya).
   const LOGO_SVG = `<svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true" focusable="false">
@@ -470,7 +484,9 @@
             <button type="button" data-act="report">Laporkan</button>
           </div>
           <form class="report" id="nv-report" hidden>
-            <label for="nv-reason">Apa yang tidak akurat dari deskripsi ini?</label>
+            <label for="nv-kategori">Apa yang salah dari deskripsi ini?</label>
+            <select id="nv-kategori">${REPORT_OPTIONS}</select>
+            <label for="nv-reason">Catatan (opsional; wajib bila memilih Lainnya)</label>
             <textarea id="nv-reason" rows="3" maxlength="1000"></textarea>
             <div class="controls">
               <button type="submit">Kirim laporan</button>
@@ -1028,8 +1044,9 @@
     }
     const form = $('#nv-report');
     form.hidden = false;
+    $('#nv-kategori').value = '';
     $('#nv-reason').value = '';
-    $('#nv-reason').focus();
+    $('#nv-kategori').focus();
   }
 
   function closeReport() {
@@ -1040,14 +1057,20 @@
   async function onReportSubmit(event) {
     if (event.target.id !== 'nv-report') return;
     event.preventDefault();
-    const alasan = $('#nv-reason').value.trim();
-    if (!alasan) {
-      setStatus('Alasan pelaporan wajib diisi sebelum laporan dikirim.', 'error');
+    const kategori = $('#nv-kategori').value;
+    const catatan = $('#nv-reason').value.trim();
+    if (!kategori) {
+      setStatus('Pilih alasan pelaporan terlebih dahulu.', 'error');
+      $('#nv-kategori').focus();
+      return;
+    }
+    if (kategori === 'lainnya' && catatan.length < 3) {
+      setStatus('Untuk alasan "Lainnya", tuliskan apa yang salah di catatan.', 'error');
       $('#nv-reason').focus();
       return;
     }
     try {
-      const res = await chrome.runtime.sendMessage({ type: 'NV_REPORT', riwayatId: state.current.riwayatId, alasan });
+      const res = await chrome.runtime.sendMessage({ type: 'NV_REPORT', riwayatId: state.current.riwayatId, kategori, catatan });
       if (!res?.ok) throw new Error(res?.message || 'Laporan gagal dikirim.');
       $('#nv-report').hidden = true;
       setStatus('Terima kasih. Laporan Anda sudah dikirim dan akan ditinjau Admin.');
@@ -1091,7 +1114,7 @@
   function onKeyDown(event) {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     const tag = event.target?.tagName;
-    if (tag === 'TEXTAREA' || tag === 'INPUT') {
+    if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();

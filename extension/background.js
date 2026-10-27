@@ -439,9 +439,10 @@ async function requestDescription({ src, dataUrl, pageUrl, auto, context }, send
   return data;
 }
 
-async function sendReport({ riwayatId, alasan }) {
+async function sendReport({ riwayatId, kategori, catatan }) {
+  const text = (v) => (typeof v === 'string' ? v.slice(0, 1000) : undefined);
   try {
-    return await apiFetch('/reports', { method: 'POST', body: { riwayat_id: riwayatId, alasan } });
+    return await apiFetch('/reports', { method: 'POST', body: { riwayat_id: riwayatId, kategori: text(kategori), catatan: text(catatan) || undefined } });
   } catch (err) {
     throw new NvError(err.code || 'SERVER_ERROR', err.message);
   }

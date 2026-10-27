@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS laporan_deskripsi (
   riwayat_id         INT NOT NULL,
   user_id            INT NOT NULL,
   admin_id           INT NULL,
+  kategori           VARCHAR(30) NULL,
   alasan             TEXT NOT NULL,
   status_laporan     ENUM('baru','ditinjau') NOT NULL DEFAULT 'baru',
   tindak_lanjut      TEXT NULL,

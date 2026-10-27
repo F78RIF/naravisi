@@ -2,22 +2,50 @@ import { Errors } from '../lib/errors.js';
 import { sqlToIso, toSqlDateTime } from '../lib/time.js';
 import * as v from '../lib/validate.js';
 
+/** Pilihan alasan (RF-20). Kunci disimpan di kolom `kategori`; label + catatan disimpan di `alasan`. */
+export const KATEGORI_LAPORAN = {
+  objek_salah: 'Objek atau orang disebut salah',
+  teks_salah: 'Tulisan di gambar salah dibaca',
+  kurang_lengkap: 'Deskripsi kurang lengkap',
+  jenis_salah: 'Jenis gambar salah',
+  tidak_pantas: 'Bahasa tidak pantas atau menyinggung',
+  lainnya: 'Lainnya',
+};
+
 /** Laporan deskripsi tidak akurat: RF-20..RF-22 (UC-LAP-01..03). */
 export function createReportService({ db, clock, history }) {
-  // UC-LAP-01
+  /** {kategori, catatan?} (baru) atau {alasan} (klien lama) → { kategori, alasan }. */
+  function reason(body) {
+    if (body?.kategori === undefined && body?.alasan !== undefined) {
+      return { kategori: null, alasan: v.str(body, 'alasan', { label: 'Alasan pelaporan', min: 3, max: 1000 }) };
+    }
+    if (body?.kategori === undefined || body.kategori === null || body.kategori === '') {
+      throw Errors.validation('kategori', 'Pilih alasan pelaporan terlebih dahulu.');
+    }
+    const kategori = v.oneOf(body, 'kategori', Object.keys(KATEGORI_LAPORAN), { label: 'Alasan pelaporan' });
+    const catatan = v.str(body, 'catatan', { label: 'Catatan', min: 3, max: 1000, optional: true });
+    if (kategori === 'lainnya' && !catatan) {
+      throw Errors.validation('catatan', 'Untuk alasan "Lainnya", tuliskan apa yang salah di catatan.');
+    }
+    const label = KATEGORI_LAPORAN[kategori];
+    return { kategori, alasan: catatan ? `${label}: ${catatan}` : label };
+  }
+
+  // UC-LAP-01 — hanya riwayat milik sendiri yang masih terlihat (findVisible → 404 bila bukan miliknya)
   async function create(userId, premium, body) {
     const riwayat = await history.findVisible(userId, premium, body?.riwayat_id);
-    const alasan = v.str(body, 'alasan', { label: 'Alasan pelaporan', min: 3, max: 1000 });
+    const { kategori, alasan } = reason(body);
     const res = await db.run(
-      'INSERT INTO laporan_deskripsi (riwayat_id, user_id, alasan, status_laporan, tanggal_laporan) VALUES (?, ?, ?, ?, ?)',
-      [riwayat.riwayat_id, userId, alasan, 'baru', toSqlDateTime(clock.now())],
+      'INSERT INTO laporan_deskripsi (riwayat_id, user_id, kategori, alasan, status_laporan, tanggal_laporan) VALUES (?, ?, ?, ?, ?, ?)',
+      [riwayat.riwayat_id, userId, kategori, alasan, 'baru', toSqlDateTime(clock.now())],
     );
-    return { laporan_id: res.insertId, status_laporan: 'baru' };
+    return { laporan_id: res.insertId, status_laporan: 'baru', kategori };
   }
 
   const mapRow = (r) => ({
     laporan_id: r.laporan_id,
     status_laporan: r.status_laporan,
+    kategori: r.kategori ?? null,
     alasan: r.alasan,
     tindak_lanjut: r.tindak_lanjut,
     tanggal_laporan: sqlToIso(r.tanggal_laporan),
