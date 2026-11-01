@@ -6,10 +6,11 @@ Versi kode: 1.0.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7 dan 16 Oktob
 
 | Suite | Lokasi | Jumlah | Hasil | Cara menjalankan |
 |---|---|---|---|---|
-| Unit + integrasi API (backend) | `backend/test/` | 85 tes | **85 lulus** | `cd backend && npm test` |
-| Layanan AI (logika) | `ai-service/tests/test_service.py` | 11 tes | **11 lulus** | `cd ai-service && python -m pytest` |
-| Layanan AI (endpoint FastAPI) | `ai-service/tests/test_api.py` | 4 tes | **4 lulus** | idem |
-| End-to-end extension + backend + Admin | `e2e/run.mjs` | 63 skenario | **63 lulus** | `cd e2e && npm install && npm test` |
+| Unit + integrasi API (backend) | `backend/test/` | 101 tes | **101 lulus** | `cd backend && npm test` |
+| Layanan AI (logika, Gemini, endpoint, evaluasi) | `ai-service/tests/` | 85 tes + 13 subtes | **85 lulus** | `cd ai-service && .venv\Scripts\python -m pytest` |
+| End-to-end extension + backend + Admin | `e2e/run.mjs` | 112 skenario | **112 lulus** | `cd e2e && npm install && npm test` |
+
+Angka di atas dari jalan ulang 1 November 2026.
 
 Lingkungan uji otomatis: Chromium 141 (headless, extension dimuat), Node.js 22, basis data SQLite di memori dengan skema yang sama seperti MySQL, model AI dipalsukan (teks tetap). Yang **belum** tercakup otomatis — model AI asli, MySQL sungguhan, pembaca layar, suara nyata — diuji manual di bagian 4.
 
@@ -65,7 +66,7 @@ Legenda file: **A** = `backend/test/auth.test.js`, **D** = `describeQuotaHistory
 | RNF-01 | Antarmuka sederhana | Uji pengguna (M-05) | ⏳ manual |
 | RNF-02 | Kompatibel pembaca layar | Audit otomatis E2E (label, nama tombol, alt, live region) · M-03 NVDA | ✅ otomatis · ⏳ manual |
 | RNF-03 | Navigasi keyboard penuh | E: panel penuh keyboard, fokus kembali setelah Esc, tab Admin pakai panah | ✅ |
-| RNF-04 | Deskripsi ≤ 5 detik | M-01 dengan model BLIP asli: rata-rata 7,3 dtk, median 4,2 dtk (CPU) | ❌ belum tercapai di CPU |
+| RNF-04 | Deskripsi ≤ 5 detik | M-01 dengan model BLIP asli: rata-rata 7,3 dtk, median 4,2 dtk (CPU) · M-01 dataset 1 Nov 2026: BLIP p50 2,8 dtk (9/9 ≤ 5 dtk), Gemini p50 10,2 dtk / p95 20,3 dtk (0% ≤ 5 dtk) | ❌ belum tercapai (Gemini; BLIP di halaman berita) |
 | RNF-05 | Non-AI ≤ 2 detik | M-02: `GET /history`, `/me` maks. 23 ms | ✅ |
 | RNF-06 | Pesan error jelas | I, D: semua kode error berpesan Indonesia · E: kuota habis, belum masuk, server mati | ✅ |
 | RNF-07 | HTTPS/TLS | Konfigurasi deploy (di luar cakupan demo localhost) | 📄 didokumentasikan |
@@ -109,6 +110,30 @@ Lulus bila rata-rata ≤ 5 detik (setelah model termuat) dan ≥ 70% deskripsi d
 - Penyebab lambat: model di CPU berbagi prosesor dengan Chromium yang sedang memuat halaman berita berat (detik paling berat; menunggu halaman tenang 15 dtk menurunkan permintaan pertama dari 19 ke 11,6 dtk); unduhan gambar CDN detik ±1,5 dtk.
 - Temuan saat uji: permintaan pertama sempat **gagal** "Layanan AI terlalu lama merespons" (16–20 dtk > batas 15 dtk) → C-10.
 - Rekomendasi: torch versi CUDA untuk RTX 3050, atau layanan AI di mesin terpisah.
+
+**Hasil 1 November 2026 — dataset evaluasi (`eval/run_eval.py`)**. Dataset: 9 gambar (`eval/data/manifest.csv`), 9 punya
+deskripsi acuan yang ditulis manusia lewat `eval.annotate` **sebelum** melihat keluaran model. Semua angka disalin dari
+`eval/data/reports/laporan.md` (dihitung otomatis, tidak diisi tangan). Laptop 7,7 GB RAM, BLIP di CPU, Gemini lewat API
+(`gemini-3.5-flash`, tanpa few-shot). Waktu = lama panggilan model saja (bukan Enter → suara seperti tabel di atas).
+
+| Run | Keterangan | Berhasil | Jenis benar | p50 | p95 | ≤ 5 dtk | BLEU-1 | BLEU-4 | ROUGE-L | CIDEr-D |
+|---|---|---|---|---|---|---|---|---|---|---|
+| gemini-1 | `GEMINI_MAX_OUTPUT_TOKENS` 1024 (bawaan lama) | 2/9 | 100% (n=1) | 9769 ms | 12044 ms | 0% | 0.337 | 0.113 | 0.384 | 0.011 |
+| gemini-2 | bawaan baru 4096 (C-12) | 6/9 | 100% (n=6) | 10227 ms | 20340 ms | 0% | 0.347 | 0.078 | 0.340 | 0.355 |
+| blip-1 | BLIP base + MarianMT en→id | 9/9 | – (tidak memberi jenis) | 2796 ms | 4091 ms | 100% | 0.003 | 0.001 | 0.110 | 0.010 |
+
+- **Galat:** gemini-1 `MODEL_BAD_OUTPUT` × 7 (JSON terpotong, lihat C-12); gemini-2 `MODEL_BUSY` × 3 (img-0007..0009,
+  HTTP 429 kuota Gemini gratis habis — bukan galat format). Beberapa panggilan sempat mendapat 503/504 dari Google lalu
+  berhasil setelah diulang 1×.
+- **Penilaian manusia: belum ada** (0 gambar dinilai di fase "nilai" `eval.annotate`), jadi akurasi Y/Sebagian untuk
+  dataset ini **belum diketahui**; BLEU/ROUGE/CIDEr hanya pelengkap.
+- **Kecepatan (RNF-04):** BLIP memenuhi ≤ 5 dtk pada 9/9 gambar. Gemini **tidak** (0%; p50 ±10 dtk, p95 ±20 dtk) karena
+  model "berpikir" dulu. Gambar infografis padat teks paling lama (11–23 dtk).
+- **Pengamatan kualitatif (belum dinilai formal):** BLIP memberi kalimat pendek dan sering salah konteks ("Poster untuk
+  acara." untuk dua infografis berbeda; "idonia"). Gemini menyebut jenis, isi, dan membacakan seluruh teks di gambar —
+  untuk infografis teksnya sangat panjang (>1.500 karakter).
+- BLIP pertama kali **gagal dijalankan** (`DefaultCPUAllocator: not enough memory`, RAM bebas 1,5 GB); berhasil setelah
+  aplikasi lain ditutup.
 
 ### M-02 — Respons non-AI (RNF-05)
 Buka DevTools → Network, muat halaman Riwayat dan Profil 5 kali. Lulus bila semua permintaan API < 2 detik.
@@ -166,5 +191,6 @@ Pertanyaan penutup (skala 1–5): kemudahan, kejelasan deskripsi, kenyamanan sua
 | C-09 | (Fase 7) Video demo: rekaman terpotong saat extension aktif | `viewport: null` + tinggi jendela 860 di `e2e/demo.mjs` |
 | C-10 | (M-01) Permintaan pertama ke model asli gagal "Layanan AI terlalu lama merespons": 16–20 dtk > `AI_TIMEOUT_MS` 15 dtk saat model CPU berbagi prosesor dengan browser | `AI_TIMEOUT_MS` bawaan 25 dtk (masih di bawah batas extension 30 dtk) + pemanasan model saat layanan AI start. Pemanasan saja tidak cukup (diuji ulang) |
 | C-11 | (M-01) Thumbnail berita detik.com berupa gambar latar CSS sehingga tidak terdeteksi (3 dari 15 gambar); SVG ditolak | Pemindai mengenali `background-image`, SVG inline, dan `<img>` SVG; SVG diubah ke JPEG di dokumen offscreen |
+| C-12 | (M-01, 1 Nov 2026) Gemini menolak 7 dari 9 gambar dengan "Jawaban Gemini tidak sesuai format". Diagnosis: `gemini-3.5-flash` memakai token "berpikir" dari jatah `max_output_tokens` 1024 yang sama (979 berpikir + 30 jawaban → `finish_reason=MAX_TOKENS`, JSON terpotong 116 karakter). Dengan 4096: 1881 berpikir + 581 jawaban, `STOP`, JSON utuh | Bawaan `GEMINI_MAX_OUTPUT_TOKENS` 4096 (`app/config.py`, `app/gemini.py`, `.env.example`); log menyebut "terpotong (MAX_TOKENS)" bila terjadi lagi. Tes: `test_batas_token_bawaan_cukup_untuk_model_berpikir`, `test_jawaban_terpotong_max_tokens_dicatat_jelas`. Ulang uji: 6/9 berhasil, 3 sisanya 429 kuota |
 
 Evaluasi lengkap (cakupan, performa, keamanan, aksesibilitas): `docs/EVALUASI.md`.

@@ -100,6 +100,11 @@ def _blocked(response: Any) -> bool:
     return False
 
 
+def _truncated(response: Any) -> bool:
+    return any("MAX_TOKENS" in str(getattr(c, "finish_reason", "") or "").upper()
+               for c in getattr(response, "candidates", None) or [])
+
+
 class GeminiCaptioner:
     """Mendeskripsikan gambar langsung dalam bahasa Indonesia, terstruktur sesuai GeminiCaption."""
 
@@ -112,7 +117,7 @@ class GeminiCaptioner:
         model_name: str,
         client: Any | None = None,
         timeout_seconds: float = 15.0,
-        max_output_tokens: int = 1024,
+        max_output_tokens: int = 4096,
         thinking_budget: int | None = None,
         fewshot: list[dict] | None = None,
         retries: int = 1,
@@ -202,7 +207,11 @@ class GeminiCaptioner:
         try:
             parsed = GeminiCaption.model_validate_json(raw)
         except (ValidationError, ValueError) as exc:
-            log.warning("Jawaban Gemini tidak valid (%d karakter): %s", len(raw), exc.__class__.__name__)
+            if _truncated(response):
+                # Model "berpikir" memakai jatah max_output_tokens yang sama; bila habis, JSON terpotong.
+                log.warning("Jawaban Gemini terpotong (MAX_TOKENS, %d karakter); naikkan GEMINI_MAX_OUTPUT_TOKENS.", len(raw))
+            else:
+                log.warning("Jawaban Gemini tidak valid (%d karakter): %s", len(raw), exc.__class__.__name__)
             raise ProviderError("MODEL_BAD_OUTPUT", MSG_BAD_OUTPUT) from exc
 
         out = parsed.model_dump()

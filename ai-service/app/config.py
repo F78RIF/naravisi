@@ -20,7 +20,7 @@ class Settings:
     gemini_api_key: str = field(default="", repr=False)
     gemini_model: str = ""
     gemini_timeout_seconds: float = 15.0
-    gemini_max_output_tokens: int = 1024
+    gemini_max_output_tokens: int = 4096
     gemini_thinking_budget: int | None = None
     fallback_provider: str = "blip"
     fewshot_path: str = str(DEFAULT_FEWSHOT_PATH)
@@ -67,7 +67,7 @@ def load_settings() -> Settings:
         gemini_api_key=gemini_api_key,
         gemini_model=gemini_model,
         gemini_timeout_seconds=float(os.getenv("GEMINI_TIMEOUT_SECONDS", "15")),
-        gemini_max_output_tokens=int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024")),
+        gemini_max_output_tokens=int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "4096")),
         gemini_thinking_budget=_int_or_none("GEMINI_THINKING_BUDGET"),
         fallback_provider=fallback,
         fewshot_path=os.getenv("FEWSHOT_PATH", "").strip() or str(DEFAULT_FEWSHOT_PATH),

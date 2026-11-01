@@ -445,3 +445,58 @@ sudah menjadi contoh few-shot otomatis tidak ikut dinilai, supaya skornya tidak 
 | RF-23 | `premiumAdmin.test.js`: "RF-23: daftar paket publik …" · e2e: "RF-23: membuka daftar paket tidak membuat transaksi …" |
 | Baca berurutan | e2e: "baca berurutan TIDAK jalan di chrome://, halaman extension, file://, Incognito, domain dikecualikan", "alasan kuota tidak diumumkan berulang …", ditambah skenario Tahap 2 |
 | Dataset | `tests/test_eval_metrics.py` (nilai yang dihitung tangan), `test_eval_collect.py` (parser HTML, filter, robots.txt, jeda), `test_eval_pipeline.py` (predict mock → score → few-shot → prompt; alat anotasi) |
+
+---
+
+## Tahap 5 — Langkah 0: menuntaskan 70% (uji ulang + evaluasi model asli)
+
+### Ide besarnya
+
+Sebelum menambah fitur baru, semua tes dijalankan ulang dan kedua model AI diuji pada **dataset yang sama** dengan
+**jawaban acuan tulisan manusia**. Hasilnya dicatat apa adanya di `docs/PENGUJIAN.md` bagian M-01, termasuk yang gagal.
+
+### Alur evaluasi
+
+1. **Tulis acuan** (`python -m eval.annotate`, http://127.0.0.1:8765/acuan). Manusia menulis deskripsi ideal tiap gambar
+   *tanpa* melihat keluaran model, supaya acuannya tidak ikut-ikutan model. Tersimpan di `eval/data/references.csv`.
+2. **Prediksi** (`python -m eval.run_eval predict --provider gemini|blip --run <nama>`). Setiap gambar dikirim ke kode
+   layanan AI yang **sama dengan produksi** (tanpa cadangan, agar kegagalan terlihat). Satu baris per gambar, galat ikut
+   dicatat, ke `eval/data/predictions/<nama>.jsonl`.
+3. **Skor** (`python -m eval.run_eval score --runs ...`). Membandingkan prediksi dengan acuan: berapa yang berhasil,
+   jenis gambar benar, waktu p50/p95, % ≤ 5 detik, BLEU/ROUGE-L/CIDEr-D. Ditulis ke `eval/data/reports/laporan.md`.
+4. Angka laporan disalin ke `docs/PENGUJIAN.md` tanpa diubah.
+
+### Temuan: jawaban Gemini terpotong (C-12)
+
+Model Gemini versi baru "berpikir" dulu sebelum menjawab. Masalahnya, token untuk berpikir dan token untuk jawaban
+diambil dari **satu jatah yang sama** (`max_output_tokens`).
+
+```
+Jatah 1024 token:  [■■■■■■■■■■■■■■■■■■■ berpikir 979 ■■■■■■■■■■■■■■■■■■■][jawab 30] → habis!
+                   JSON terpotong: {"jenis": "foto", "ringkasan": "Seekor ...   → ditolak validasi
+
+Jatah 4096 token:  [■■■■■■■■■ berpikir 1881 ■■■■■■■■■][■■■ jawab 581 ■■■][ sisa ]  → STOP, JSON utuh
+```
+
+Karena JSON tidak lengkap, validator (`GeminiCaption`) menolaknya dan pengguna mendengar "Jawaban Gemini tidak sesuai
+format". Perbaikannya:
+
+- Bawaan `GEMINI_MAX_OUTPUT_TOKENS` dinaikkan dari 1024 ke **4096** (masih bisa diatur lewat `.env`).
+- Bila Gemini berhenti karena `MAX_TOKENS`, log sekarang menulis **"terpotong (MAX_TOKENS) … naikkan
+  GEMINI_MAX_OUTPUT_TOKENS"**, bukan sekadar "tidak valid", sehingga penyebabnya langsung terlihat.
+- Alur pengguna tidak berubah: bila Gemini tetap gagal, cadangan BLIP tetap dipakai seperti biasa.
+
+### Hal yang perlu diingat
+
+- Model yang berpikir lebih **lambat** (p50 ±10 dtk). RNF-04 (≤ 5 dtk) belum tercapai dengan Gemini; BLIP cepat tetapi
+  deskripsinya jauh lebih miskin.
+- Kuota Gemini gratis bisa habis di tengah evaluasi (429 → `MODEL_BUSY`); gambar itu tercatat sebagai galat, bukan dibuang.
+- BLIP di CPU butuh RAM lega; dengan RAM bebas 1,5 GB ia gagal memuat.
+
+### Bukti (tes)
+
+| Bagian | Tes |
+|---|---|
+| Bawaan 4096 & bisa diubah lewat env | `tests/test_gemini.py`: `test_batas_token_bawaan_cukup_untuk_model_berpikir` |
+| Log jelas saat terpotong | `tests/test_gemini.py`: `test_jawaban_terpotong_max_tokens_dicatat_jelas` |
+| Alur manual & pintasan tidak berubah | e2e: "ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc" |

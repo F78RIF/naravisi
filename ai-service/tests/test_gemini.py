@@ -306,6 +306,27 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(cfg.gemini_timeout_seconds, 15.0)
         self.assertEqual(cfg.gemini_thinking_budget, 0)
 
+    def test_batas_token_bawaan_cukup_untuk_model_berpikir(self):
+        # M-01: dengan 1024, gemini-3.5-flash memakai 979 token untuk berpikir → JSON terpotong (MAX_TOKENS).
+        env = {k: v for k, v in os.environ.items() if k != "GEMINI_MAX_OUTPUT_TOKENS"}
+        env.update(CAPTION_PROVIDER="gemini", GEMINI_API_KEY=KEY, GEMINI_MODEL=MODEL, GEMINI_THINKING_BUDGET="", FALLBACK_PROVIDER="")
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(load_settings().gemini_max_output_tokens, 4096)
+        with self.env(CAPTION_PROVIDER="gemini", GEMINI_API_KEY=KEY, GEMINI_MODEL=MODEL, GEMINI_MAX_OUTPUT_TOKENS="8192"):
+            self.assertEqual(load_settings().gemini_max_output_tokens, 8192)
+        client = FakeClient(response(answer()))
+        gemini(client).describe_structured(image(), None)
+        self.assertEqual(client.calls[0]["config"].max_output_tokens, 4096)
+
+    def test_jawaban_terpotong_max_tokens_dicatat_jelas(self):
+        client = FakeClient(response('{"jenis": "foto", "ringkasan": "Seekor', finish_reason="MAX_TOKENS"))
+        with self.assertLogs("naravisi.ai", level="WARNING") as logs:
+            with self.assertRaises(ProviderError) as ctx:
+                gemini(client).describe_structured(image(), None)
+        self.assertEqual(ctx.exception.code, "MODEL_BAD_OUTPUT")
+        self.assertIn("terpotong (MAX_TOKENS", "\n".join(logs.output))
+        self.assertIn("GEMINI_MAX_OUTPUT_TOKENS", "\n".join(logs.output))
+
     def test_cadangan_tidak_valid_ditolak(self):
         with self.env(CAPTION_PROVIDER="mock", FALLBACK_PROVIDER="gemini"):
             with self.assertRaisesRegex(ValueError, "FALLBACK_PROVIDER"):
