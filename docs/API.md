@@ -94,7 +94,7 @@ Semua endpoint bertanda **user** wajib `Authorization: Bearer <JWT>` (didapat da
 | Paket | `GET /plans` | – | RF-23 | `{items, mode_pembayaran}` |
 | Pembayaran | `POST /payments` `{paket_id}` | user | RF-24, RF-25 | → `{order_id, redirect_url, snap_token, mode_pembayaran}` |
 | Pembayaran | `GET /payments/:orderId` | user | RF-25 | bila masih menunggu, status dicek langsung ke Midtrans |
-| Pembayaran | `POST /payments/notification` | tanda tangan SHA-512 | RF-25 | webhook Midtrans |
+| Pembayaran | `POST /payments/notification` | tanda tangan SHA-512 | RF-25 | webhook Midtrans: tanda tangan → order & nominal dicocokkan dengan database → konfirmasi ulang Status API Midtrans; 403 di mode simulasi |
 | Langganan | `GET /me/subscription` | user | RF-26 | `{premium, berlaku_hingga, riwayat[]}` |
 | Admin | `GET /admin/users?q&page` · `POST /admin/users` | admin | RF-27, RF-28 | |
 | Admin | `GET/PATCH/DELETE /admin/users/:id` | admin | RF-29, RF-30 | tidak bisa menonaktifkan/menghapus diri sendiri |
@@ -102,4 +102,4 @@ Semua endpoint bertanda **user** wajib `Authorization: Bearer <JWT>` (didapat da
 
 Halaman HTML: `GET /admin/` (dashboard), `GET /pay/finish`, `GET|POST /pay/simulate/:orderId` (hanya mode simulasi).
 
-Kode error tambahan: `UNAUTHORIZED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `EMAIL_TAKEN`, `VALIDATION_ERROR` (+`details.field`), `NOT_FOUND`, `QUOTA_EXCEEDED`, `PREMIUM_REQUIRED`, `SHORTCUT_CONFLICT`, `PAYMENT_GATEWAY_ERROR`, `INVALID_SIGNATURE`.
+Kode error tambahan: `UNAUTHORIZED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `EMAIL_TAKEN`, `VALIDATION_ERROR` (+`details.field`), `NOT_FOUND`, `QUOTA_EXCEEDED`, `PREMIUM_REQUIRED`, `SHORTCUT_CONFLICT`, `PAYMENT_GATEWAY_ERROR`, `INVALID_SIGNATURE`, `PAYMENT_MISMATCH` (400: nominal/order notifikasi atau Status API ≠ database), `PAYMENT_UNCONFIRMED` (409: transaksi tidak dikenal Status API Midtrans).

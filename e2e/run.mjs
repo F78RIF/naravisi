@@ -1448,12 +1448,22 @@ try {
     assert.ok((await prem.locator('.plan .benefits li').count()) >= 1);
   });
 
-  await step('UC-PRM-02/03: beli → halaman bayar terbuka → bayar → akun Premium', async () => {
-    const [payTab] = await Promise.all([context.waitForEvent('page'), prem.getByRole('button', { name: 'Beli Premium Bulanan' }).click()]);
+  await step('UC-PRM-02/03 + RF-24: beli → halaman bayar SIMULASI berlabel jelas & lolos audit → bayar → akun Premium', async () => {
+    // RF-24: tombol beli membawa keterangan SIMULASI (aria-describedby → dibacakan NVDA setelah nama tombol).
+    const buyBtn = prem.getByRole('button', { name: 'Beli Premium Bulanan' });
+    const desc = await buyBtn.evaluate((b) => document.getElementById(b.getAttribute('aria-describedby'))?.textContent ?? '');
+    assert.match(desc, /^SIMULASI: .*tidak ada uang yang ditagih/);
+    const [payTab] = await Promise.all([context.waitForEvent('page'), buyBtn.click()]);
     await payTab.waitForLoadState();
     assert.match(payTab.url(), /\/pay\/simulate\//);
-    await payTab.getByRole('button', { name: 'Bayar (simulasi berhasil)' }).click();
-    await payTab.getByRole('status').filter({ hasText: 'Pembayaran berhasil' }).waitFor();
+    // RF-24: halaman bayar simulasi berlabel jelas di judul tab, h1, dan tiap tombol; lolos audit aksesibilitas.
+    assert.match(await payTab.title(), /^SIMULASI pembayaran/);
+    await payTab.getByRole('heading', { level: 1, name: /^SIMULASI — pembayaran Premium/ }).waitFor();
+    assert.deepEqual(await a11yAudit(payTab), []);
+    await prem.locator('#msg', { hasText: 'Halaman pembayaran SIMULASI dibuka' }).waitFor();
+    await payTab.getByRole('button', { name: 'SIMULASI: bayar berhasil' }).click();
+    await payTab.getByRole('status').filter({ hasText: 'SIMULASI: Pembayaran berhasil' }).waitFor();
+    assert.equal(await payTab.getByRole('button', { name: 'SIMULASI: pembayaran gagal' }).count(), 0);
     await payTab.close();
     await prem.bringToFront();
     await prem.getByRole('button', { name: 'Cek status pembayaran' }).click();

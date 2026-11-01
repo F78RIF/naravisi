@@ -109,14 +109,42 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
     });
   }
 
+  /**
+   * RF-25: data dari Midtrans hanya dipercaya bila order_id DAN nominalnya sama dengan transaksi di database kita.
+   * Nominal dibandingkan dalam sen ("15000.00" dari Midtrans = 15000 di database).
+   */
+  const toCents = (x) => {
+    const n = Number(x);
+    return Number.isFinite(n) ? Math.round(n * 100) : NaN;
+  };
+  const sameAmount = (a, b) => !Number.isNaN(toCents(a)) && toCents(a) === toCents(b);
+  const matches = (trx, n) => n?.order_id === trx.order_id && sameAmount(n.gross_amount, trx.jumlah);
+
   // UC-PRM-03 langkah 4: notifikasi dari Midtrans (webhook)
   async function handleNotification(body) {
+    // Mode simulasi tidak punya webhook: aktivasi simulasi lewat /pay/simulate (tanpa konfirmasi Midtrans).
     if (!midtrans.enabled) throw Errors.forbidden();
+    // 1. Tanda tangan: notifikasi benar-benar dibuat oleh pemegang server key.
     if (!midtrans.verifySignature(body)) throw Errors.invalidSignature();
-    const status = mapMidtransStatus(body);
+    // 2. Cocokkan dengan database: order harus ada dan nominalnya sama dengan harga yang tercatat saat pesanan dibuat.
+    const trx = await db.get('SELECT order_id, jumlah FROM transaksi WHERE order_id = ?', [String(body.order_id)]);
+    if (!trx) throw Errors.notFound('Transaksi');
+    if (!matches(trx, body)) {
+      console.warn(`[pembayaran] notifikasi ditolak: nominal ${body.gross_amount} ≠ ${trx.jumlah} untuk ${trx.order_id}`);
+      throw Errors.paymentMismatch();
+    }
+    if (!mapMidtransStatus(body)) return { diterima: true, diabaikan: true };
+    // 3. Konfirmasi ulang ke Status API Midtrans; status yang dipakai adalah jawaban Midtrans, bukan isi notifikasi.
+    const confirmed = await midtrans.getStatus(trx.order_id);
+    if (!confirmed) throw Errors.paymentUnconfirmed();
+    if (!matches(trx, confirmed)) {
+      console.warn(`[pembayaran] Status API tidak cocok dengan database untuk ${trx.order_id}`);
+      throw Errors.paymentMismatch();
+    }
+    const status = mapMidtransStatus(confirmed);
     if (!status) return { diterima: true, diabaikan: true };
-    await applyStatus(body.order_id, status, { metode: body.payment_type ?? null });
-    return { diterima: true };
+    await applyStatus(trx.order_id, status, { metode: confirmed.payment_type ?? null });
+    return { diterima: true, status_pembayaran: status };
   }
 
   /** Status transaksi milik pengguna. Bila masih menunggu, cek langsung ke Midtrans (berguna saat webhook tak bisa menjangkau localhost). */
@@ -126,7 +154,9 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
     if (trx.status_pembayaran === 'menunggu' && midtrans.enabled) {
       const n = await midtrans.getStatus(trx.order_id);
       const status = n && mapMidtransStatus(n);
-      if (status && status !== 'menunggu') {
+      if (status && status !== 'menunggu' && !matches(trx, n)) {
+        console.warn(`[pembayaran] Status API tidak cocok dengan database untuk ${trx.order_id}; status tidak diubah`);
+      } else if (status && status !== 'menunggu') {
         await applyStatus(trx.order_id, status, { metode: n.payment_type ?? null });
         trx = await db.get('SELECT * FROM transaksi WHERE order_id = ?', [trx.order_id]);
       }

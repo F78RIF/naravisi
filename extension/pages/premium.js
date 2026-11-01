@@ -32,7 +32,13 @@ function statusCard(sub) {
 }
 
 function planCard(plan, premium, mode) {
-  const btn = el('button', { type: 'button', class: 'primary', id: `buy-${plan.paket_id}` }, premium ? `Perpanjang ${plan.durasi_hari} hari` : `Beli Premium ${plan.nama_paket}`);
+  const hintId = `mode-${plan.paket_id}`;
+  // aria-describedby: NVDA membacakan keterangan mode (SIMULASI / Midtrans) tepat setelah nama tombol.
+  const btn = el(
+    'button',
+    { type: 'button', class: 'primary', id: `buy-${plan.paket_id}`, 'aria-describedby': hintId },
+    premium ? `Perpanjang ${plan.durasi_hari} hari` : `Beli Premium ${plan.nama_paket}`,
+  );
   btn.addEventListener('click', () => buy(plan, btn));
   return el(
     'section',
@@ -41,8 +47,8 @@ function planCard(plan, premium, mode) {
     el('p', { class: 'price' }, rupiah(plan.harga), el('small', {}, ` / ${plan.durasi_hari} hari`)),
     el('ul', { class: 'benefits' }, plan.manfaat.map((m) => el('li', {}, m))),
     mode === 'simulasi'
-      ? el('p', { class: 'hint' }, 'Server berjalan dalam mode simulasi pembayaran (demo, tidak ada tagihan).')
-      : el('p', { class: 'hint' }, 'Pembayaran diproses Midtrans: QRIS, e-wallet, atau transfer bank.'),
+      ? el('p', { class: 'hint', id: hintId }, el('strong', {}, 'SIMULASI: '), 'pembayaran demo, tidak ada uang yang ditagih.')
+      : el('p', { class: 'hint', id: hintId }, 'Pembayaran diproses Midtrans: QRIS, e-wallet, atau transfer bank.'),
     el('div', { class: 'row' }, btn),
   );
 }
@@ -61,18 +67,19 @@ async function buy(plan, btn) {
 }
 
 function showPending(pay) {
+  const sim = pay.mode_pembayaran === 'simulasi';
   const check = el('button', { type: 'button', id: 'check-payment', class: 'primary' }, 'Cek status pembayaran');
   const card = el(
     'section',
     { class: 'card', id: 'pending', 'aria-labelledby': 'pending-title' },
-    el('h2', { id: 'pending-title' }, 'Menunggu pembayaran'),
-    el('p', {}, `Halaman pembayaran untuk order ${pay.order_id} (${rupiah(pay.jumlah)}) sudah dibuka di tab baru. Selesaikan pembayaran di sana, lalu kembali ke halaman ini.`),
+    el('h2', { id: 'pending-title' }, sim ? 'Menunggu pembayaran SIMULASI' : 'Menunggu pembayaran'),
+    el('p', {}, `Halaman pembayaran${sim ? ' SIMULASI' : ''} untuk order ${pay.order_id} (${rupiah(pay.jumlah)}) sudah dibuka di tab baru. Selesaikan pembayaran di sana, lalu kembali ke halaman ini.`),
     el('p', { id: 'pay-status' }, `Status: ${STATUS_LABEL.menunggu}`),
     el('div', { class: 'row' }, check),
   );
   check.addEventListener('click', () => checkPayment(pay.order_id, true));
   $('content').prepend(card);
-  say('Halaman pembayaran dibuka di tab baru.');
+  say(sim ? 'Halaman pembayaran SIMULASI dibuka di tab baru. Tidak ada uang yang ditagih.' : 'Halaman pembayaran dibuka di tab baru.');
   clearInterval(pollTimer);
   const started = Date.now();
   pollTimer = setInterval(() => {

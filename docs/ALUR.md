@@ -500,3 +500,110 @@ format". Perbaikannya:
 | Bawaan 4096 & bisa diubah lewat env | `tests/test_gemini.py`: `test_batas_token_bawaan_cukup_untuk_model_berpikir` |
 | Log jelas saat terpotong | `tests/test_gemini.py`: `test_jawaban_terpotong_max_tokens_dicatat_jelas` |
 | Alur manual & pintasan tidak berubah | e2e: "ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc" |
+
+---
+
+## Tahap 6 — Langkah 1: Premium yang aman (RF-24, RF-25, RF-26)
+
+### Ide besarnya
+
+Server **tidak pernah percaya begitu saja** pada data pembayaran yang datang dari luar. Harga diambil dari database
+server, dan setiap kabar "sudah dibayar" diperiksa tiga kali sebelum akun dijadikan Premium.
+
+### RF-24 — Memilih paket: harga selalu dari server
+
+```
+Extension ──POST /payments { paket_id: 1, jumlah: 1 }──▶ Backend
+                                                        │  jumlah dari klien DIABAIKAN
+                                                        ▼
+                               SELECT harga FROM paket_premium WHERE paket_id = 1   → 15000
+                                                        │
+                               INSERT transaksi (order_id, jumlah = 15000, 'menunggu')
+                                                        │
+              mode sandbox ──▶ Snap Midtrans (gross_amount 15000)   mode simulasi ──▶ /pay/simulate/<order>
+```
+
+Klien hanya boleh memilih **paket mana**, bukan **berapa harganya**. Harga yang tercatat di tabel `transaksi` saat itu
+menjadi patokan semua pengecekan berikutnya.
+
+**Halaman bayar SIMULASI.** Bila `MIDTRANS_SERVER_KEY` kosong, server memakai halaman bayar buatan sendiri. Agar tidak
+ada yang mengira itu pembayaran sungguhan, kata **SIMULASI** dipasang di semua tempat yang mungkin dibacakan NVDA:
+
+| Tempat | Yang dibacakan |
+|---|---|
+| Judul tab (dibaca saat tab terbuka) | "SIMULASI pembayaran — NaraVisi" |
+| Judul halaman (`h1`, tombol H di NVDA) | "SIMULASI — pembayaran Premium (bukan pembayaran sungguhan)" |
+| Tiap tombol + keterangannya (`aria-describedby`) | "SIMULASI: bayar berhasil … Ini halaman SIMULASI … Tidak ada uang yang ditagih" |
+| Hasil (`role="status"`) | "SIMULASI: Pembayaran berhasil" |
+| Tombol beli di halaman Premium extension | "Beli Premium Bulanan" + keterangan "SIMULASI: pembayaran demo, tidak ada uang yang ditagih" |
+| Pesan setelah klik beli (`aria-live`) | "Halaman pembayaran SIMULASI dibuka di tab baru. Tidak ada uang yang ditagih." |
+
+Pita merah "SIMULASI" di atas halaman diberi `aria-hidden` karena hanya untuk mata; NVDA sudah mendengar kata yang sama
+dari judulnya, jadi tidak diucapkan dua kali.
+
+### RF-25 — Aktivasi: tiga lapis pemeriksaan webhook
+
+Midtrans memanggil `POST /api/v1/payments/notification` saat pembayaran berubah. Siapa pun bisa memanggil alamat itu,
+jadi isinya diperiksa berlapis:
+
+```mermaid
+flowchart TD
+    N[Notifikasi masuk] --> M{Mode simulasi?}
+    M -- ya --> X0[403: simulasi tidak punya webhook]
+    M -- tidak --> S{1. Tanda tangan SHA-512 benar?}
+    S -- tidak --> X1[403 INVALID_SIGNATURE]
+    S -- ya --> D{2. order_id ada di database?}
+    D -- tidak --> X2[404]
+    D -- ya --> A{nominal = jumlah di database?}
+    A -- tidak --> X3[400 PAYMENT_MISMATCH<br/>status tidak berubah]
+    A -- ya --> C{3. Tanya ulang Status API Midtrans}
+    C -- tidak dikenal --> X4[409 PAYMENT_UNCONFIRMED]
+    C -- order/nominal beda --> X3
+    C -- cocok --> U[Pakai status DARI MIDTRANS<br/>settlement → berhasil → langganan dibuat<br/>pending → tetap menunggu]
+```
+
+1. **Tanda tangan** membuktikan pengirimnya memegang server key. Dibandingkan dengan `timingSafeEqual` agar lama
+   pengecekan tidak membocorkan berapa huruf yang sudah benar.
+2. **Cocokkan dengan database.** Order harus ada, dan nominalnya harus sama dengan harga yang dicatat saat order dibuat.
+   Nominal dibandingkan dalam sen (`"15000.00"` dari Midtrans = `15000` di database). Ini menangkap pembayaran Rp1.000
+   untuk paket Rp15.000 → **"nominal dimanipulasi ditolak"**.
+3. **Konfirmasi ulang ke Status API.** Server bertanya langsung ke Midtrans, "order ini statusnya apa?". Yang dipakai
+   adalah **jawaban Midtrans**, bukan isi notifikasi. Jawaban itu juga dicocokkan lagi order & nominalnya.
+
+Hanya bila ketiganya lolos, status berubah. Status yang dipakai tetap status SRS (`menunggu`, `berhasil`, `gagal`,
+`kedaluwarsa`); penolakan tidak menambah status baru, transaksinya tetap `menunggu`.
+
+Galat 4xx/5xx membuat Midtrans mengirim ulang notifikasi nanti, jadi gangguan sementara (mis. Status API tidak bisa
+dihubungi → 502) tidak menghilangkan pembayaran yang sah.
+
+**Tanpa webhook (localhost).** Tombol "Cek status pembayaran" bertanya ke Status API dengan aturan pencocokan yang sama;
+bila nominalnya beda, status tidak diubah.
+
+**Mode simulasi** melewati langkah 3 karena tidak ada Midtrans: tombol di halaman SIMULASI langsung memanggil
+`applyStatus`, yang tetap idempoten (dibayar dua kali tidak menambah masa aktif).
+
+### RF-26 — Status & masa aktif
+
+Tidak berubah: Premium dihitung dari tabel `langganan` (ada langganan yang `tanggal_berakhir ≥ hari ini` WITA).
+Perpanjangan disambung setelah langganan aktif terakhir. Halaman Premium menampilkan "Status" dan "Berlaku hingga" dalam
+daftar definisi (`dl`) yang dibaca NVDA sebagai pasangan label–nilai.
+
+### Server key
+
+`MIDTRANS_SERVER_KEY` hanya dibaca dari `backend/.env` (tidak masuk git). Extension tidak pernah tahu kunci itu; ia
+hanya menerima `redirect_url` dan `mode_pembayaran`. Tes memastikan kunci tidak muncul di respons API mana pun.
+
+### Bukti (tes)
+
+| Aturan | Tes |
+|---|---|
+| Nominal dimanipulasi ditolak | `premiumAdmin.test.js`: "RF-25: nominal dimanipulasi ditolak (tanda tangan sah, nominal ≠ database) → tetap Gratis" |
+| Status API beda nominal | "RF-25: nominal notifikasi cocok tetapi Status API Midtrans berbeda → ditolak" |
+| Status API masih pending | "RF-25: notifikasi \"settlement\" tetapi Status API masih pending → tidak diaktifkan" |
+| Tidak dikenal Midtrans | "RF-25: transaksi tidak dikenal Status API Midtrans → 409, tidak diaktifkan" |
+| Order tak ada | "RF-25: order_id yang tidak ada di database → 404" |
+| Cek status manual | "RF-25: cek status manual juga menolak nominal Status API yang berbeda" |
+| Harga dari server | "harga selalu dari database server: jumlah/harga kiriman klien diabaikan" |
+| Server key | "server key Midtrans tidak pernah ikut dalam respons API" |
+| Label SIMULASI | `premiumAdmin.test.js` UC-PRM-02/03 · e2e: "UC-PRM-02/03 + RF-24: beli → halaman bayar SIMULASI berlabel jelas & lolos audit → bayar → akun Premium" |
+| Alur manual tetap | e2e: "ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc" |

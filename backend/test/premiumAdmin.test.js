@@ -41,11 +41,16 @@ describe('Premium — mode simulasi (UC-PRM-01..04)', () => {
 
     const page = await app.api('GET', `/pay/simulate/${pay.body.order_id}`);
     assert.equal(page.status, 200);
-    assert.match(page.body, /Mode simulasi/);
+    // RF-24: label SIMULASI jelas di judul tab, h1, kotak peringatan, dan setiap tombol.
+    assert.match(page.body, /<title>SIMULASI pembayaran/);
+    assert.match(page.body, /<h1>SIMULASI — pembayaran Premium/);
+    assert.match(page.body, /Tidak ada uang yang ditagih/);
+    const buttons = [...page.body.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1]);
+    assert.deepEqual(buttons, ['SIMULASI: bayar berhasil', 'SIMULASI: pembayaran gagal']);
     assert.match(page.body, /Rp15\.000/);
 
     const done = await app.api('POST', `/pay/simulate/${pay.body.order_id}`, { form: { hasil: 'berhasil' } });
-    assert.match(done.body, /Pembayaran berhasil/);
+    assert.match(done.body, /<h1 role="status">SIMULASI: Pembayaran berhasil/);
 
     const me = await app.api('GET', '/api/v1/me', { token: u.token });
     assert.equal(me.body.jenis_pengguna, 'Premium');
@@ -153,7 +158,7 @@ describe('Premium — Midtrans Sandbox (klien asli, HTTP palsu)', () => {
   it('notifikasi settlement valid → Premium (dan notifikasi ganda aman)', async () => {
     const u = await app.register();
     const pay = await app.api('POST', '/api/v1/payments', { token: u.token, body: { paket_id: 1 } });
-    const n = app.mtHttp.notification(pay.body.order_id, 'settlement');
+    const n = app.mtHttp.pay(pay.body.order_id, 'settlement');
     assert.equal((await app.api('POST', '/api/v1/payments/notification', { body: n })).status, 200);
     assert.equal((await app.api('POST', '/api/v1/payments/notification', { body: n })).status, 200);
     const sub = await app.api('GET', '/api/v1/me/subscription', { token: u.token });
@@ -177,9 +182,88 @@ describe('Premium — Midtrans Sandbox (klien asli, HTTP palsu)', () => {
   it('notifikasi expire → kedaluwarsa', async () => {
     const u = await app.register();
     const pay = await app.api('POST', '/api/v1/payments', { token: u.token, body: { paket_id: 1 } });
-    await app.api('POST', '/api/v1/payments/notification', { body: app.mtHttp.notification(pay.body.order_id, 'expire') });
+    await app.api('POST', '/api/v1/payments/notification', { body: app.mtHttp.pay(pay.body.order_id, 'expire') });
     const st = await app.api('GET', `/api/v1/payments/${pay.body.order_id}`, { token: u.token });
     assert.equal(st.body.status_pembayaran, 'kedaluwarsa');
+  });
+
+  // --- RF-25: webhook dicocokkan dengan database & dikonfirmasi ulang ke Status API ---------------
+  const buy = async () => {
+    const u = await app.register();
+    const pay = await app.api('POST', '/api/v1/payments', { token: u.token, body: { paket_id: 1 } });
+    return { u, orderId: pay.body.order_id };
+  };
+  const notify = (body) => app.api('POST', '/api/v1/payments/notification', { body });
+  const stateOf = async ({ u, orderId }) => ({
+    jenis: (await app.api('GET', '/api/v1/me', { token: u.token })).body.jenis_pengguna,
+    status: (await app.db.get('SELECT status_pembayaran AS s FROM transaksi WHERE order_id = ?', [orderId])).s,
+  });
+
+  it('RF-25: nominal dimanipulasi ditolak (tanda tangan sah, nominal ≠ database) → tetap Gratis', async () => {
+    const t = await buy();
+    // Pembayaran Rp1.000 untuk order yang di database berharga Rp15.000.
+    const res = await notify(app.mtHttp.pay(t.orderId, 'settlement', '1000.00'));
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'PAYMENT_MISMATCH');
+    assert.deepEqual(await stateOf(t), { jenis: 'Gratis', status: 'menunggu' });
+  });
+
+  it('RF-25: nominal notifikasi cocok tetapi Status API Midtrans berbeda → ditolak', async () => {
+    const t = await buy();
+    app.mtHttp.statuses.set(t.orderId, app.mtHttp.notification(t.orderId, 'settlement', '1000.00'));
+    const res = await notify(app.mtHttp.notification(t.orderId, 'settlement'));
+    assert.equal(res.body.error.code, 'PAYMENT_MISMATCH');
+    assert.deepEqual(await stateOf(t), { jenis: 'Gratis', status: 'menunggu' });
+  });
+
+  it('RF-25: notifikasi "settlement" tetapi Status API masih pending → tidak diaktifkan', async () => {
+    const t = await buy();
+    app.mtHttp.statuses.set(t.orderId, app.mtHttp.notification(t.orderId, 'pending'));
+    const res = await notify(app.mtHttp.notification(t.orderId, 'settlement'));
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status_pembayaran, 'menunggu');
+    assert.deepEqual(await stateOf(t), { jenis: 'Gratis', status: 'menunggu' });
+  });
+
+  it('RF-25: transaksi tidak dikenal Status API Midtrans → 409, tidak diaktifkan', async () => {
+    const t = await buy();
+    const res = await notify(app.mtHttp.notification(t.orderId, 'settlement')); // statuses kosong → 404 di Midtrans
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'PAYMENT_UNCONFIRMED');
+    assert.deepEqual(await stateOf(t), { jenis: 'Gratis', status: 'menunggu' });
+  });
+
+  it('RF-25: order_id yang tidak ada di database → 404', async () => {
+    const res = await notify(app.mtHttp.pay('NV-TIDAK-ADA', 'settlement'));
+    assert.equal(res.status, 404);
+  });
+
+  it('RF-25: cek status manual juga menolak nominal Status API yang berbeda', async () => {
+    const t = await buy();
+    app.mtHttp.statuses.set(t.orderId, app.mtHttp.notification(t.orderId, 'settlement', '1.00'));
+    const st = await app.api('GET', `/api/v1/payments/${t.orderId}`, { token: t.u.token });
+    assert.equal(st.body.status_pembayaran, 'menunggu');
+    assert.equal(st.body.langganan.premium, false);
+  });
+
+  it('harga selalu dari database server: jumlah/harga kiriman klien diabaikan', async () => {
+    const u = await app.register();
+    const pay = await app.api('POST', '/api/v1/payments', {
+      token: u.token,
+      body: { paket_id: 1, jumlah: 1, harga: 1, gross_amount: 1 },
+    });
+    assert.equal(pay.body.jumlah, 15000);
+    assert.equal(app.mtHttp.created.at(-1).body.transaction_details.gross_amount, 15000);
+    const row = await app.db.get('SELECT jumlah FROM transaksi WHERE order_id = ?', [pay.body.order_id]);
+    assert.equal(Number(row.jumlah), 15000);
+  });
+
+  it('server key Midtrans tidak pernah ikut dalam respons API', async () => {
+    const u = await app.register();
+    const pay = await app.api('POST', '/api/v1/payments', { token: u.token, body: { paket_id: 1 } });
+    const plans = await app.api('GET', '/api/v1/plans');
+    const st = await app.api('GET', `/api/v1/payments/${pay.body.order_id}`, { token: u.token });
+    for (const r of [pay, plans, st]) assert.doesNotMatch(JSON.stringify(r.body), new RegExp(KEY));
   });
 
   it('pemetaan status Midtrans', () => {

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { Errors } from '../lib/errors.js';
 
 /**
@@ -49,11 +49,12 @@ export function createMidtransClient({ serverKey, isProduction, fetchImpl = glob
 
   /** signature_key = SHA512(order_id + status_code + gross_amount + server_key) */
   function verifySignature(n) {
-    if (!n?.signature_key) return false;
-    const expected = createHash('sha512')
-      .update(`${n.order_id}${n.status_code}${n.gross_amount}${serverKey}`)
-      .digest('hex');
-    return expected === n.signature_key;
+    if (!enabled || typeof n?.signature_key !== 'string') return false;
+    const expected = Buffer.from(
+      createHash('sha512').update(`${n.order_id}${n.status_code}${n.gross_amount}${serverKey}`).digest('hex'),
+    );
+    const given = Buffer.from(n.signature_key);
+    return given.length === expected.length && timingSafeEqual(given, expected); // waktu konstan
   }
 
   return { enabled, createTransaction, getStatus, verifySignature };

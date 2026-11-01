@@ -102,4 +102,8 @@ export const Errors = {
     ),
   invalidSignature: () =>
     new AppError(403, 'INVALID_SIGNATURE', 'Tanda tangan notifikasi pembayaran tidak valid.'),
+  paymentMismatch: () =>
+    new AppError(400, 'PAYMENT_MISMATCH', 'Data pembayaran tidak cocok dengan transaksi. Pembayaran tidak diproses.'),
+  paymentUnconfirmed: () =>
+    new AppError(409, 'PAYMENT_UNCONFIRMED', 'Status pembayaran belum dapat dikonfirmasi ke Midtrans. Pembayaran tidak diproses.'),
 };

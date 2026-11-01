@@ -71,6 +71,12 @@ export function fakeMidtransHttp(serverKey) {
       ...extra,
     };
   };
+  /** Midtrans mencatat pembayaran ini (Status API menjawabnya) lalu mengirim notifikasi yang sama. */
+  state.pay = (orderId, transactionStatus = 'settlement', gross = '15000.00', extra = {}) => {
+    const n = state.notification(orderId, transactionStatus, gross, extra);
+    state.statuses.set(orderId, n);
+    return n;
+  };
   return state;
 }
 

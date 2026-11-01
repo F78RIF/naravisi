@@ -6,7 +6,7 @@ Versi kode: 1.0.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7 dan 16 Oktob
 
 | Suite | Lokasi | Jumlah | Hasil | Cara menjalankan |
 |---|---|---|---|---|
-| Unit + integrasi API (backend) | `backend/test/` | 101 tes | **101 lulus** | `cd backend && npm test` |
+| Unit + integrasi API (backend) | `backend/test/` | 109 tes | **109 lulus** | `cd backend && npm test` |
 | Layanan AI (logika, Gemini, endpoint, evaluasi) | `ai-service/tests/` | 85 tes + 13 subtes | **85 lulus** | `cd ai-service && .venv\Scripts\python -m pytest` |
 | End-to-end extension + backend + Admin | `e2e/run.mjs` | 112 skenario | **112 lulus** | `cd e2e && npm install && npm test` |
 
@@ -49,8 +49,8 @@ Legenda file: **A** = `backend/test/auth.test.js`, **D** = `describeQuotaHistory
 | RF-21 | Admin: daftar laporan | UC-LAP-02 | S · E: dashboard | ✅ |
 | RF-22 | Admin: ubah status laporan | UC-LAP-03 | S: tindak lanjut wajib, peninjau tercatat · E | ✅ |
 | RF-23 | Daftar paket Premium | UC-PRM-01 | P: Bulanan Rp15.000/30 hari · E | ✅ |
-| RF-24 | Memilih paket | UC-PRM-02 | P: paket tidak ada → 404 · E | ✅ |
-| RF-25 | Pembayaran & aktivasi Premium | UC-PRM-03 | P: simulasi, Midtrans (Snap, webhook, tanda tangan, cek status, idempoten, gagal, kedaluwarsa) · E: alur bayar lengkap · M: Sandbox asli | ✅ otomatis · ⏳ manual |
+| RF-24 | Memilih paket | UC-PRM-02 | P: paket tidak ada → 404; harga dari database, jumlah kiriman klien diabaikan; halaman bayar berlabel "SIMULASI" (judul tab, h1, tiap tombol) · E: label SIMULASI, keterangan tombol beli (aria-describedby), audit aksesibilitas halaman bayar | ✅ |
+| RF-25 | Pembayaran & aktivasi Premium | UC-PRM-03 | P: simulasi, Midtrans (Snap, webhook, tanda tangan, cek status, idempoten, gagal, kedaluwarsa); webhook dicocokkan dengan database ("nominal dimanipulasi ditolak", order tak dikenal → 404) dan dikonfirmasi ulang ke Status API (pending/404/nominal beda → tidak aktif); server key tidak ada di respons · E: alur bayar lengkap · M: Sandbox asli | ✅ otomatis · ⏳ manual |
 | RF-26 | Status & masa aktif langganan | UC-PRM-04 | P: perpanjangan disambung, kembali Gratis saat habis · E | ✅ |
 | RF-27 | Admin: tambah pengguna | UC-ADM-01 | P · E | ✅ |
 | RF-28 | Admin: daftar pengguna | UC-ADM-02 | P: daftar & cari · E | ✅ |
