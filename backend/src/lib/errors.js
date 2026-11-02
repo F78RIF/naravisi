@@ -26,6 +26,12 @@ export const Errors = {
   accountDisabled: () =>
     new AppError(403, 'ACCOUNT_DISABLED', 'Akun Anda dinonaktifkan. Hubungi admin NaraVisi.'),
   forbidden: () => new AppError(403, 'FORBIDDEN', 'Anda tidak memiliki akses ke fitur ini.'),
+  lastAdmin: () =>
+    new AppError(
+      409,
+      'LAST_ADMIN',
+      'Ini Admin aktif terakhir. Admin terakhir tidak dapat dihapus, diturunkan, atau dinonaktifkan. Tambahkan Admin lain terlebih dahulu.',
+    ),
   tooManyAttempts: (minutes) =>
     new AppError(
       429,

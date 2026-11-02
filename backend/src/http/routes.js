@@ -85,7 +85,7 @@ export function buildRoutes(s) {
     },
     {
       method: 'DELETE', path: '/api/v1/admin/users/:id', auth: 'admin',
-      handler: async ({ user, params }) => ok(await s.admin.deleteUser(user.id, params.id)),
+      handler: async ({ user, params, body }) => ok(await s.admin.deleteUser(user.id, params.id, body)),
     },
     { method: 'GET', path: '/api/v1/admin/reports', auth: 'admin', handler: async ({ query }) => ok(await s.reports.list(query)) },
     {

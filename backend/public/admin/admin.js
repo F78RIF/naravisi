@@ -269,26 +269,45 @@ $('user-form').addEventListener('submit', async (e) => {
   }
 });
 
+// RF-30: hapus pengguna wajib dikonfirmasi dengan mengetik email pengguna tersebut (diperiksa ulang di server).
 let pendingDelete = null;
 function confirmDelete(user) {
   pendingDelete = user;
   $('confirm-text').textContent = `Akun ${user.nama} (${user.email}) beserta riwayat, pengaturan, dan laporannya akan dihapus permanen. Data transaksi disimpan tanpa identitas.`;
+  $('confirm-email-hint').textContent = `Ketik ${user.email} lalu tekan Hapus permanen.`;
+  $('confirm-email').value = '';
+  $('confirm-email').removeAttribute('aria-invalid');
+  $('confirm-error').textContent = '';
   $('confirm-dialog').showModal();
+  $('confirm-email').focus();
 }
-$('confirm-dialog').addEventListener('close', async () => {
+function confirmFailed(message) {
+  $('confirm-error').textContent = message;
+  $('confirm-email').setAttribute('aria-invalid', 'true');
+  $('confirm-email').focus();
+}
+$('confirm-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
   const user = pendingDelete;
-  pendingDelete = null;
-  if ($('confirm-dialog').returnValue !== 'ok' || !user) {
-    toast('Penghapusan dibatalkan.');
+  if (!user) return;
+  const typed = $('confirm-email').value.trim();
+  if (typed.toLowerCase() !== user.email.toLowerCase()) {
+    confirmFailed(`Email tidak cocok. Ketik ${user.email} untuk menghapus.`);
     return;
   }
   try {
-    await api('DELETE', `/admin/users/${user.user_id}`);
+    await api('DELETE', `/admin/users/${user.user_id}`, { konfirmasi_email: typed });
+    pendingDelete = null;
+    $('confirm-dialog').close();
     toast(`Pengguna ${user.nama} berhasil dihapus.`);
     loadUsers();
   } catch (err) {
-    toast(err.message);
+    confirmFailed(err.message);
   }
+});
+$('confirm-dialog').addEventListener('close', () => {
+  if (pendingDelete) toast('Penghapusan dibatalkan.');
+  pendingDelete = null;
 });
 
 // ---------------------------------------------------------------------------

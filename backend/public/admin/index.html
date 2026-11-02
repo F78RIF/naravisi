@@ -116,12 +116,17 @@
 
   <!-- Konfirmasi hapus -->
   <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text">
-    <form method="dialog">
+    <form id="confirm-form" method="dialog" novalidate>
       <h2 id="confirm-title">Hapus pengguna?</h2>
       <p id="confirm-text"></p>
+      <label for="confirm-email">Ketik email pengguna untuk konfirmasi</label>
+      <input id="confirm-email" name="konfirmasi_email" type="email" autocomplete="off" spellcheck="false"
+             aria-describedby="confirm-email-hint confirm-error">
+      <p class="hint" id="confirm-email-hint"></p>
+      <p class="error" id="confirm-error" role="alert"></p>
       <div class="actions">
-        <button value="cancel" autofocus>Batal</button>
-        <button value="ok" class="danger">Hapus permanen</button>
+        <button type="button" data-close>Batal</button>
+        <button type="submit" class="danger">Hapus permanen</button>
       </div>
     </form>
   </dialog>

@@ -1623,10 +1623,31 @@ try {
     await adm.locator('#users-body tr', { hasText: 'Nonaktif' }).waitFor();
   });
 
-  await step('UC-ADM-04: hapus pengguna dengan konfirmasi', async () => {
+  await step('RF-30: hapus tanpa mengetik email yang benar ditolak; fokus kembali ke kolom, pesan dibacakan', async () => {
     await adm.getByRole('button', { name: 'Hapus Dewi Penguji' }).click();
+    const dlg = adm.locator('#confirm-dialog');
+    const field = dlg.getByLabel('Ketik email pengguna untuk konfirmasi');
+    assert.equal(await field.evaluate((el) => el === document.activeElement), true, 'fokus awal di kolom email');
+    assert.match(await dlg.locator('#confirm-email-hint').innerText(), /dewi@uji\.id/);
+    await field.fill('salah@uji.id');
+    await dlg.getByRole('button', { name: 'Hapus permanen' }).click();
+    await dlg.locator('[role="alert"]', { hasText: 'Email tidak cocok' }).waitFor();
+    assert.equal(await field.getAttribute('aria-invalid'), 'true');
+    assert.equal(await field.evaluate((el) => el === document.activeElement), true, 'fokus kembali ke kolom email');
+    assert.equal(await dlg.evaluate((d) => d.open), true);
+    assert.equal(Number((await backend.db.get("SELECT COUNT(*) AS n FROM users WHERE email = 'dewi@uji.id'")).n), 1);
+    assert.deepEqual(await a11yAudit(adm), []);
+    await dlg.getByRole('button', { name: 'Batal' }).click();
+    await adm.locator('#toast', { hasText: 'Penghapusan dibatalkan.' }).waitFor();
+  });
+
+  await step('UC-ADM-04: hapus pengguna dengan konfirmasi (ketik email)', async () => {
+    await adm.getByRole('button', { name: 'Hapus Dewi Penguji' }).click();
+    await adm.getByLabel('Ketik email pengguna untuk konfirmasi').fill('DEWI@uji.id');
     await adm.getByRole('button', { name: 'Hapus permanen' }).click();
     await adm.locator('#toast', { hasText: 'berhasil dihapus' }).waitFor();
+    assert.equal(await adm.locator('#confirm-dialog').evaluate((d) => d.open), false);
+    assert.equal(Number((await backend.db.get("SELECT COUNT(*) AS n FROM users WHERE email = 'dewi@uji.id'")).n), 0);
   });
 
   await step('dashboard pengguna lolos audit aksesibilitas', async () => assert.deepEqual(await a11yAudit(adm), []));

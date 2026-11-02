@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
+import { buildRoutes } from '../src/http/routes.js';
 import { mapMidtransStatus } from '../src/services/midtransClient.js';
 import { startTestApp } from './support/testApp.js';
 
@@ -335,8 +336,13 @@ describe('Admin — pengguna (UC-ADM-01..04)', () => {
     const u = await app.register();
     await app.describe(u.token);
     const pay = await app.api('POST', '/api/v1/payments', { token: u.token, body: { paket_id: 1 } });
-    const del = await app.api('DELETE', `/api/v1/admin/users/${u.user.user_id}`, { token: adminToken });
+    const del = await app.api('DELETE', `/api/v1/admin/users/${u.user.user_id}`, {
+      token: adminToken,
+      body: { konfirmasi_email: u.email },
+    });
     assert.equal(del.status, 200);
+    assert.equal(del.body.riwayat_dihapus, 1);
+    assert.equal(del.body.transaksi_dianonimkan, 1);
     const trx = await app.db.get('SELECT user_id FROM transaksi WHERE order_id = ?', [pay.body.order_id]);
     assert.equal(trx.user_id, null);
     const hist = await app.db.get('SELECT COUNT(*) AS n FROM riwayat_deskripsi WHERE user_id = ?', [u.user.user_id]);
@@ -348,5 +354,248 @@ describe('Admin — pengguna (UC-ADM-01..04)', () => {
     const res = await app.api('GET', '/admin/');
     assert.equal(res.status, 200);
     assert.match(String(res.body), /Dashboard Admin/);
+  });
+});
+
+describe('Admin — aturan RF-21/22/27..30 (Langkah 2)', () => {
+  let app;
+  let adminToken;
+  let adminId;
+  before(async () => {
+    app = await startTestApp();
+    adminToken = await app.loginAdmin();
+    adminId = (await app.api('GET', '/api/v1/me', { token: adminToken })).body.user_id;
+  });
+  after(() => app.close());
+
+  const count = async (sql, params = []) => Number((await app.db.get(sql, params)).n);
+  const userCount = (id) => count('SELECT COUNT(*) AS n FROM users WHERE user_id = ?', [id]);
+  const activeAdmins = () => count("SELECT COUNT(*) AS n FROM users WHERE peran = 'admin' AND status_akun = 'aktif'");
+
+  async function newAdmin(email) {
+    const res = await app.api('POST', '/api/v1/admin/users', {
+      token: adminToken,
+      body: { nama: `Admin ${email}`, email, kata_sandi: 'adminkedua1', peran: 'admin' },
+    });
+    assert.equal(res.status, 201);
+    const login = await app.api('POST', '/api/v1/auth/login', { body: { email, kata_sandi: 'adminkedua1' } });
+    return { id: res.body.user_id, token: login.body.token, email };
+  }
+
+  it('RNF-10: SETIAP rute /api/v1/admin dicek peran di server (pengguna → 403, tanpa login → 401)', async () => {
+    const routes = buildRoutes({});
+    const adminRoutes = routes.filter((r) => r.path.startsWith('/api/v1/admin'));
+    assert.ok(adminRoutes.length >= 7, `rute admin ditemukan: ${adminRoutes.length}`);
+    for (const r of adminRoutes) assert.equal(r.auth, 'admin', `${r.method} ${r.path} harus auth: 'admin'`);
+    for (const r of routes.filter((x) => x.auth === 'admin')) assert.match(r.path, /^\/api\/v1\/admin\//);
+
+    const u = await app.register();
+    const attack = {
+      nama: 'Penyusup',
+      email: 'x@uji.id',
+      kata_sandi: 'sandiku123',
+      peran: 'admin',
+      status_akun: 'nonaktif',
+      status_laporan: 'baru',
+      konfirmasi_email: 'admin@uji.id',
+    };
+    for (const r of adminRoutes) {
+      const path = r.path.replace(':id', String(adminId));
+      const body = r.method === 'GET' ? undefined : attack;
+      const asUser = await app.api(r.method, path, { token: u.token, body });
+      assert.equal(asUser.status, 403, `${r.method} ${path} sebagai pengguna`);
+      assert.equal(asUser.body.error.code, 'FORBIDDEN');
+      const anon = await app.api(r.method, path, { body });
+      assert.equal(anon.status, 401, `${r.method} ${path} tanpa login`);
+    }
+    // Percobaan di atas tidak mengubah apa pun.
+    assert.equal(await userCount(adminId), 1);
+    assert.equal(await activeAdmins(), 1);
+    assert.equal(await count("SELECT COUNT(*) AS n FROM users WHERE email = 'x@uji.id'"), 0);
+  });
+
+  it('RNF-10: peran dibaca dari database, bukan dari token — Admin yang diturunkan langsung ditolak (403)', async () => {
+    const b = await newAdmin('turun@uji.id');
+    assert.equal((await app.api('GET', '/api/v1/admin/users', { token: b.token })).status, 200);
+    const res = await app.api('PATCH', `/api/v1/admin/users/${b.id}`, { token: adminToken, body: { peran: 'pengguna' } });
+    assert.equal(res.status, 200);
+    assert.equal((await app.api('GET', '/api/v1/admin/users', { token: b.token })).status, 403);
+    assert.equal((await app.api('GET', '/api/v1/admin/reports', { token: b.token })).status, 403);
+  });
+
+  it('RF-30: hapus wajib konfirmasi dengan mengetik email pengguna (kosong/salah → 400, data tetap ada)', async () => {
+    const u = await app.register();
+    const path = `/api/v1/admin/users/${u.user.user_id}`;
+    const wrong = [undefined, {}, { konfirmasi_email: '' }, { konfirmasi_email: 'orang-lain@uji.id' }, { konfirmasi_email: 123 }];
+    for (const body of wrong) {
+      const res = await app.api('DELETE', path, { token: adminToken, body });
+      assert.equal(res.status, 400, JSON.stringify(body));
+      assert.equal(res.body.error.code, 'VALIDATION_ERROR');
+      assert.equal(res.body.error.details.field, 'konfirmasi_email');
+    }
+    assert.equal(await userCount(u.user.user_id), 1);
+    // Huruf besar/kecil dan spasi di tepi diabaikan.
+    const ok = await app.api('DELETE', path, { token: adminToken, body: { konfirmasi_email: `  ${u.email.toUpperCase()} ` } });
+    assert.equal(ok.status, 200);
+    assert.equal(await userCount(u.user.user_id), 0);
+  });
+
+  it('RF-30: Admin aktif terakhir tidak bisa dihapus, diturunkan, atau dinonaktifkan (409 LAST_ADMIN)', async () => {
+    // Dari luar, Admin terakhir hanya bisa disasar oleh Admin yang baru saja kehilangan haknya (lihat uji
+    // "bersamaan" di bawah). Di sini aturan diuji langsung di service dengan pelaku yang sudah tidak ada.
+    assert.equal(await activeAdmins(), 1);
+    const bekas = 999999;
+    await assert.rejects(app.services.admin.deleteUser(bekas, adminId, { konfirmasi_email: 'admin@uji.id' }), {
+      code: 'LAST_ADMIN',
+      status: 409,
+    });
+    await assert.rejects(app.services.admin.updateUser(bekas, adminId, { peran: 'pengguna' }), { code: 'LAST_ADMIN' });
+    await assert.rejects(app.services.admin.updateUser(bekas, adminId, { status_akun: 'nonaktif' }), { code: 'LAST_ADMIN' });
+    const row = await app.db.get('SELECT peran, status_akun FROM users WHERE user_id = ?', [adminId]);
+    assert.equal(row.peran, 'admin');
+    assert.equal(row.status_akun, 'aktif');
+    // Mengubah nama Admin terakhir tetap boleh.
+    assert.equal((await app.services.admin.updateUser(bekas, adminId, { nama: 'Admin Uji' })).peran, 'admin');
+  });
+
+  it('RF-30: Admin yang baru diturunkan tidak bisa lagi menurunkan Admin lain (403), tetap ada 1 Admin aktif', async () => {
+    const b = await newAdmin('kedua@uji.id');
+    const r1 = await app.api('PATCH', `/api/v1/admin/users/${b.id}`, { token: adminToken, body: { peran: 'pengguna' } });
+    const r2 = await app.api('PATCH', `/api/v1/admin/users/${adminId}`, { token: b.token, body: { peran: 'pengguna' } });
+    assert.deepEqual([r1.status, r2.status], [200, 403]);
+    assert.equal(await activeAdmins(), 1);
+  });
+
+  it('RF-30: Admin lain boleh dihapus selama masih ada Admin aktif', async () => {
+    const b = await newAdmin('keempat@uji.id');
+    const res = await app.api('DELETE', `/api/v1/admin/users/${b.id}`, { token: adminToken, body: { konfirmasi_email: b.email } });
+    assert.equal(res.status, 200);
+    assert.equal(await activeAdmins(), 1);
+  });
+
+  it('RF-30: hapus dalam SATU transaksi — bila langkah terakhir gagal, riwayat & transaksi tidak berubah', async () => {
+    const u = await app.register();
+    await app.describe(u.token);
+    const pay = await app.api('POST', '/api/v1/payments', { token: u.token, body: { paket_id: 1 } });
+    const realRun = app.db.run;
+    app.db.run = async function (sql, params) {
+      if (/^DELETE FROM users/.test(sql)) throw new Error('disk penuh (simulasi)');
+      return realRun.call(this, sql, params);
+    };
+    let res;
+    try {
+      res = await app.api('DELETE', `/api/v1/admin/users/${u.user.user_id}`, {
+        token: adminToken,
+        body: { konfirmasi_email: u.email },
+      });
+    } finally {
+      app.db.run = realRun;
+    }
+    assert.equal(res.status, 500);
+    assert.equal(await userCount(u.user.user_id), 1);
+    const hist = await count('SELECT COUNT(*) AS n FROM riwayat_deskripsi WHERE user_id = ?', [u.user.user_id]);
+    assert.equal(hist, 1, 'riwayat harus kembali (ROLLBACK)');
+    const trx = await app.db.get('SELECT user_id FROM transaksi WHERE order_id = ?', [pay.body.order_id]);
+    assert.equal(Number(trx.user_id), u.user.user_id, 'transaksi tidak boleh teranonimkan sebagian');
+  });
+
+  it('RF-30: laporan yang pernah ditinjau Admin yang dihapus tetap ada (peninjau dikosongkan)', async () => {
+    const b = await newAdmin('peninjau@uji.id');
+    const u = await app.register();
+    const d = await app.describe(u.token);
+    const rep = await app.api('POST', '/api/v1/reports', {
+      token: u.token,
+      body: { riwayat_id: d.body.riwayat_id, kategori: 'objek_salah' },
+    });
+    assert.equal(rep.status, 201);
+    const tinjau = await app.api('PATCH', `/api/v1/admin/reports/${rep.body.laporan_id}`, {
+      token: b.token,
+      body: { status_laporan: 'ditinjau', tindak_lanjut: 'Sudah dicek.' },
+    });
+    assert.equal(tinjau.body.peninjau.user_id, b.id);
+    const del = await app.api('DELETE', `/api/v1/admin/users/${b.id}`, { token: adminToken, body: { konfirmasi_email: b.email } });
+    assert.equal(del.status, 200);
+    const list = await app.api('GET', '/api/v1/admin/reports', { token: adminToken });
+    const item = list.body.items.find((x) => x.laporan_id === rep.body.laporan_id);
+    assert.equal(item.status_laporan, 'ditinjau');
+    assert.equal(item.peninjau, null);
+  });
+
+  it('RF-22: status laporan hanya "baru" atau "ditinjau" sesuai SRS; status lain ditolak', async () => {
+    const u = await app.register();
+    const d = await app.describe(u.token);
+    const rep = await app.api('POST', '/api/v1/reports', {
+      token: u.token,
+      body: { riwayat_id: d.body.riwayat_id, kategori: 'teks_salah' },
+    });
+    for (const status of ['selesai', 'ditolak', 'diproses', '']) {
+      const res = await app.api('PATCH', `/api/v1/admin/reports/${rep.body.laporan_id}`, {
+        token: adminToken,
+        body: { status_laporan: status, tindak_lanjut: 'x' },
+      });
+      assert.equal(res.status, 400, status);
+    }
+    const missing = await app.api('PATCH', '/api/v1/admin/reports/999999', { token: adminToken, body: { status_laporan: 'baru' } });
+    assert.equal(missing.status, 404);
+  });
+});
+
+describe('Admin — balapan: dua Admin terakhir saling menghapus/menurunkan bersamaan (RF-30)', () => {
+  // Kedua permintaan sudah lolos cek peran (keduanya Admin aktif saat itu), lalu masuk ke service bersamaan.
+  // Pemeriksaan "Admin terakhir" ada di dalam transaksi, jadi hanya satu yang boleh berhasil.
+  async function twoAdmins() {
+    const app = await startTestApp();
+    const token = await app.loginAdmin();
+    const a = (await app.api('GET', '/api/v1/me', { token })).body;
+    const res = await app.api('POST', '/api/v1/admin/users', {
+      token,
+      body: { nama: 'Admin Dua', email: 'dua@uji.id', kata_sandi: 'adminkedua1', peran: 'admin' },
+    });
+    return { app, a: { id: a.user_id, email: a.email }, b: { id: res.body.user_id, email: 'dua@uji.id' } };
+  }
+  const settle = (p) => p.then(() => 'ok', (e) => e.code);
+  const activeAdmins = async (app) =>
+    Number((await app.db.get("SELECT COUNT(*) AS n FROM users WHERE peran = 'admin' AND status_akun = 'aktif'")).n);
+
+  it('saling menurunkan → satu berhasil, satu LAST_ADMIN; tersisa tepat 1 Admin aktif', async () => {
+    const { app, a, b } = await twoAdmins();
+    try {
+      const results = await Promise.all([
+        settle(app.services.admin.updateUser(a.id, b.id, { peran: 'pengguna' })),
+        settle(app.services.admin.updateUser(b.id, a.id, { peran: 'pengguna' })),
+      ]);
+      assert.deepEqual(results.sort(), ['LAST_ADMIN', 'ok']);
+      assert.equal(await activeAdmins(app), 1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('saling menonaktifkan → satu berhasil, satu LAST_ADMIN', async () => {
+    const { app, a, b } = await twoAdmins();
+    try {
+      const results = await Promise.all([
+        settle(app.services.admin.updateUser(a.id, b.id, { status_akun: 'nonaktif' })),
+        settle(app.services.admin.updateUser(b.id, a.id, { status_akun: 'nonaktif' })),
+      ]);
+      assert.deepEqual(results.sort(), ['LAST_ADMIN', 'ok']);
+      assert.equal(await activeAdmins(app), 1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('saling menghapus → satu berhasil, satu LAST_ADMIN; tersisa tepat 1 Admin aktif', async () => {
+    const { app, a, b } = await twoAdmins();
+    try {
+      const results = await Promise.all([
+        settle(app.services.admin.deleteUser(a.id, b.id, { konfirmasi_email: b.email })),
+        settle(app.services.admin.deleteUser(b.id, a.id, { konfirmasi_email: a.email })),
+      ]);
+      assert.deepEqual(results.sort(), ['LAST_ADMIN', 'ok']);
+      assert.equal(await activeAdmins(app), 1);
+    } finally {
+      await app.close();
+    }
   });
 });

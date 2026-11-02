@@ -97,9 +97,9 @@ Semua endpoint bertanda **user** wajib `Authorization: Bearer <JWT>` (didapat da
 | Pembayaran | `POST /payments/notification` | tanda tangan SHA-512 | RF-25 | webhook Midtrans: tanda tangan → order & nominal dicocokkan dengan database → konfirmasi ulang Status API Midtrans; 403 di mode simulasi |
 | Langganan | `GET /me/subscription` | user | RF-26 | `{premium, berlaku_hingga, riwayat[]}` |
 | Admin | `GET /admin/users?q&page` · `POST /admin/users` | admin | RF-27, RF-28 | |
-| Admin | `GET/PATCH/DELETE /admin/users/:id` | admin | RF-29, RF-30 | tidak bisa menonaktifkan/menghapus diri sendiri |
+| Admin | `GET/PATCH/DELETE /admin/users/:id` | admin | RF-29, RF-30 | tidak bisa menonaktifkan/menghapus diri sendiri; Admin aktif terakhir tidak bisa dihapus/diturunkan/dinonaktifkan (409 `LAST_ADMIN`); `DELETE` wajib body `{konfirmasi_email}` = email pengguna itu, respons `{dihapus, riwayat_dihapus, transaksi_dianonimkan}` |
 | Admin | `GET /admin/reports?status` · `PATCH /admin/reports/:id` | admin | RF-21, RF-22 | `ditinjau` wajib `tindak_lanjut` |
 
 Halaman HTML: `GET /admin/` (dashboard), `GET /pay/finish`, `GET|POST /pay/simulate/:orderId` (hanya mode simulasi).
 
-Kode error tambahan: `UNAUTHORIZED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `EMAIL_TAKEN`, `VALIDATION_ERROR` (+`details.field`), `NOT_FOUND`, `QUOTA_EXCEEDED`, `PREMIUM_REQUIRED`, `SHORTCUT_CONFLICT`, `PAYMENT_GATEWAY_ERROR`, `INVALID_SIGNATURE`, `PAYMENT_MISMATCH` (400: nominal/order notifikasi atau Status API ≠ database), `PAYMENT_UNCONFIRMED` (409: transaksi tidak dikenal Status API Midtrans).
+Kode error tambahan: `UNAUTHORIZED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS`, `WRONG_PASSWORD`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `LAST_ADMIN` (409: Admin aktif terakhir), `EMAIL_TAKEN`, `VALIDATION_ERROR` (+`details.field`), `NOT_FOUND`, `QUOTA_EXCEEDED`, `PREMIUM_REQUIRED`, `SHORTCUT_CONFLICT`, `PAYMENT_GATEWAY_ERROR`, `INVALID_SIGNATURE`, `PAYMENT_MISMATCH` (400: nominal/order notifikasi atau Status API ≠ database), `PAYMENT_UNCONFIRMED` (409: transaksi tidak dikenal Status API Midtrans).

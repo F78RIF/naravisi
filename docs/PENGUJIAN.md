@@ -6,11 +6,11 @@ Versi kode: 1.0.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7 dan 16 Oktob
 
 | Suite | Lokasi | Jumlah | Hasil | Cara menjalankan |
 |---|---|---|---|---|
-| Unit + integrasi API (backend) | `backend/test/` | 109 tes | **109 lulus** | `cd backend && npm test` |
+| Unit + integrasi API (backend) | `backend/test/` | 121 tes | **121 lulus** | `cd backend && npm test` |
 | Layanan AI (logika, Gemini, endpoint, evaluasi) | `ai-service/tests/` | 85 tes + 13 subtes | **85 lulus** | `cd ai-service && .venv\Scripts\python -m pytest` |
-| End-to-end extension + backend + Admin | `e2e/run.mjs` | 112 skenario | **112 lulus** | `cd e2e && npm install && npm test` |
+| End-to-end extension + backend + Admin | `e2e/run.mjs` | 113 skenario | **113 lulus** | `cd e2e && npm install && npm test` |
 
-Angka di atas dari jalan ulang 1 November 2026.
+Angka di atas dari jalan ulang 2 November 2026 (Langkah 2 — Admin).
 
 Lingkungan uji otomatis: Chromium 141 (headless, extension dimuat), Node.js 22, basis data SQLite di memori dengan skema yang sama seperti MySQL, model AI dipalsukan (teks tetap). Yang **belum** tercakup otomatis — model AI asli, MySQL sungguhan, pembaca layar, suara nyata — diuji manual di bagian 4.
 
@@ -46,16 +46,16 @@ Legenda file: **A** = `backend/test/auth.test.js`, **D** = `describeQuotaHistory
 | RF-18 | Ubah bahasa & pintasan | UC-AKS-02 | S: normalisasi, bentrok, format salah · E | ✅ |
 | RF-19 | Ubah kecepatan, nada, jenis suara | UC-AKS-03 | S: Gratis kecepatan saja, Premium nada & suara · E: "Coba suara", terbuka setelah Premium | ✅ |
 | RF-20 | Melaporkan deskripsi | UC-LAP-01 | S: alasan wajib, milik sendiri · E: dari panel (tombol L) | ✅ |
-| RF-21 | Admin: daftar laporan | UC-LAP-02 | S · E: dashboard | ✅ |
-| RF-22 | Admin: ubah status laporan | UC-LAP-03 | S: tindak lanjut wajib, peninjau tercatat · E | ✅ |
+| RF-21 | Admin: daftar laporan | UC-LAP-02 | S · P: rute laporan wajib peran Admin (pengguna 403, tanpa login 401) · E: dashboard | ✅ |
+| RF-22 | Admin: ubah status laporan | UC-LAP-03 | S: tindak lanjut wajib, peninjau tercatat · P: hanya status SRS `baru`/`ditinjau` (lainnya 400), laporan tak ada 404, peninjau yang dihapus → laporan tetap ada · E | ✅ |
 | RF-23 | Daftar paket Premium | UC-PRM-01 | P: Bulanan Rp15.000/30 hari · E | ✅ |
 | RF-24 | Memilih paket | UC-PRM-02 | P: paket tidak ada → 404; harga dari database, jumlah kiriman klien diabaikan; halaman bayar berlabel "SIMULASI" (judul tab, h1, tiap tombol) · E: label SIMULASI, keterangan tombol beli (aria-describedby), audit aksesibilitas halaman bayar | ✅ |
 | RF-25 | Pembayaran & aktivasi Premium | UC-PRM-03 | P: simulasi, Midtrans (Snap, webhook, tanda tangan, cek status, idempoten, gagal, kedaluwarsa); webhook dicocokkan dengan database ("nominal dimanipulasi ditolak", order tak dikenal → 404) dan dikonfirmasi ulang ke Status API (pending/404/nominal beda → tidak aktif); server key tidak ada di respons · E: alur bayar lengkap · M: Sandbox asli | ✅ otomatis · ⏳ manual |
 | RF-26 | Status & masa aktif langganan | UC-PRM-04 | P: perpanjangan disambung, kembali Gratis saat habis · E | ✅ |
 | RF-27 | Admin: tambah pengguna | UC-ADM-01 | P · E | ✅ |
 | RF-28 | Admin: daftar pengguna | UC-ADM-02 | P: daftar & cari · E | ✅ |
-| RF-29 | Admin: ubah pengguna | UC-ADM-03 | P: nonaktifkan → login & token ditolak; tidak bisa nonaktifkan diri · E | ✅ |
-| RF-30 | Admin: hapus pengguna | UC-ADM-04 | P: riwayat terhapus, transaksi dianonimkan · E | ✅ |
+| RF-29 | Admin: ubah pengguna | UC-ADM-03 | P: nonaktifkan → login & token ditolak; tidak bisa nonaktifkan diri; Admin aktif terakhir tidak bisa diturunkan/dinonaktifkan (409 `LAST_ADMIN`, juga saat dua Admin saling menurunkan bersamaan); Admin yang diturunkan langsung ditolak (peran dibaca dari database) · E | ✅ |
+| RF-30 | Admin: hapus pengguna | UC-ADM-04 | P: konfirmasi dengan mengetik email pengguna (kosong/salah → 400); Admin aktif terakhir tidak bisa dihapus (409, juga saat saling menghapus bersamaan); riwayat terhapus + transaksi dianonimkan dalam satu transaksi database (gagal di tengah → semua batal) · E: email salah ditolak & dibacakan, email benar → terhapus | ✅ |
 
 **Cakupan: 30/30 RF memiliki tes otomatis.** Dua RF (RF-12, RF-25) masih butuh konfirmasi manual karena bergantung pada perangkat suara dan akun Midtrans.
 
@@ -72,7 +72,7 @@ Legenda file: **A** = `backend/test/auth.test.js`, **D** = `describeQuotaHistory
 | RNF-07 | HTTPS/TLS | Konfigurasi deploy (di luar cakupan demo localhost) | 📄 didokumentasikan |
 | RNF-08 | Sandi ter-hash | A: hash scrypt tidak memuat teks asli | ✅ |
 | RNF-09 | Autentikasi token | A: token palsu/kedaluwarsa ditolak | ✅ |
-| RNF-10 | Hak akses per peran | S, P: pengguna biasa ditolak di rute Admin; Premium-only di pengaturan | ✅ |
+| RNF-10 | Hak akses per peran | S, P: SETIAP rute `/api/v1/admin/*` diuji satu per satu (pengguna 403, tanpa login 401, tidak ada perubahan data); peran dibaca dari database di tiap permintaan; Premium-only di pengaturan | ✅ |
 | RNF-11 | Manifest V3 | `extension/manifest.json` · E: extension dimuat di Chromium | ✅ |
 | RNF-12 | Info jelas saat AI/internet mati | D: AI mati → 503 & kuota dikembalikan · E: server mati dibacakan | ✅ |
 | RNF-13 (baru) | File gambar tidak disimpan | Kode: `descriptionService` hanya menyimpan URL & teks · E: data: URL tersimpan tanpa URL gambar | ✅ |

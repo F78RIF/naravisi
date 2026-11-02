@@ -607,3 +607,117 @@ hanya menerima `redirect_url` dan `mode_pembayaran`. Tes memastikan kunci tidak 
 | Server key | "server key Midtrans tidak pernah ikut dalam respons API" |
 | Label SIMULASI | `premiumAdmin.test.js` UC-PRM-02/03 · e2e: "UC-PRM-02/03 + RF-24: beli → halaman bayar SIMULASI berlabel jelas & lolos audit → bayar → akun Premium" |
 | Alur manual tetap | e2e: "ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc" |
+
+---
+
+## Tahap 7 — Langkah 2: Admin yang aman (RF-21, RF-22, RF-27..RF-30)
+
+### Ide besarnya
+
+Dashboard Admin hanyalah tampilan. **Semua keputusan diambil di server**: siapa yang boleh, apa yang boleh diubah, dan
+apakah datanya tetap rapi. Ada tiga aturan baru:
+
+1. Setiap rute `/api/v1/admin/*` memeriksa peran di server pada **setiap** permintaan.
+2. Sistem **selalu punya minimal satu Admin aktif**.
+3. Menghapus pengguna harus **disengaja** (ketik email pengguna itu) dan **utuh** (semua bagian terhapus bersama, atau
+   tidak ada sama sekali).
+
+### Aturan 1 — Peran dicek di server, dibaca dari database
+
+```
+Permintaan ──▶ dispatch: rute ber-auth 'admin'?
+                 │
+                 ├─ tanpa token / token rusak ─────────────▶ 401
+                 ├─ token sah → SELECT peran, status_akun FROM users WHERE user_id = sub
+                 │     ├─ akun nonaktif ───────────────────▶ 403 ACCOUNT_DISABLED
+                 │     └─ peran ≠ 'admin' ─────────────────▶ 403 FORBIDDEN
+                 └─ Admin aktif ──▶ handler
+```
+
+Peran **tidak** diambil dari isi token, melainkan dari database setiap kali. Akibatnya, Admin yang baru saja diturunkan
+langsung ditolak pada permintaan berikutnya walaupun tokennya belum kedaluwarsa. Tes membaca seluruh tabel rute dan
+memastikan semua rute `/api/v1/admin` bertanda `auth: 'admin'`. Setelah itu setiap rute dipanggil sebagai pengguna biasa
+(harus 403) dan tanpa login (harus 401), dan dipastikan tidak ada data yang berubah. Bila nanti ada rute Admin baru yang
+lupa diberi tanda, tes ini langsung gagal.
+
+### Aturan 2 — Admin aktif terakhir dilindungi (RF-29, RF-30)
+
+"Admin aktif" artinya `peran = 'admin'` **dan** `status_akun = 'aktif'`. Tiga tindakan dapat menghilangkan Admin aktif:
+**menghapus**, **menurunkan** peran ke pengguna, dan **menonaktifkan**. Ketiganya ditolak bila sasarannya Admin aktif
+terakhir:
+
+```
+Mulai transaksi
+  SELECT user_id FROM users WHERE peran='admin' AND status_akun='aktif'  (MySQL: FOR UPDATE → baris Admin dikunci)
+  sasaran ada di daftar DAN daftar hanya berisi 1?  ──ya──▶ ROLLBACK, 409 LAST_ADMIN
+                                                  └─tidak─▶ ubah / hapus, COMMIT
+```
+
+**Kenapa di dalam transaksi?** Misalkan hanya ada dua Admin, A dan B, dan keduanya saling menurunkan pada detik yang
+sama. Bila pemeriksaan dilakukan di luar transaksi, keduanya melihat "ada 2 Admin", keduanya lolos, dan akhirnya tidak
+ada Admin sama sekali. Di dalam transaksi pemeriksaan berjalan bergiliran: di MySQL baris Admin dikunci dengan
+`FOR UPDATE`, sedangkan SQLite menjalankan transaksi satu per satu. Hasilnya, yang kedua melihat "tinggal 1" dan ditolak.
+
+Aturan lama tetap berlaku: Admin tidak bisa menghapus, menurunkan, atau menonaktifkan **dirinya sendiri** (400). Mengubah
+nama atau email Admin terakhir tetap boleh.
+
+Di dashboard, pesan `LAST_ADMIN` tampil di kotak galat formulir (`role="alert"`), sehingga NVDA langsung membacakannya.
+
+### Aturan 3 — Hapus pengguna: disengaja dan utuh (RF-30)
+
+**Disengaja.** Dialog "Hapus pengguna?" berisi kolom **"Ketik email pengguna untuk konfirmasi"**:
+
+```
+Tombol "Hapus Dewi" ──▶ dialog terbuka, fokus di kolom email
+                         NVDA: "Hapus pengguna? Akun Dewi (dewi@uji.id) … akan dihapus permanen …
+                                Ketik email pengguna untuk konfirmasi, edit, Ketik dewi@uji.id lalu tekan Hapus permanen."
+Ketik email salah + Enter ──▶ dialog tetap terbuka, kolom diberi aria-invalid, fokus kembali ke kolom
+                              NVDA (role="alert"): "Email tidak cocok. Ketik dewi@uji.id untuk menghapus."
+Ketik email benar + Enter ──▶ DELETE /admin/users/:id { konfirmasi_email } ──▶ dialog tertutup
+                              NVDA: "Pengguna Dewi berhasil dihapus."
+Batal / Esc ──▶ "Penghapusan dibatalkan."
+```
+
+Pemeriksaan di browser hanya untuk kenyamanan. **Server memeriksa ulang**: bila `konfirmasi_email` kosong, salah,
+atau bukan teks, permintaan ditolak dengan `400 VALIDATION_ERROR` (`field: konfirmasi_email`) dan tidak ada yang
+terhapus. Huruf besar/kecil dan spasi di tepi diabaikan.
+
+**Utuh.** Semua langkah penghapusan berjalan di **satu transaksi database**:
+
+```
+BEGIN
+  1. cari pengguna                         → tidak ada: 404
+  2. cocokkan konfirmasi_email             → salah: 400
+  3. cek Admin aktif terakhir              → ya: 409
+  4. DELETE riwayat_deskripsi milik pengguna   (laporan atas riwayat itu ikut terhapus)
+  5. UPDATE transaksi SET user_id = NULL       (bukti pembayaran disimpan tanpa identitas — ADR-13)
+  6. UPDATE laporan SET admin_id = NULL        (laporan yang pernah ia tinjau tetap ada)
+  7. DELETE users                              (pengaturan, kuota, langganan ikut terhapus — ON DELETE CASCADE)
+COMMIT   ← hanya bila 1–7 semua berhasil; galat di langkah mana pun → ROLLBACK, data kembali seperti semula
+```
+
+Bila server mati atau database galat di langkah 7, langkah 4–6 ikut dibatalkan. Tidak akan ada pengguna yang riwayatnya
+sudah hilang tetapi akunnya masih ada, atau transaksinya sudah anonim tetapi akunnya masih ada. Tes membuktikannya
+dengan membuat langkah 7 gagal dengan sengaja, lalu memeriksa bahwa riwayat dan transaksi tidak berubah. Respons
+berhasil menyebut jumlahnya: `{ dihapus: true, riwayat_dihapus, transaksi_dianonimkan }`.
+
+### RF-21 / RF-22 — Laporan: status tetap sesuai SRS
+
+Tidak ada status baru. Status laporan tetap **`baru`** atau **`ditinjau`**, dan nilai lain (`selesai`, `ditolak`, …)
+ditolak dengan 400. Menandai `ditinjau` wajib mengisi tindak lanjut, dan peninjau serta waktunya dicatat. Bila Admin
+peninjau kemudian dihapus, laporannya tetap ada dan kolom peninjau dikosongkan.
+
+### Bukti (tes)
+
+| Aturan | Tes |
+|---|---|
+| Semua rute Admin dicek di server | `premiumAdmin.test.js`: "RNF-10: SETIAP rute /api/v1/admin dicek peran di server (pengguna → 403, tanpa login → 401)" |
+| Peran dari database | "RNF-10: peran dibaca dari database, bukan dari token — Admin yang diturunkan langsung ditolak (403)" |
+| Konfirmasi email | "RF-30: hapus wajib konfirmasi dengan mengetik email pengguna (kosong/salah → 400, data tetap ada)" |
+| Admin terakhir | "RF-30: Admin aktif terakhir tidak bisa dihapus, diturunkan, atau dinonaktifkan (409 LAST_ADMIN)" |
+| Balapan dua Admin | "saling menurunkan / saling menonaktifkan / saling menghapus → satu berhasil, satu LAST_ADMIN" |
+| Satu transaksi | "RF-30: hapus dalam SATU transaksi — bila langkah terakhir gagal, riwayat & transaksi tidak berubah" |
+| Anonimisasi | "UC-ADM-04: hapus pengguna → riwayat terhapus, transaksi tetap tanpa identitas (ADR-13)" |
+| Status laporan SRS | "RF-22: status laporan hanya \"baru\" atau \"ditinjau\" sesuai SRS; status lain ditolak" |
+| Dashboard & NVDA | e2e: "RF-30: hapus tanpa mengetik email yang benar ditolak; fokus kembali ke kolom, pesan dibacakan" (+ audit aksesibilitas dialog) · "UC-ADM-04: hapus pengguna dengan konfirmasi (ketik email)" |
+| Alur manual tetap | e2e: "ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc" |
