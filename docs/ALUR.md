@@ -1,7 +1,76 @@
 # Logika & Alur Sistem NaraVisi
 
-Dokumen ini menjelaskan cara kerja NaraVisi dengan bahasa sederhana, satu bagian per tahap pengerjaan.
-Setiap bagian punya diagram alur (Mermaid) yang bisa langsung ditampilkan di GitHub atau di slide presentasi.
+Dokumen ini menjelaskan cara kerja NaraVisi (versi 1.1.0) dengan bahasa sederhana. Bagian "Gambaran besar" menjelaskan
+seluruh sistem sekaligus, lalu ada satu bagian per tahap pengerjaan. Diagram ditulis sebagai teks atau Mermaid, sehingga
+bisa langsung tampil di GitHub atau disalin ke slide.
+
+## Daftar isi
+
+| Bagian | Isi | RF / RNF |
+|---|---|---|
+| [Gambaran besar](#gambaran-besar) | komponen, peran, alur utama satu deskripsi | semua |
+| [Tahap 1](#tahap-1--ai-gemini-sebagai-provider-utama-blip-sebagai-cadangan) | AI: Gemini utama, BLIP cadangan | RF-09, RF-10 |
+| [Tahap 2](#tahap-2--urutan-baca-dari-atas-ke-bawah--terhubung-ke-pembaca-layar) | urutan baca, alt untuk NVDA, Baca berurutan, pintasan | RF-06..RF-08, RNF-02 |
+| [Tahap 3](#tahap-3--fitur-menuju-70-11-rf-tambahan--2130) | akun, riwayat, pengaturan, laporan, paket | RF-02..04, 14..20, 23 |
+| [Tahap 4](#tahap-4--penutup-70-verifikasi-privasi-dan-dataset-evaluasi) | verifikasi, privasi, dataset evaluasi | RF-02..04, 20, 23 |
+| [Tahap 5](#tahap-5--langkah-0-menuntaskan-70-uji-ulang--evaluasi-model-asli) | Langkah 0: evaluasi model asli, C-12 | RNF-04 |
+| [Tahap 6](#tahap-6--langkah-1-premium-yang-aman-rf-24-rf-25-rf-26) | Langkah 1: Premium aman | RF-24..RF-26 |
+| [Tahap 7](#tahap-7--langkah-2-admin-yang-aman-rf-21-rf-22-rf-27rf-30) | Langkah 2: Admin aman | RF-21, 22, 27..30 |
+| [Tahap 8](#tahap-8--langkah-3-bukti-rnf-kinerja-aksesibilitas-keamanan) | Langkah 3: bukti RNF | RNF-01..13 |
+| [Tahap 9](#tahap-9--langkah-4-penutup-100) | Langkah 4: rilis 1.1.0 & dokumentasi final | – |
+
+---
+
+## Gambaran besar
+
+### Komponen
+
+```
+┌──────────────────────── Chrome (pengguna) ────────────────────────┐
+│ Halaman web  ◀── content script: panel NaraVisi (Shadow DOM),     │
+│                  pemindai gambar, suara (Web Speech API)          │
+│ Service worker:  ambil & normalisasi gambar (AVIF/SVG → JPEG),    │
+│                  token login, pemandu suara (chrome.tts)          │
+│ Popup & halaman extension: masuk/daftar, Riwayat, Pengaturan,     │
+│                  Premium, Profil                                  │
+└───────────────────────────────┬───────────────────────────────────┘
+                                │ HTTPS · JSON · token JWT
+                                ▼
+┌──────────── Backend (Node.js 22 + Express 5) ────────────┐      ┌── Midtrans ──┐
+│ /api/v1: akun, kuota, deskripsi, riwayat, pengaturan,    │◀────▶│ Snap,        │
+│ laporan, Premium, Admin · dashboard Admin /admin/        │      │ Status API   │
+└───────────┬──────────────────────────────┬───────────────┘      └──────────────┘
+            │ SQL                          │ HTTP 127.0.0.1
+            ▼                              ▼
+     MySQL 8.4 (8 tabel)        Layanan AI (Python + FastAPI)
+                                Gemini (utama) ──gagal──▶ BLIP + MarianMT (cadangan)
+```
+
+### Siapa boleh apa
+
+| Peran | Bisa | Dicek di |
+|---|---|---|
+| Tamu | lihat paket Premium, daftar, masuk | – |
+| Pengguna Gratis | 10 deskripsi/hari, riwayat 7 hari, kecepatan suara, laporan | token + `quotaService` |
+| Pengguna Premium | tanpa batas, semua riwayat, semua suara + nada | tabel `langganan` (tanggal berakhir ≥ hari ini) |
+| Admin | kelola pengguna & laporan di dashboard web | `peran = 'admin'` dibaca dari database **setiap** permintaan |
+
+### Alur utama: satu gambar dideskripsikan
+
+```
+Alt+Shift+K ─▶ panel terbuka, gambar dipindai & diurutkan seperti urutan baca NVDA
+   ↑/↓      ─▶ "Gambar 2 dari 6 · <keterangan>"
+   Enter    ─▶ service worker mengambil byte gambar, mengubah ke JPEG ≤ 1280 px
+            ─▶ POST /api/v1/descriptions (token)
+                 backend: cek token → pesan 1 kuota (atomik) → layanan AI
+                 layanan AI: Gemini (JSON: jenis, ringkasan, detail, teks) │ gagal → BLIP
+                 berhasil → simpan riwayat (teks saja, file gambar TIDAK disimpan)
+                 gagal    → kuota dikembalikan, pesan jelas
+            ─▶ teks tampil di panel, dibacakan suara NaraVisi, disuntikkan ke alt gambar asli
+   Spasi/R/S ─▶ jeda/lanjut · ulang · berhenti      L ─▶ laporkan      Esc ─▶ tutup, fokus kembali
+```
+
+Bagian-bagian berikut menjelaskan setiap potongan alur ini secara rinci, sesuai urutan pengerjaannya.
 
 ---
 
@@ -803,3 +872,43 @@ dengan kode 1 bila ada temuan, jadi bisa dipakai sebagai gerbang sebelum commit/
 - Angka bench sekitar 15 ms di mesin ini didominasi biaya koneksi lokal (bahkan `GET /plans` yang tanpa basis data
   juga sekitar 15 ms), bukan kerja endpoint. Yang penting: jauh di bawah 2 detik.
 - Audit otomatis 0 pelanggaran **bukan** berarti sudah nyaman dipakai NVDA. M-03 dan M-05 tetap wajib dijalankan manusia.
+
+---
+
+## Tahap 9 — Langkah 4: penutup 100%
+
+### Ide besarnya
+
+Tidak ada fitur baru. Langkah ini mengemas hasil kerja supaya **orang lain bisa memasang, menjalankan, dan memeriksa**
+NaraVisi tanpa bertanya, dan supaya perbedaan dengan SRS/SDD v1.1 tercatat jelas.
+
+### Alur rilis 1.1.0
+
+```
+1. versi         extension/manifest.json  1.0.0 → 1.1.0
+2. dokumen       README (30/30 RF, instal + Gemini, keamanan, privasi, keterbatasan)
+                 docs/PERUBAHAN_SRS_SDD.md (apa yang berbeda dari SRS/SDD v1.1 dan kenapa)
+                 docs/KEPUTUSAN.md ADR-23..ADR-27 · docs/ALUR.md (gambaran besar + daftar isi)
+3. gerbang       semua tes lulus (backend, layanan AI, e2e + axe-core)
+                 python -I scripts/pindai_rahasia.py  → 0 temuan
+4. paket         python -I scripts/paket_extension.py → dist/naravisi-extension-1.1.0.zip
+```
+
+### Kenapa ZIP dibuat dengan skrip, bukan "Send to → Compressed folder"?
+
+Chrome Web Store mensyaratkan `manifest.json` berada **di akar** ZIP. Kalau folder `extension/` yang dizip, manifest
+ikut masuk ke subfolder. `Compress-Archive` bawaan Windows PowerShell 5.1 juga menulis jalur dengan `\`, yang ditolak.
+`scripts/paket_extension.py` menulis jalur dengan `/` dan menaruh isi `extension/` di akar. Setelah itu ia membuka ZIP-nya
+lagi untuk memeriksa bahwa setiap berkas yang dirujuk manifest (service worker, popup, ikon, halaman Pengaturan) memang ada.
+Terakhir ia mencetak versi, jumlah berkas, dan SHA-256 agar paket yang dibagikan bisa dicocokkan. Folder `dist/`
+masuk `.gitignore`, karena paket selalu bisa dibuat ulang dari kode.
+
+### Yang masih harus dikerjakan manusia
+
+| Uji | Kenapa tidak bisa otomatis | Tempat mencatat |
+|---|---|---|
+| M-03 NVDA | butuh pembaca layar & suara sungguhan | `docs/PENGUJIAN.md` bagian 4 |
+| M-04 Midtrans Sandbox | butuh akun & Server Key Sandbox | idem |
+| M-05 pengguna tunanetra | menilai kemudahan, bukan kebenaran | idem |
+| M-06 MySQL asli | butuh server MySQL di laptop | idem |
+| Penilaian akurasi M-01 | butuh mata manusia (fase "nilai" `eval.annotate`) | `ai-service/eval` |

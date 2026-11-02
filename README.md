@@ -11,8 +11,13 @@ Halaman web ──Alt+Shift+K──▶ Extension (scan, pilih, panel, TTS)
                        │                      │
                        ▼                      ▼
           Layanan AI FastAPI            Midtrans Snap (Sandbox)
-          BLIP + terjemahan ID          atau mode simulasi
+          Gemini (utama)                atau mode simulasi
+          BLIP + terjemahan ID (cadangan)
 ```
+
+**Versi 1.1.0** · Progres **30/30 RF (100%)** · Dokumen pendukung: alur sistem bergambar `docs/ALUR.md`, pengujian
+`docs/PENGUJIAN.md`, perubahan sejak SRS/SDD v1.1 `docs/PERUBAHAN_SRS_SDD.md`, keputusan desain `docs/KEPUTUSAN.md`,
+API `docs/API.md`.
 
 | Folder | Isi | Stack (SRS 2.4) |
 |---|---|---|
@@ -22,13 +27,28 @@ Halaman web ──Alt+Shift+K──▶ Extension (scan, pilih, panel, TTS)
 | `e2e/` | Uji end-to-end di Chromium | Playwright |
 | `docs/` | API, keputusan desain, pengujian, log Agentic SDLC | – |
 
-## Progres Prototype: 21/30 RF (70%) — tahap 70% selesai
+## Progres Prototype: 30/30 RF (100%)
 
-Semua **21 RF** di tabel ini **dihitung** di tahap 70%: 10 RF tahap 30%, 5 RF tahap 50% (RF-14..17, RF-19), dan 6 RF yang
-diverifikasi di tahap ini (RF-02, RF-03, RF-04, RF-18, RF-20, RF-23). Tahap ini juga menambahkan peningkatan AI (Gemini
-terstruktur + cadangan BLIP), urutan baca + alt text untuk NVDA, mode **Baca berurutan** beserta pengecualian privasinya,
-dan **dataset evaluasi sendiri** (`docs/DATASET.md`). Semuanya lulus tes otomatis. RF-21, RF-22, dan RF-24..RF-30 sudah ada
-di kode sejak fase awal, tetapi **bukan bagian penilaian 70%**.
+Ke-30 RF di SRS v1.1 sudah diterapkan dan masing-masing punya tes otomatis. Urutannya: 10 RF di tahap 30%, 5 RF di tahap
+50%, 6 RF di tahap 70%, lalu 9 RF terakhir di tahap 100%:
+
+- **Premium yang aman (RF-24..26):** harga diambil dari database, webhook diperiksa tiga lapis, dan halaman bayar demo
+  berlabel SIMULASI.
+- **Admin yang aman (RF-21, RF-22, RF-27..30):** setiap rute Admin dicek di server, Admin aktif terakhir dilindungi, dan
+  hapus pengguna dikonfirmasi dengan mengetik email lalu dijalankan dalam satu transaksi.
+
+Ada dua RF yang masih menunggu konfirmasi manusia, karena bergantung pada perangkat suara (RF-12) dan akun Midtrans
+Sandbox (RF-25). Langkah ujinya ada di `docs/PENGUJIAN.md` bagian 4 dengan kolom hasil yang masih kosong.
+
+| Bukti | Hasil (2 November 2026) |
+|---|---|
+| Tes backend | 121/121 lulus, cakupan baris 94% |
+| Tes layanan AI | 85/85 lulus |
+| Tes end-to-end (extension asli di Chromium) | 113/113 lulus, termasuk alur manual Alt+Shift+K |
+| Audit aksesibilitas axe-core (WCAG 2.x A/AA) | 15 audit di 9 tampilan, 0 pelanggaran |
+| Kinerja non-AI (RNF-05) | p95 ≤ 68 ms (batas 2 dtk) |
+| Kinerja AI (RNF-04, ≤ 5 dtk) | BLIP p50 2,8 dtk ✅ · Gemini p50 10,2 dtk ❌ (lihat Keterbatasan) |
+| `npm audit` / `pip-audit` / pindai rahasia | 0 / hanya `transformers` (risiko diterima) / 0 |
 
 | RF | Fitur | Status | File & fungsi utama | Cara uji |
 |---|---|---|---|---|
@@ -57,6 +77,15 @@ di kode sejak fase awal, tetapi **bukan bagian penilaian 70%**.
 | RF-20 | Laporkan deskripsi (alasan wajib dipilih, catatan opsional maks. 500 karakter, hanya riwayat milik sendiri) | ✅ | panel `content.js`, `riwayat.js` → `reportService.js` (`CATATAN_MAKS`) | e2e "RF-20" · `settingsReports.test.js` |
 | RF-23 | Daftar paket Premium (publik, hanya paket aktif; melihat paket tidak membuat transaksi) | ✅ | `pages/premium.js` → `paymentService.js` (`listPlans`) | e2e "UC-PRM-01", "RF-23" · `premiumAdmin.test.js` |
 | Kuota | Gratis 10/hari, reset 00.00 WITA | ✅ | `quotaService.js` (`increment`: `UPDATE … WHERE jumlah_permintaan < batas`) | gambar ke-11 ditolak · e2e "setelah 10 deskripsi" |
+| RF-21 | Admin: daftar laporan (filter status, gambar, deskripsi, alasan, pelapor) | ✅ | `backend/public/admin/admin.js` (`loadReports`) → `reportService.js` (`list`) | dashboard → tab Laporan · e2e "UC-LAP-02" |
+| RF-22 | Admin: ubah status laporan (hanya `baru`/`ditinjau` sesuai SRS; `ditinjau` wajib tindak lanjut; peninjau tercatat) | ✅ | `admin.js` → `reportService.js` (`updateStatus`) | e2e "UC-LAP-03" · `premiumAdmin.test.js` "RF-22" |
+| RF-24 | Pilih paket (harga dari database; halaman bayar demo berlabel **SIMULASI**) | ✅ | `pages/premium.js` → `paymentService.js` (`create`), `http/pages.js` | e2e "RF-24" · `premiumAdmin.test.js` "harga selalu dari database" |
+| RF-25 | Bayar & aktivasi (tanda tangan → cocokkan order & nominal dengan database → konfirmasi Status API Midtrans) | ✅ otomatis · ⏳ Sandbox manual | `paymentService.js` (`handleNotification`, `applyStatus`), `midtransClient.js` | `premiumAdmin.test.js` "RF-25: …" (6 tes) · M-04 |
+| RF-26 | Status & masa aktif langganan (perpanjangan disambung, kembali Gratis saat habis) | ✅ | `subscriptionService.js` → `pages/premium.js` | e2e "UC-PRM-04" · `premiumAdmin.test.js` "W2" |
+| RF-27 | Admin: tambah pengguna | ✅ | `admin.js` → `adminService.js` (`createUser`) | e2e "UC-ADM-01" |
+| RF-28 | Admin: daftar & cari pengguna | ✅ | `admin.js` (`loadUsers`) → `adminService.js` (`listUsers`) | e2e "UC-ADM-02" |
+| RF-29 | Admin: ubah pengguna (nonaktifkan → token ditolak; Admin aktif terakhir tidak bisa diturunkan/dinonaktifkan) | ✅ | `adminService.js` (`updateUser`, `assertNotLastAdmin`) | e2e "UC-ADM-03" · `premiumAdmin.test.js` "LAST_ADMIN", uji balapan |
+| RF-30 | Admin: hapus pengguna (ketik email pengguna; Admin terakhir dilindungi; riwayat dihapus + transaksi dianonimkan dalam satu transaksi) | ✅ | `admin.js` (`confirmDelete`) → `adminService.js` (`deleteUser`) | e2e "RF-30" · `premiumAdmin.test.js` "RF-30: hapus dalam SATU transaksi" |
 
 Rencana uji manual lengkap: `docs/PENGUJIAN.md`. Alur sistem bergambar: `docs/ALUR.md`. Dataset & evaluasi model: `docs/DATASET.md`, laporan evaluasi terbaru: `ai-service/eval/data/reports/laporan.md`, hasil uji Gemini vs BLIP: `docs/PENGUJIAN.md` bagian M-01.
 
@@ -80,6 +109,10 @@ Rencana uji manual lengkap: `docs/PENGUJIAN.md`. Alur sistem bergambar: `docs/AL
 | + | Data milik orang lain (riwayat, laporan atas riwayat orang lain) → **404**, keberadaannya tidak dibocorkan | ✅ `historyService.js` (`findVisible`) |
 | + | Kunci Gemini hanya ada di `ai-service/.env` (masuk `.gitignore`) dan disamarkan di semua log maupun berkas prediksi evaluasi | ✅ `app/main.py` (`RedactSecrets`), `eval/run_eval.py` |
 | + | Alat anotasi dataset hanya listen di `127.0.0.1`, menolak Host asing (DNS rebinding) dan POST lintas situs | ✅ `eval/annotate.py` |
+| + | Halaman HTML (dashboard Admin, halaman bayar) memakai **CSP** dan `X-Frame-Options: DENY` | ✅ `http/routes.js` (`HTML_SECURITY_HEADERS`) |
+| + | **Premium**: harga selalu dari database; webhook Midtrans diperiksa tanda tangan SHA-512 → `order_id` & nominal dicocokkan dengan database → dikonfirmasi ulang ke Status API; server key hanya di `backend/.env` dan tidak pernah ada di respons API | ✅ `paymentService.js`, `midtransClient.js` |
+| + | **Admin**: setiap rute `/api/v1/admin/*` dicek peran di server, dan peran dibaca dari database pada setiap permintaan; Admin aktif terakhir tidak bisa dihapus/diturunkan/dinonaktifkan; hapus pengguna wajib mengetik email dan berjalan dalam satu transaksi database | ✅ `http/dispatch.js`, `adminService.js` |
+| + | Pemindai rahasia untuk berkas & seluruh riwayat git (nilai kunci tidak pernah dicetak) | ✅ `scripts/pindai_rahasia.py` |
 
 ### Privasi
 
@@ -92,6 +125,10 @@ Rencana uji manual lengkap: `docs/PENGUJIAN.md`. Alur sistem bergambar: `docs/AL
   `CAPTION_PROVIDER=blip` bila gambar tidak boleh keluar dari server.
 - **Dataset evaluasi**: gambar (`eval/data/images/`) dan keluaran model (`eval/data/predictions/`) tidak pernah di-commit
   (hak cipta & privasi). Dataset dipakai untuk few-shot & evaluasi (prompt tuning), **bukan** untuk melatih ulang bobot model.
+- **Hapus data**: pengguna bisa menghapus riwayat (satu atau semua) dan akunnya sendiri. Admin bisa menghapus pengguna.
+  Dalam kedua kasus riwayat, laporan, pengaturan, dan kuota ikut terhapus. Transaksi tetap disimpan tanpa identitas
+  sebagai bukti pembayaran.
+- **Pemandu suara** hanya menghitung gambar di halaman. Ia tidak mengirim apa pun ke server dan bisa dimatikan di Pengaturan.
 
 Audit dependensi (2 November 2026): `npm audit` backend & e2e **0 kerentanan**. `pip-audit` ai-service: starlette, pillow, filelock, pyasn1, setuptools, certifi sudah di-upgrade (FastAPI 0.162 / starlette 1.10). Yang tersisa hanya `transformers` 4.57 (dibatasi `<5` sampai BLIP/MarianMT diuji ulang); temuannya hanya terpicu saat memuat repo model yang tidak dipercaya, padahal layanan hanya memuat dua model tetap. Pindai rahasia (`python -I scripts/pindai_rahasia.py`): **0 temuan** di berkas maupun riwayat git. Rincian: `docs/PENGUJIAN.md` bagian 3b.
 
@@ -101,6 +138,8 @@ Butuh: **Node.js 22.9+**, **Python 3.12**, **MySQL 8.4** (mis. lewat XAMPP/Larag
 
 ### 1. Layanan AI (terminal 1)
 
+**a. Pasang dependensi**
+
 ```bash
 cd ai-service
 python -m venv .venv
@@ -108,16 +147,23 @@ python -m venv .venv
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 cp .env.example .env        # Windows: copy .env.example .env
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file .env
 ```
 
-**Provider utama: Google Gemini** (ADR-22). Di `ai-service/.env` isi:
+**b. Isi `ai-service/.env` untuk Gemini** (provider utama, ADR-22). Buat kunci gratis di
+https://aistudio.google.com/apikey, lalu isi:
 
 ```ini
 CAPTION_PROVIDER=gemini
-GEMINI_API_KEY=<kunci dari https://aistudio.google.com/apikey>   # hanya di .env, jangan di-commit
+GEMINI_API_KEY=<kunci Anda>          # HANYA di berkas .env ini — jangan di kode, extension, chat, atau git
 GEMINI_MODEL=<model Flash/Flash-Lite gratis yang tersedia di AI Studio>
-FALLBACK_PROVIDER=blip      # cadangan otomatis bila Gemini gagal/kuota habis/offline (blip | mock | none)
+GEMINI_MAX_OUTPUT_TOKENS=4096        # jangan diturunkan ke 1024: jawaban model "berpikir" terpotong (C-12)
+FALLBACK_PROVIDER=blip               # cadangan otomatis bila Gemini gagal/kuota habis/offline (blip | mock | none)
+```
+
+**c. Jalankan**
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file .env
 ```
 
 Gemini menjawab dalam JSON terstruktur (jenis gambar, ringkasan, detail, teks di gambar, keyakinan) yang dirangkai menjadi kalimat siap baca, mis. *"Grafik: Penjualan naik tiap bulan. … Tulisan di gambar: …"*. Saat start, BLIP dimuat di latar sebagai cadangan (unduhan pertama ±1,3 GB); layanan sudah siap memakai Gemini sebelum BLIP selesai dimuat. Log **"Layanan AI siap"** menandai layanan bisa dipakai.
@@ -154,6 +200,9 @@ Log menampilkan alamat API, dashboard Admin, dan mode pembayaran.
 
 1. Buka `chrome://extensions`, aktifkan **Developer mode**.
 2. **Load unpacked** → pilih folder `extension/`. Salin **ID** extension ke `backend/.env`: `ALLOWED_ORIGINS=chrome-extension://<ID>`, lalu restart backend.
+   Paket ZIP rilis (untuk dibagikan / Chrome Web Store) dibuat dengan `python -I scripts/paket_extension.py` →
+   `dist/naravisi-extension-1.1.0.zip` (manifest di akar ZIP; `dist/` tidak masuk git). Untuk memasangnya, ekstrak ZIP
+   lalu **Load unpacked** folder hasil ekstrak.
 3. Tab **Selamat datang** terbuka otomatis dan sambutan dibacakan. Tekan **Tab** untuk masuk atau daftar (bisa juga lewat ikon NaraVisi di toolbar).
 4. Buka situs berita, tekan **Alt+Shift+K**.
    **Alt+Shift+V** membuka popup NaraVisi. Alt+Shift+N tidak dipakai karena bentrok dengan Split View bawaan Chrome. Bila pintasan tetap "belum diatur" (bentrok dengan extension lain), atur di `chrome://extensions/shortcuts` (popup menyediakan tautan **Atur pintasan di Chrome**).
@@ -209,14 +258,18 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 ## Pengujian
 
 ```bash
-cd backend && npm test                         # 101 tes unit + integrasi API (SQLite di memori)
-cd ai-service && python -m pytest              # 83 tes (Gemini dengan klien palsu, metrik & dataset evaluasi; tanpa internet)
-cd e2e && npm install && npm test              # 112 skenario, termasuk alur manual Alt+Shift+K
+cd backend && npm test                         # 121 tes unit + integrasi API (SQLite di memori)
+cd ai-service && python -m pytest              # 85 tes (Gemini dengan klien palsu, metrik & dataset evaluasi; tanpa internet)
+cd e2e && npm install && npm test              # 113 skenario + audit axe-core, termasuk alur manual Alt+Shift+K
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
-cd backend && node --no-warnings scripts/bench.js   # ukur waktu respons (RNF-05)
+cd backend && node --no-warnings scripts/bench.js   # ukur p50/p95 waktu respons (RNF-05)
+cd backend && npm audit && cd ../e2e && npm audit   # kerentanan dependensi Node
+python -I scripts/pindai_rahasia.py            # pindai kunci di berkas & riwayat git (keluar 1 bila ada temuan)
+python -I scripts/paket_extension.py           # buat dist/naravisi-extension-<versi>.zip
 ```
 
-Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`.
+Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`. `pip-audit` dijalankan dari venv terpisah, lihat
+`docs/PENGUJIAN.md` bagian 3b.
 
 ## Status
 
@@ -229,12 +282,28 @@ Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`.
 - [x] Fase 6 — Pengujian otomatis lengkap; uji manual M-01..M-06 menunggu dijalankan
 - [x] Fase 7 — Evaluasi (`docs/EVALUASI.md`), perbaikan keamanan, video demo, naskah demo & checklist gladi (`docs/NASKAH_DEMO.md`), laporan akhir & slide
 - [x] Tahap 70% — verifikasi RF-02..04, RF-18, RF-20, RF-23; uji privasi Baca berurutan; dataset evaluasi & few-shot (`docs/DATASET.md`)
+- [x] Tahap 100% — Langkah 0: uji ulang & evaluasi Gemini vs BLIP · Langkah 1: Premium aman (RF-24..26) · Langkah 2: Admin aman (RF-21, 22, 27..30) · Langkah 3: bukti RNF (axe-core, p50/p95, audit dependensi, pindai rahasia) · Langkah 4: dokumentasi final, versi 1.1.0, paket ZIP
+- [ ] Uji manual oleh manusia: M-02..M-06 di `docs/PENGUJIAN.md` bagian 4 (NVDA, Midtrans Sandbox, pengguna tunanetra, MySQL asli). Kolom hasilnya masih kosong.
 
 ## Batasan yang diketahui
 
-- BLIP menghasilkan kalimat pendek berbahasa Inggris lalu diterjemahkan; kualitas terjemahan kadang kaku. Alternatif Google Gemini (ADR-21) menghasilkan bahasa Indonesia alami secara langsung, namun memiliki konsekuensi: data pada paket gratis berpotensi dipakai Google untuk peningkatan produk, membutuhkan koneksi internet, dan dibatasi kuota rate limit Google AI Studio. BLIP tetap dipertahankan penuh sebagai opsi lokal offline.
+- **RNF-04 (≤ 5 detik) belum tercapai dengan Gemini.** Pada dataset evaluasi, Gemini p50 10,2 dtk dan p95 20,3 dtk karena
+  model "berpikir" dulu; infografis padat teks paling lama. BLIP memenuhi target (p50 2,8 dtk), tetapi kalimatnya pendek,
+  sering salah konteks, dan tidak menyebut jenis gambar. Pilihan: model Flash-Lite, `GEMINI_THINKING_BUDGET=0` (model 2.5),
+  atau `CAPTION_PROVIDER=blip` bila kecepatan lebih penting.
+- **Gemini tingkat gratis**: data yang dikirim dapat dipakai Google untuk meningkatkan produknya. Gemini juga butuh internet
+  dan punya batas kuota; saat kuota habis (429) deskripsi otomatis dibuat BLIP.
+- BLIP menghasilkan kalimat pendek berbahasa Inggris lalu diterjemahkan; kualitas terjemahan kadang kaku.
+- Akurasi deskripsi pada dataset evaluasi **belum dinilai manusia** (`docs/PENGUJIAN.md` M-01). BLEU/ROUGE/CIDEr hanya
+  pelengkap.
+- `transformers` dibatasi < 5 dan masih punya temuan `pip-audit`. Risikonya diterima karena hanya terpicu saat memuat
+  model yang tidak dipercaya (`docs/PENGUJIAN.md` 3b).
 - Gambar latar CSS hanya diambil dari `url(...)` pertama; gradien dan sprite ikon kecil (< 48 px) diabaikan. SVG inline dengan efek rumit (filter, font eksternal) bisa sedikit berbeda setelah diubah ke JPEG.
-- Model AI di CPU: rata-rata 7,3 detik per gambar saat model dan browser berbagi satu laptop (uji M-01; target RNF-04 ≤ 5 detik). Di GPU atau server terpisah jauh lebih cepat.
+- Model AI lokal di CPU: rata-rata 7,3 detik per gambar saat model dan browser berbagi satu laptop (uji 16 Oktober). Di GPU atau server terpisah jauh lebih cepat.
 - Halaman dengan sangat banyak gambar (beranda antaranews.com: ±500) menghasilkan daftar yang panjang.
 - Pintasan keyboard Chrome hanya bisa diubah di `chrome://extensions/shortcuts`; halaman Pengaturan menyimpan pilihan pengguna dan menautkan ke sana.
 - HTTPS (RNF-07) berlaku saat deploy ke server; demo berjalan di localhost.
+- Webhook Midtrans tidak bisa menjangkau `localhost`. Di laptop, status pembayaran diperbarui lewat cek langsung ke Status
+  API saat halaman Premium dibuka. Pembayaran Sandbox asli belum diuji manusia (M-04).
+- Uji dengan NVDA sungguhan dan pengguna tunanetra (M-03, M-05) belum dijalankan. Audit otomatis 0 pelanggaran tidak
+  menjamin pengalaman yang nyaman.

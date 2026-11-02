@@ -1,6 +1,6 @@
 # Laporan & Rencana Pengujian NaraVisi (Fase 6)
 
-Versi kode: 1.0.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7, 16 Oktober, dan 2 November 2026 — Langkah 3: bukti RNF)
+Versi kode: 1.1.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7, 16 Oktober, dan 2 November 2026 — Langkah 3: bukti RNF, Langkah 4: rilis 1.1.0)
 
 ## 1. Ringkasan hasil uji otomatis
 

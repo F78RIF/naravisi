@@ -24,3 +24,6 @@ ai-service/eval/data/images/
 ai-service/eval/data/predictions/
 ai-service/eval/sources.txt
 *.tmp
+
+# Paket rilis extension (dibuat ulang dengan: python -I scripts/paket_extension.py)
+dist/
