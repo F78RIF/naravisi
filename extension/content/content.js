@@ -573,7 +573,9 @@
       }
       const text = document.createElement('span');
       text.className = 'label';
-      text.innerHTML = '<span class="title"></span><span class="meta"></span>';
+      // Spasi di antara judul & keterangan: teks yang terlihat menjadi bagian dari nama aksesibel (WCAG 2.5.3,
+      // penting bagi pengguna perintah suara). Nama yang dibacakan NVDA tetap dari aria-label di atas.
+      text.innerHTML = '<span class="title"></span> <span class="meta"></span>';
       text.querySelector('.title').textContent = label.title;
       text.querySelector('.meta').textContent = label.meta;
       li.append(thumb, text);

@@ -18,7 +18,7 @@ Halaman web ──Alt+Shift+K──▶ Extension (scan, pilih, panel, TTS)
 |---|---|---|
 | `extension/` | Chrome Extension: panel deskripsi, popup akun, halaman Riwayat/Pengaturan/Premium/Profil | Manifest V3, JavaScript ES2022, Web Speech API |
 | `backend/` | REST API + dashboard Admin (`/admin/`) | Node.js 22, Express 5, MySQL 8.4 (`mysql2`) |
-| `ai-service/` | Image captioning | Python 3.12, FastAPI 0.115, BLIP + MarianMT (lokal) atau Gemini Flash (Google AI Studio) |
+| `ai-service/` | Image captioning | Python 3.12, FastAPI 0.162, BLIP + MarianMT (lokal) atau Gemini Flash (Google AI Studio) |
 | `e2e/` | Uji end-to-end di Chromium | Playwright |
 | `docs/` | API, keputusan desain, pengujian, log Agentic SDLC | – |
 
@@ -93,7 +93,7 @@ Rencana uji manual lengkap: `docs/PENGUJIAN.md`. Alur sistem bergambar: `docs/AL
 - **Dataset evaluasi**: gambar (`eval/data/images/`) dan keluaran model (`eval/data/predictions/`) tidak pernah di-commit
   (hak cipta & privasi). Dataset dipakai untuk few-shot & evaluasi (prompt tuning), **bukan** untuk melatih ulang bobot model.
 
-Audit dependensi (15 Oktober 2026): `npm audit` backend **0 kerentanan**. `pip-audit` ai-service: **23 temuan** di `starlette` 0.46 (lewat `fastapi==0.115.*`) dan `transformers` 4.57 (dibatasi `<5`). Risiko diperkecil karena ai-service hanya listen di `127.0.0.1` dan hanya menerima gambar dari backend. Upgrade ke FastAPI/transformers versi baru dijadwalkan di tahap berikutnya karena perlu uji ulang model BLIP.
+Audit dependensi (2 November 2026): `npm audit` backend & e2e **0 kerentanan**. `pip-audit` ai-service: starlette, pillow, filelock, pyasn1, setuptools, certifi sudah di-upgrade (FastAPI 0.162 / starlette 1.10). Yang tersisa hanya `transformers` 4.57 (dibatasi `<5` sampai BLIP/MarianMT diuji ulang); temuannya hanya terpicu saat memuat repo model yang tidak dipercaya, padahal layanan hanya memuat dua model tetap. Pindai rahasia (`python -I scripts/pindai_rahasia.py`): **0 temuan** di berkas maupun riwayat git. Rincian: `docs/PENGUJIAN.md` bagian 3b.
 
 ## Menjalankan di laptop
 

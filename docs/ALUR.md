@@ -721,3 +721,85 @@ peninjau kemudian dihapus, laporannya tetap ada dan kolom peninjau dikosongkan.
 | Status laporan SRS | "RF-22: status laporan hanya \"baru\" atau \"ditinjau\" sesuai SRS; status lain ditolak" |
 | Dashboard & NVDA | e2e: "RF-30: hapus tanpa mengetik email yang benar ditolak; fokus kembali ke kolom, pesan dibacakan" (+ audit aksesibilitas dialog) · "UC-ADM-04: hapus pengguna dengan konfirmasi (ketik email)" |
 | Alur manual tetap | e2e: "ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc" |
+
+---
+
+## Tahap 8 — Langkah 3: Bukti RNF (kinerja, aksesibilitas, keamanan)
+
+### Ide besarnya
+
+Kebutuhan non-fungsional ("cepat", "bisa dipakai NVDA", "aman") hanya bisa diklaim kalau ada **bukti yang bisa diulang**.
+Setiap RNF di `docs/PENGUJIAN.md` bagian 3 sekarang menunjuk ke alat yang menghasilkan angkanya, perintah untuk
+menjalankannya ulang, dan hasilnya apa adanya, termasuk yang belum tercapai (RNF-04 dengan Gemini tetap ❌). Hal yang
+hanya bisa dinilai manusia (NVDA, Midtrans Sandbox, MySQL asli, pengguna tunanetra) ditulis sebagai langkah uji
+dengan **kolom hasil kosong**.
+
+### Alur pengumpulan bukti
+
+```
+           ┌─ npm test (backend) ──────────▶ 121 tes + cakupan baris 94%
+           ├─ pytest (ai-service) ─────────▶ 85 tes
+ Bukti ────┼─ npm test (e2e) ──────────────▶ 113 skenario + axe-core di 15 tampilan  ─▶ RNF-02/03
+           ├─ bench.js ────────────────────▶ p50/p95 per endpoint                     ─▶ RNF-05
+           ├─ run_eval (Langkah 0) ────────▶ p50/p95 model AI                         ─▶ RNF-04
+           ├─ npm audit / pip-audit ───────▶ kerentanan dependensi
+           └─ pindai_rahasia.py ───────────▶ kunci di berkas & riwayat git
+                                   │
+                                   ▼
+                    docs/PENGUJIAN.md (angka disalin apa adanya)
+```
+
+### p50 dan p95 — kenapa dua angka?
+
+Setiap endpoint dipanggil 200 kali lalu waktunya diurutkan. **p50** adalah waktu di urutan tengah (separuh permintaan
+lebih cepat dari ini), sedangkan **p95** adalah waktu yang dilampaui hanya oleh 5% permintaan paling lambat. Rata-rata
+bisa menyembunyikan permintaan yang sesekali sangat lambat; p95 menunjukkannya. Target RNF-05 (≤ 2 detik) dibandingkan
+dengan p95, bukan rata-rata.
+
+### Audit aksesibilitas: dua lapis
+
+```
+a11yAudit(halaman)
+  ├─ basicAudit : label, nama tombol, alt, satu h1, lang        (aturan sederhana buatan sendiri)
+  └─ axeAudit   : axe-core, aturan WCAG 2.0/2.1/2.2 A & AA      (disuntik lewat DevTools Protocol,
+                                                                  jadi tetap jalan di halaman extension ber-CSP)
+  → daftar masalah; tes gagal bila tidak kosong
+```
+
+axe-core langsung menemukan satu masalah yang lolos dari pemeriksaan sendiri, yaitu WCAG 2.5.3 *Label in Name* di daftar
+gambar panel. Pengguna perintah suara mengucapkan apa yang **terlihat** ("klik Gambar 1 dari 5"), jadi teks yang terlihat
+harus ada di nama aksesibelnya. Sebelumnya judul dan keterangan menempel tanpa spasi ("…dari 5teks alternatif…"). Sekarang
+diberi satu spasi. Tampilan tidak berubah karena keduanya elemen blok, dan `aria-label` yang dibacakan NVDA juga sama
+persis. Alur manual Alt+Shift+K tidak tersentuh.
+
+### Audit dependensi: perbaiki yang bisa, jelaskan yang tidak
+
+1. **npm audit**: dua temuan di backend (`body-parser`, `qs`) diperbaiki tanpa mengubah kode. Temuan `sharp` di e2e
+   (alat uji, tidak dikirim ke pengguna) di-upgrade ke 0.35.5.
+2. **pip-audit**: dijalankan dari venv terpisah terhadap paket yang terpasang di venv layanan. Paket yang punya versi
+   perbaikan kompatibel di-upgrade, lalu batas minimumnya ditulis di `requirements.txt`. FastAPI ikut naik (0.115 → 0.162)
+   karena starlette lama terkunci olehnya.
+3. **transformers** tidak di-upgrade. Perbaikannya ada di versi 5, yang belum diuji dengan BLIP/MarianMT. Semua temuannya
+   hanya terpicu saat memuat repo model milik penyerang, sedangkan layanan hanya memuat dua model tetap dari `.env`.
+   Risiko ini dicatat sebagai **diterima** beserta mitigasinya, tidak disembunyikan.
+
+### Pindai rahasia
+
+`scripts/pindai_rahasia.py` (Python standar, tanpa dependensi) memeriksa tiga hal:
+
+```
+git ls-files           → setiap baris berkas yang dilacak sekarang
+git log --all -p       → setiap baris yang PERNAH ditambahkan (kunci yang sudah dihapus tetap ada di riwayat!)
+git log --name-status  → berkas .env yang pernah di-commit + ukurannya
+```
+
+Polanya mencakup kunci Google/Gemini (`AIza…`), kunci Midtrans (`Mid-server-…`), private key, token, JWT, dan penugasan
+`*_SECRET=`/`*_KEY=` berisi nilai harfiah. Placeholder seperti `ganti-dengan-…` diabaikan. Nilai yang ditemukan **tidak
+pernah dicetak**, hanya jenis, lokasi, dan panjangnya, agar laporan pemindaian tidak ikut membocorkan kunci. Skrip keluar
+dengan kode 1 bila ada temuan, jadi bisa dipakai sebagai gerbang sebelum commit/push.
+
+### Hal yang perlu diingat
+
+- Angka bench sekitar 15 ms di mesin ini didominasi biaya koneksi lokal (bahkan `GET /plans` yang tanpa basis data
+  juga sekitar 15 ms), bukan kerja endpoint. Yang penting: jauh di bawah 2 detik.
+- Audit otomatis 0 pelanggaran **bukan** berarti sudah nyaman dipakai NVDA. M-03 dan M-05 tetap wajib dijalankan manusia.

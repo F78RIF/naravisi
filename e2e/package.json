@@ -8,7 +8,8 @@
     "icons": "node build-icons.mjs"
   },
   "devDependencies": {
+    "axe-core": "4.14.0",
     "playwright": "^1.48.0",
-    "sharp": "^0.33.0"
+    "sharp": "^0.35.5"
   }
 }

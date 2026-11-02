@@ -9,6 +9,7 @@ const app = await startTestApp();
 app.clock.set(new Date().toISOString());
 
 const u = await app.register({ nama: 'Bench', email: 'bench@uji.id' });
+const adminToken = await app.loginAdmin();
 // Isi riwayat 200 baris agar query riwayat realistis
 for (let i = 0; i < 200; i++) {
   await app.db.run(
@@ -24,6 +25,8 @@ const cases = [
   ['GET /settings', () => app.api('GET', '/api/v1/settings', { token: u.token })],
   ['PUT /settings', () => app.api('PUT', '/api/v1/settings', { token: u.token, body: { kecepatan_suara: 1.2 } })],
   ['GET /plans', () => app.api('GET', '/api/v1/plans')],
+  ['GET /admin/users', () => app.api('GET', '/api/v1/admin/users?limit=20', { token: adminToken })],
+  ['GET /admin/reports', () => app.api('GET', '/api/v1/admin/reports?limit=20', { token: adminToken })],
   ['POST /auth/login', () => app.api('POST', '/api/v1/auth/login', { body: { email: 'bench@uji.id', kata_sandi: u.password } }), 50],
   ['POST /descriptions*', async () => {
     await app.db.run('DELETE FROM kuota_harian');

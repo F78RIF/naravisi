@@ -1,16 +1,22 @@
 # Laporan & Rencana Pengujian NaraVisi (Fase 6)
 
-Versi kode: 1.0.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7 dan 16 Oktober 2026)
+Versi kode: 1.0.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7, 16 Oktober, dan 2 November 2026 — Langkah 3: bukti RNF)
 
 ## 1. Ringkasan hasil uji otomatis
 
 | Suite | Lokasi | Jumlah | Hasil | Cara menjalankan |
 |---|---|---|---|---|
-| Unit + integrasi API (backend) | `backend/test/` | 121 tes | **121 lulus** | `cd backend && npm test` |
+| Unit + integrasi API (backend) | `backend/test/` | 121 tes | **121 lulus** · cakupan baris **94,04%**, cabang 88,96%, fungsi 95,22% | `cd backend && npm test` (cakupan: `node --test --experimental-test-coverage "test/**/*.test.js"`) |
 | Layanan AI (logika, Gemini, endpoint, evaluasi) | `ai-service/tests/` | 85 tes + 13 subtes | **85 lulus** | `cd ai-service && .venv\Scripts\python -m pytest` |
 | End-to-end extension + backend + Admin | `e2e/run.mjs` | 113 skenario | **113 lulus** | `cd e2e && npm install && npm test` |
+| Audit aksesibilitas axe-core 4.14.0 (di dalam E2E) | `e2e/run.mjs` (`axeAudit`) | 15 audit, 39 aturan WCAG 2.x A/AA | **0 pelanggaran** | ikut `npm test` di `e2e/` |
+| Kinerja non-AI (p50/p95) | `backend/scripts/bench.js` | 10 endpoint × 200 (login × 50) | p95 maks. **67,9 ms** (≤ 2 dtk) | `cd backend && node --no-warnings scripts/bench.js` |
+| `npm audit` | `backend/`, `e2e/` | – | **0 kerentanan** | `npm audit` |
+| `pip-audit` | `ai-service/.venv` | 82 paket | 9 temuan tersisa di `transformers` (risiko diterima, bagian 3b) | lihat bagian 3b |
+| Pindai rahasia | `scripts/pindai_rahasia.py` | 131 berkas + 43 commit | **0 temuan** | `python -I scripts/pindai_rahasia.py` |
 
-Angka di atas dari jalan ulang 2 November 2026 (Langkah 2 — Admin).
+Angka di atas dari jalan ulang 2 November 2026 (Langkah 3). Mesin: Windows 11, Intel i5-11400H (12 thread), RAM 8 GB,
+Node.js 24.19, Python 3.12.10.
 
 Lingkungan uji otomatis: Chromium 141 (headless, extension dimuat), Node.js 22, basis data SQLite di memori dengan skema yang sama seperti MySQL, model AI dipalsukan (teks tetap). Yang **belum** tercakup otomatis — model AI asli, MySQL sungguhan, pembaca layar, suara nyata — diuji manual di bagian 4.
 
@@ -18,7 +24,9 @@ Teknik yang dipakai:
 - **Black-box** per use case: setiap UC diuji alur utama, alur alternatif, dan kondisi gagal.
 - **Boundary value**: kuota ke-10/ke-11, pergantian hari 23.59→00.01 WITA, riwayat hari ke-7/ke-8, kecepatan suara 0.5/2.0/5, sandi 7/8 karakter.
 - **Keamanan**: token palsu, token kedaluwarsa, akses lintas pengguna, akses Admin oleh pengguna biasa, tanda tangan webhook palsu, permintaan serentak (race condition kuota).
-- **Audit aksesibilitas otomatis** (E2E): setiap kontrol berlabel, tombol bernama, gambar ber-alt, satu `h1`, atribut `lang`.
+- **Audit aksesibilitas otomatis** (E2E): pemeriksaan buatan sendiri (setiap kontrol berlabel, tombol bernama, gambar
+  ber-alt, satu `h1`, atribut `lang`) **ditambah axe-core** dengan aturan WCAG 2.0/2.1/2.2 level A & AA, serta rasio
+  kontras token warna terang/gelap.
 
 ## 2. Matriks traceability kebutuhan fungsional
 
@@ -61,23 +69,120 @@ Legenda file: **A** = `backend/test/auth.test.js`, **D** = `describeQuotaHistory
 
 ## 3. Matriks kebutuhan non-fungsional
 
-| RNF | Kebutuhan | Bukti | Status |
+Status: ✅ terbukti otomatis · ⏳ menunggu uji manual (bagian 4, kolom hasil kosong) · ❌ diukur dan belum tercapai ·
+📄 hanya didokumentasikan.
+
+| RNF | Kebutuhan | Bukti otomatis / terukur | Bukti manual | Status |
+|---|---|---|---|---|
+| RNF-01 | Antarmuka sederhana | E: alur utama diuji ujung ke ujung ("ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc"); kesederhanaan hanya bisa dinilai pengguna | M-05 | ⏳ manual |
+| RNF-02 | Kompatibel pembaca layar | E: axe-core 4.14.0, 15 audit di 9 tampilan (sambutan, popup, panel, Riwayat, Pengaturan, Premium, halaman bayar SIMULASI, Profil, dashboard Admin), 39 aturan WCAG A/AA yang berlaku pada tampilan itu → **0 pelanggaran**; pemeriksaan label/nama/alt/h1/lang; live region & `aria-activedescendant` diuji | M-03 (NVDA) | ✅ otomatis · ⏳ manual |
+| RNF-03 | Navigasi keyboard penuh | E: panel penuh keyboard, fokus kembali setelah Esc, tab Admin pakai panah, dialog hapus Admin memfokus kolom & mengembalikan fokus saat galat · "ALUR MANUAL" Alt+Shift+K | M-03 | ✅ otomatis · ⏳ manual |
+| RNF-04 | Deskripsi ≤ 5 detik | Evaluasi 1 Nov 2026 (bagian 4, M-01): BLIP p50 2,8 dtk / p95 4,1 dtk (9/9 ≤ 5 dtk); Gemini p50 10,2 dtk / p95 20,3 dtk (0% ≤ 5 dtk). Overhead backend saja (AI dipalsukan): p50 15,3 ms / p95 17,1 ms | M-01 (tabel kosong untuk penguji manusia) | ❌ belum tercapai dengan Gemini · ✅ dengan BLIP pada dataset |
+| RNF-05 | Non-AI ≤ 2 detik | `bench.js` (bagian 3a): p95 tertinggi 67,9 ms (`POST /auth/login`, sengaja lambat karena scrypt); endpoint lain p95 ≤ 17,0 ms | M-06 (MySQL asli) | ✅ |
+| RNF-06 | Pesan error jelas | I, D: semua kode error berpesan Indonesia · E: kuota habis, belum masuk, server mati, email konfirmasi salah | M-03 | ✅ |
+| RNF-07 | HTTPS/TLS | Konfigurasi deploy (di luar cakupan demo localhost); token & kunci tidak pernah dikirim ke halaman web | – | 📄 didokumentasikan |
+| RNF-08 | Sandi ter-hash | A: hash scrypt + salt, tidak memuat teks asli · pindai rahasia: 0 temuan | – | ✅ |
+| RNF-09 | Autentikasi token | A: token palsu/kedaluwarsa/akun terhapus ditolak; 10 login gagal → dikunci 15 menit | – | ✅ |
+| RNF-10 | Hak akses per peran | P: SETIAP rute `/api/v1/admin/*` diuji satu per satu (pengguna 403, tanpa login 401, data tidak berubah); peran dibaca dari database tiap permintaan; Admin aktif terakhir dilindungi (409); Premium-only di pengaturan | – | ✅ |
+| RNF-11 | Manifest V3 | `extension/manifest.json` · E: extension dimuat di Chromium 141 | – | ✅ |
+| RNF-12 | Info jelas saat AI/internet mati | D: AI mati → 503 & kuota dikembalikan · E: server mati dibacakan | M-03 | ✅ |
+| RNF-13 (baru) | File gambar tidak disimpan | Kode: `descriptionService` hanya menyimpan URL & teks · E: data: URL tersimpan tanpa URL gambar | – | ✅ |
+| Keamanan dependensi | Tidak ada kerentanan yang diketahui tanpa alasan | `npm audit` 0 · `pip-audit`: semua paket diperbaiki kecuali `transformers` (risiko diterima, bagian 3b) | – | ✅ dengan catatan |
+| Rahasia | Tidak ada kunci di repo | `scripts/pindai_rahasia.py`: 131 berkas + 43 commit → 0 temuan | – | ✅ |
+
+### 3a. Kinerja non-AI (RNF-05) — `backend/scripts/bench.js`, 2 November 2026
+
+SQLite di memori, 200 baris riwayat, server `node:http` di 127.0.0.1, setiap endpoint dipanaskan 1× lalu diukur 200×
+(login 50×). Waktu = kirim permintaan → respons diterima di klien uji.
+
+| Endpoint | n | p50 (ms) | p95 (ms) | maks (ms) |
+|---|---|---|---|---|
+| GET /me | 200 | 15.2 | 16.9 | 19.9 |
+| GET /me/quota | 200 | 15.4 | 16.7 | 23.7 |
+| GET /history | 200 | 15.3 | 17.0 | 18.1 |
+| GET /settings | 200 | 15.4 | 16.8 | 19.0 |
+| PUT /settings | 200 | 15.3 | 16.9 | 22.8 |
+| GET /plans | 200 | 15.4 | 16.4 | 17.1 |
+| GET /admin/users | 200 | 15.4 | 16.6 | 23.1 |
+| GET /admin/reports | 200 | 15.2 | 16.5 | 18.5 |
+| POST /auth/login | 50 | 61.7 | 67.9 | 72.1 |
+| POST /descriptions* | 200 | 15.3 | 17.1 | 19.1 |
+
+\* Model AI dipalsukan: angka = overhead backend (validasi, kuota, riwayat). Hampir semua endpoint berada di sekitar
+15 ms, termasuk `GET /plans` yang tidak menyentuh basis data. Jadi angka ini didominasi biaya koneksi lokal di mesin
+uji, bukan kerja endpoint. Pengukuran Fase 7 di mesin lain mencatat p95 ≤ 3,5 ms. Kedua angka jauh di bawah batas 2 detik.
+
+### 3b. Keamanan dependensi & rahasia — 2 November 2026
+
+**npm audit**
+
+| Folder | Sebelum | Tindakan | Sesudah |
 |---|---|---|---|
-| RNF-01 | Antarmuka sederhana | Uji pengguna (M-05) | ⏳ manual |
-| RNF-02 | Kompatibel pembaca layar | Audit otomatis E2E (label, nama tombol, alt, live region) · M-03 NVDA | ✅ otomatis · ⏳ manual |
-| RNF-03 | Navigasi keyboard penuh | E: panel penuh keyboard, fokus kembali setelah Esc, tab Admin pakai panah | ✅ |
-| RNF-04 | Deskripsi ≤ 5 detik | M-01 dengan model BLIP asli: rata-rata 7,3 dtk, median 4,2 dtk (CPU) · M-01 dataset 1 Nov 2026: BLIP p50 2,8 dtk (9/9 ≤ 5 dtk), Gemini p50 10,2 dtk / p95 20,3 dtk (0% ≤ 5 dtk) | ❌ belum tercapai (Gemini; BLIP di halaman berita) |
-| RNF-05 | Non-AI ≤ 2 detik | M-02: `GET /history`, `/me` maks. 23 ms | ✅ |
-| RNF-06 | Pesan error jelas | I, D: semua kode error berpesan Indonesia · E: kuota habis, belum masuk, server mati | ✅ |
-| RNF-07 | HTTPS/TLS | Konfigurasi deploy (di luar cakupan demo localhost) | 📄 didokumentasikan |
-| RNF-08 | Sandi ter-hash | A: hash scrypt tidak memuat teks asli | ✅ |
-| RNF-09 | Autentikasi token | A: token palsu/kedaluwarsa ditolak | ✅ |
-| RNF-10 | Hak akses per peran | S, P: SETIAP rute `/api/v1/admin/*` diuji satu per satu (pengguna 403, tanpa login 401, tidak ada perubahan data); peran dibaca dari database di tiap permintaan; Premium-only di pengaturan | ✅ |
-| RNF-11 | Manifest V3 | `extension/manifest.json` · E: extension dimuat di Chromium | ✅ |
-| RNF-12 | Info jelas saat AI/internet mati | D: AI mati → 503 & kuota dikembalikan · E: server mati dibacakan | ✅ |
-| RNF-13 (baru) | File gambar tidak disimpan | Kode: `descriptionService` hanya menyimpan URL & teks · E: data: URL tersimpan tanpa URL gambar | ✅ |
+| `backend/` | 2 (high: `body-parser` 2.0.0–2.3.0 DoS GHSA-27r3-jxmh-p828; moderate: `qs` ≤ 6.16.0 GHSA-6pq8-jhm2-2vcw) | `npm audit fix` (hanya lockfile, tanpa perubahan kode) | **0** |
+| `e2e/` (alat uji, tidak dikirim ke pengguna) | 1 (high: `sharp` ≤ 0.35.5-rc.1, libvips/libheif/librsvg) | `sharp` ^0.33 → ^0.35.5; E2E tetap 113/113 | **0** |
+
+**pip-audit 2.10.1** (`pip-audit --path ai-service/.venv/Lib/site-packages`, dijalankan dari venv terpisah agar venv layanan
+tidak berubah)
+
+| Paket | Sebelum | Tindakan | Sesudah |
+|---|---|---|---|
+| `starlette` 0.46.2 (lewat `fastapi==0.115.*`) | 7 ID | `fastapi` 0.115 → 0.162, `starlette` 1.10.0 | 0 |
+| `pillow` 12.3.0 | 39 ID | → 13.0.0 | 0 |
+| `filelock` 3.32.3 | 12 ID | → ≥ 4.2.1 | 0 |
+| `pyasn1` 0.6.4 | 4 ID | → ≥ 0.6.5 | 0 |
+| `setuptools` 78.1.0 | 3 ID | → ≥ 84.1.0 | 0 |
+| `certifi` 2026.7.22 | 1 ID | → ≥ 2026.10.18 | 0 |
+| `transformers` 4.57.6 | 6 ID (PYSEC-2025-217, PYSEC-2026-2288/2289/2290/3929/4174) | **tidak di-upgrade** | 6 ID (9 baris) |
+| `torch` 2.14.1+cpu | – | tidak bisa diaudit (build `+cpu` tidak ada di PyPI) | – |
+
+Batas minimum baru ditulis di `ai-service/requirements.txt`. Tes ai-service tetap 85/85 setelah upgrade.
+
+**Risiko yang diterima — `transformers` < 5.** Keenam temuan hanya terpicu bila aplikasi (a) memuat **repo model milik
+penyerang** dari Hugging Face Hub (`config.json`/`tokenizer_config.json` jahat, LightGlue, `custom_generate`), (b) memakai
+`Trainer` untuk memuat checkpoint latih, atau (c) mengonversi checkpoint X-CLIP. Layanan NaraVisi hanya memuat dua repo
+tetap yang ditentukan operator lewat `.env` (`Salesforce/blip-image-captioning-base`, `Helsinki-NLP/opus-mt-en-id`),
+tidak memakai `Trainer` saat melayani, dan menerima **gambar** (bukan model) dari backend lewat `127.0.0.1`. Upgrade ke
+transformers 5.x ditunda karena BLIP & MarianMT perlu diuji ulang. Mitigasi: jangan mengisi `BLIP_MODEL` /
+`TRANSLATION_MODEL` dengan repo yang tidak dipercaya. Setelah model terunduh, layanan bisa dijalankan dengan
+`HF_HUB_OFFLINE=1`.
+
+**Pindai rahasia** (`python -I scripts/pindai_rahasia.py`). Skrip ini memindai berkas yang dilacak git **dan** setiap baris
+yang pernah ditambahkan di 43 commit. Polanya: kunci Google/Gemini, kunci Midtrans, private key, token
+GitHub/Slack/Hugging Face/AWS, JWT, dan penugasan `*SECRET*`/`*PASSWORD*`/`*API_KEY*`/`*SERVER_KEY*`/`*TOKEN*`. Nilai yang
+ditemukan tidak pernah dicetak.
+
+| Hasil | |
+|---|---|
+| Berkas dilacak dipindai | 131 |
+| Berkas `.env` dilacak saat ini | tidak ada (`backend/.env`, `ai-service/.env` diabaikan lewat `*.env` di `.gitignore`) |
+| Berkas `.env` di riwayat | `ai-service.env` di commit 2c7e0c2, **0 byte** (kosong), dihapus di 09dc21c |
+| Temuan | **0** |
+
+Skrip diuji dengan kunci palsu (kunci Google, kunci Midtrans, `JWT_SECRET` harfiah → terdeteksi; placeholder & kode →
+diabaikan).
+
+### 3c. Audit aksesibilitas otomatis (RNF-02, RNF-03)
+
+`a11yAudit()` di `e2e/run.mjs` menjalankan dua pemeriksaan di setiap tampilan:
+
+1. **Pemeriksaan buatan sendiri**: kontrol berlabel, tombol/tautan bernama, gambar ber-`alt`, tepat satu `h1`, atribut `lang`.
+2. **axe-core 4.14.0** dengan tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`. Skrip disuntik lewat DevTools
+   Protocol sehingga juga berjalan di halaman extension dan halaman ber-CSP. Panel di halaman web diaudit di dalam
+   shadow root-nya.
+
+Selain itu, rasio kontras setiap pasangan token warna (tema terang & gelap) dihitung dan harus ≥ 4,5:1.
+
+Hasil 2 November 2026: **15 audit, 39 aturan, 0 pelanggaran.** Audit axe pertama menemukan satu masalah nyata:
+`label-content-name-mismatch` (WCAG 2.5.3 *Label in Name*) pada opsi daftar gambar di panel. Teks yang terlihat
+("Gambar 1 dari 5" langsung disambung keterangan tanpa spasi) tidak menjadi bagian dari nama aksesibel, sehingga
+menyulitkan pengguna perintah suara. Perbaikan (C-13): satu spasi di antara judul dan keterangan. Tampilan dan nama yang
+dibacakan NVDA (`aria-label`) tidak berubah.
+
+Audit otomatis **tidak** menggantikan uji dengan pembaca layar sungguhan (M-03) dan pengguna tunanetra (M-05).
 
 ## 4. Uji manual (wajib dijalankan di laptop)
+
+Kolom hasil di bagian ini **sengaja dikosongkan** dan diisi oleh penguji manusia setelah benar-benar menjalankan langkahnya. Catatan uji yang pernah dijalankan otomatis oleh agen (bukan pengganti uji manusia) dipindah ke Lampiran A.
 
 ### M-01 — Kualitas & kecepatan model AI asli (RNF-04)
 Jalankan stack lengkap (`README.md`), deskripsikan 10 gambar dari 3 situs berita. Catat waktu dari tekan Enter sampai suara mulai.
@@ -135,46 +240,104 @@ deskripsi acuan yang ditulis manusia lewat `eval.annotate` **sebelum** melihat k
 - BLIP pertama kali **gagal dijalankan** (`DefaultCPUAllocator: not enough memory`, RAM bebas 1,5 GB); berhasil setelah
   aplikasi lain ditutup.
 
-### M-02 — Respons non-AI (RNF-05)
-Buka DevTools → Network, muat halaman Riwayat dan Profil 5 kali. Lulus bila semua permintaan API < 2 detik.
+### M-02 — Respons non-AI di peramban (RNF-05)
+Jalankan stack lengkap dengan MySQL (`DB_DRIVER=mysql`). Buka DevTools → Network, lalu muat halaman Riwayat, Profil,
+Pengaturan, dan dashboard Admin masing-masing 5 kali. Lulus bila semua permintaan `/api/v1/*` < 2 detik.
 
-**Hasil 16 Oktober 2026** (agen, timing jaringan Playwright pada stack MySQL): `GET /history` 8–23 ms, `GET /me` 7–16 ms dari 5 kali muat → **lulus** ✅.
+| Halaman | Permintaan paling lambat (ms) | Lulus? (Y/T) |
+|---|---|---|
+| Riwayat | | |
+| Profil | | |
+| Pengaturan | | |
+| Dashboard Admin | | |
 
-### M-03 — Pembaca layar NVDA (RNF-02, RF-12)
-Dengan NVDA aktif di Windows:
-1. Tekan Alt+Shift+K → NVDA mengumumkan "NaraVisi, dialog" dan jumlah gambar.
-2. Panah bawah → nama "Gambar 2 dari N" dan teks alternatif dibaca.
-3. Enter → status "Mendeskripsikan…", lalu TTS NaraVisi membacakan deskripsi tanpa bertabrakan dengan NVDA.
-4. Tombol Putar/Jeda/Ulang/Berhenti dapat dijangkau dengan Tab dan berfungsi.
-5. Halaman Pengaturan & Riwayat: setiap kontrol diumumkan dengan labelnya.
+Penguji: ________ · Tanggal: ________
 
-Catat masalah: ____________________
+### M-03 — Pembaca layar NVDA (RNF-02, RNF-03, RF-12)
+Persiapan: Windows + NVDA (versi terbaru), Chrome dengan extension NaraVisi terpasang (`chrome://extensions` → Load
+unpacked → `extension/`), backend + layanan AI berjalan, akun Gratis sudah masuk. Mouse tidak dipakai sama sekali.
 
-### M-04 — Midtrans Sandbox (RF-25)
-1. Isi `MIDTRANS_SERVER_KEY` dengan Server Key Sandbox, jalankan ulang backend (log: "Pembayaran: sandbox").
-2. Beli Premium → halaman Snap terbuka → pilih QRIS → selesaikan dengan simulator Sandbox Midtrans.
-3. Kembali ke halaman Premium → "Cek status pembayaran" → status Premium.
-(Webhook ke localhost tidak sampai; status tetap diperbarui lewat pengecekan langsung ke Midtrans.)
+| # | Langkah | Yang seharusnya terdengar / terjadi | Hasil (Y/T) | Catatan |
+|---|---|---|---|---|
+| 1 | Buka situs berita (mis. kompas.com), tekan **Alt+Shift+K** | NVDA: "NaraVisi, dialog" + "N gambar ditemukan" | | |
+| 2 | Tekan **panah bawah** dua kali | "Gambar 3 dari N · …" beserta teks alternatif / keterangan | | |
+| 3 | Tekan **Enter** | "Mendeskripsikan…", lalu suara NaraVisi membacakan deskripsi tanpa bertabrakan dengan NVDA | | |
+| 4 | Tekan **Spasi**, lalu **R**, lalu **S** | jeda/lanjut, ulang dari awal, berhenti | | |
+| 5 | Tekan **Esc** | panel tertutup, fokus kembali ke halaman | | |
+| 6 | Tab ke gambar yang sudah dideskripsikan (mode baca NVDA) | NVDA membacakan deskripsi sebagai teks alternatif gambar | | |
+| 7 | Buka Pengaturan (popup → Pengaturan), telusuri dengan Tab | setiap kontrol diumumkan dengan label & nilainya (penggeser: "1,2 kali") | | |
+| 8 | Buka Riwayat, Tab ke "Detail" lalu "Putar ulang" | detail dibacakan, putar ulang berfungsi | | |
+| 9 | Dari panel tekan **L** (Laporkan), kirim tanpa memilih alasan | pesan galat dibacakan, fokus ke pilihan alasan | | |
+| 10 | Matikan backend, tekan Alt+Shift+K lalu Enter pada gambar | pesan "Tidak dapat terhubung ke server …" dibacakan | | |
+| 11 | Halaman Premium → tombol beli | "SIMULASI" terdengar di tombol, judul tab, dan judul halaman bayar | | |
+| 12 | Dashboard Admin → Hapus pengguna → ketik email salah → Enter | "Email tidak cocok …" dibacakan, fokus kembali ke kolom email | | |
 
-### M-05 — Uji pengguna bersama teman difabel (RNF-01, evaluasi)
-Durasi ±30 menit. Peserta memakai perangkat & pembaca layarnya sendiri. Pengamat hanya mencatat, tidak membantu kecuali peserta macet > 2 menit.
+Versi NVDA: ________ · Versi Chrome: ________ · Penguji: ________ · Tanggal: ________
 
-| Tugas | Berhasil tanpa bantuan? | Waktu | Catatan |
+Masalah yang ditemukan: ____________________
+
+### M-04 — Midtrans Sandbox (RF-24, RF-25, RF-26)
+Persiapan: akun Midtrans Sandbox. Isi `MIDTRANS_SERVER_KEY` dengan **Server Key Sandbox** di `backend/.env` (jangan di
+berkas lain), lalu jalankan ulang backend. Log harus menulis "Pembayaran: sandbox".
+
+| # | Langkah | Yang seharusnya terjadi | Hasil (Y/T) | Catatan |
+|---|---|---|---|---|
+| 1 | Popup → Premium → "Beli Premium Bulanan" | tab Snap Midtrans Sandbox terbuka; nominal **Rp15.000** (dari database) | | |
+| 2 | Pilih QRIS → selesaikan dengan simulator pembayaran Sandbox | Midtrans: pembayaran berhasil | | |
+| 3 | Kembali ke halaman Premium → "Cek status pembayaran" | status **Premium**, "Berlaku hingga" = hari ini + 30 hari | | |
+| 4 | Dashboard Midtrans Sandbox → transaksi yang sama | `order_id` & nominal sama dengan tabel `transaksi` | | |
+| 5 | Ulangi beli, lalu biarkan kedaluwarsa / batalkan di simulator | status tetap Gratis (atau masa aktif tidak bertambah) | | |
+| 6 | (Opsional, perlu URL publik mis. ngrok) Atur Notification URL ke `…/api/v1/payments/notification` | notifikasi diterima; log tidak memuat server key | | |
+
+Catatan: webhook dari Midtrans tidak bisa mencapai `localhost`, jadi langkah 3 memakai cek status langsung ke Status API.
+
+Penguji: ________ · Tanggal: ________
+
+### M-05 — Uji pengguna bersama pengguna tunanetra (RNF-01, evaluasi)
+Durasi ±30 menit per peserta. Peserta memakai perangkat & pembaca layarnya sendiri. Sebelum mulai, minta persetujuan
+lisan dan jelaskan bahwa yang diuji adalah aplikasinya, bukan pesertanya. Pengamat hanya mencatat, tidak membantu kecuali
+peserta macet > 2 menit (catat sebagai "dibantu").
+
+| Tugas | Berhasil tanpa bantuan? (Y/Dibantu/T) | Waktu | Catatan |
 |---|---|---|---|
 | T1. Daftar akun dari popup | | | |
-| T2. Buka situs berita, pindai gambar dengan pintasan | | | |
+| T2. Buka situs berita, pindai gambar dengan Alt+Shift+K | | | |
 | T3. Dengarkan deskripsi gambar ke-3 | | | |
 | T4. Ulangi & hentikan suara | | | |
 | T5. Laporkan deskripsi yang salah | | | |
 | T6. Ubah kecepatan suara | | | |
-| T7. Buka riwayat dan putar ulang satu deskripsi | | | |
+| T7. Buka Riwayat dan putar ulang satu deskripsi | | | |
 
-Pertanyaan penutup (skala 1–5): kemudahan, kejelasan deskripsi, kenyamanan suara, apakah akan dipakai lagi. Masukan terbuka: ____________________
+Pertanyaan penutup (skala 1–5):
+
+| Pertanyaan | Nilai |
+|---|---|
+| Seberapa mudah NaraVisi dipakai? | |
+| Seberapa jelas deskripsi gambarnya? | |
+| Seberapa nyaman suaranya? | |
+| Apakah akan dipakai lagi? | |
+
+Pembaca layar peserta: ________ · Jumlah peserta: ________ · Tanggal: ________
+
+Masukan terbuka: ____________________
 
 ### M-06 — MySQL sungguhan
-`npm run db:setup` lalu `npm start` dengan `DB_DRIVER=mysql`; ulangi T1–T7 cepat. Pastikan data tampil di DBeaver pada tabel `users`, `riwayat_deskripsi`, `kuota_harian`, `laporan_deskripsi`, `transaksi`, `langganan`.
+Persiapan: MySQL 8.x (mis. Laragon). Di `backend/.env` isi `DB_DRIVER=mysql` dan kredensial basis data, lalu jalankan
+`npm run db:setup` dan `npm start`.
 
-**Hasil 16 Oktober 2026** (agen, MySQL 8.0.30 Laragon; diperiksa dengan kueri SQL, bukan DBeaver): registrasi & login, 10 deskripsi model asli (`riwayat_deskripsi`, `kuota_harian`), laporan (`laporan_deskripsi`), kecepatan suara 1.5 (`pengaturan_aksesibilitas`), lihat/hapus riwayat, beli Premium simulasi (`transaksi` berhasil → `langganan` sampai 2026-11-14), Admin meninjau laporan, Admin menghapus 5 akun uji (riwayat ikut terhapus, transaksi dianonimkan `user_id = NULL`). Permintaan yang gagal karena batas waktu tidak mengurangi kuota (9 riwayat = 9 kuota). → **lulus** ✅ (T1–T7 lewat API; versi lewat UI tercakup E2E).
+| # | Langkah | Periksa di MySQL (DBeaver / `mysql`) | Hasil (Y/T) |
+|---|---|---|---|
+| 1 | Daftar & masuk | baris baru di `users`, kata sandi berupa hash scrypt | |
+| 2 | Deskripsikan 3 gambar | 3 baris `riwayat_deskripsi`; `kuota_harian.jumlah_permintaan` = 3 | |
+| 3 | Laporkan 1 deskripsi | baris `laporan_deskripsi` berstatus `baru` | |
+| 4 | Ubah kecepatan suara | `pengaturan_aksesibilitas` berubah | |
+| 5 | Beli Premium (simulasi) | `transaksi` berhasil, `langganan` aktif 30 hari | |
+| 6 | Admin meninjau laporan | status laporan `ditinjau`, `admin_id` & `tanggal_tinjau` terisi | |
+| 7 | Admin menghapus akun uji (ketik emailnya) | riwayat & laporannya hilang; `transaksi.user_id` = NULL | |
+| 8 | Dengan hanya satu Admin aktif, coba nonaktifkan / turunkan Admin itu dari akun Admin kedua yang baru saja diturunkan | ditolak (403 atau "Admin aktif terakhir …"), tetap ada 1 Admin aktif | |
+| 9 | Matikan MySQL, buka Riwayat | pesan galat jelas, tidak crash; nyalakan lagi → normal | |
+
+Versi MySQL: ________ · Penguji: ________ · Tanggal: ________
 
 ## 5. Cacat yang ditemukan & diperbaiki selama Fase 6
 
@@ -192,5 +355,20 @@ Pertanyaan penutup (skala 1–5): kemudahan, kejelasan deskripsi, kenyamanan sua
 | C-10 | (M-01) Permintaan pertama ke model asli gagal "Layanan AI terlalu lama merespons": 16–20 dtk > `AI_TIMEOUT_MS` 15 dtk saat model CPU berbagi prosesor dengan browser | `AI_TIMEOUT_MS` bawaan 25 dtk (masih di bawah batas extension 30 dtk) + pemanasan model saat layanan AI start. Pemanasan saja tidak cukup (diuji ulang) |
 | C-11 | (M-01) Thumbnail berita detik.com berupa gambar latar CSS sehingga tidak terdeteksi (3 dari 15 gambar); SVG ditolak | Pemindai mengenali `background-image`, SVG inline, dan `<img>` SVG; SVG diubah ke JPEG di dokumen offscreen |
 | C-12 | (M-01, 1 Nov 2026) Gemini menolak 7 dari 9 gambar dengan "Jawaban Gemini tidak sesuai format". Diagnosis: `gemini-3.5-flash` memakai token "berpikir" dari jatah `max_output_tokens` 1024 yang sama (979 berpikir + 30 jawaban → `finish_reason=MAX_TOKENS`, JSON terpotong 116 karakter). Dengan 4096: 1881 berpikir + 581 jawaban, `STOP`, JSON utuh | Bawaan `GEMINI_MAX_OUTPUT_TOKENS` 4096 (`app/config.py`, `app/gemini.py`, `.env.example`); log menyebut "terpotong (MAX_TOKENS)" bila terjadi lagi. Tes: `test_batas_token_bawaan_cukup_untuk_model_berpikir`, `test_jawaban_terpotong_max_tokens_dicatat_jelas`. Ulang uji: 6/9 berhasil, 3 sisanya 429 kuota |
+| C-13 | (Langkah 3, axe-core) Opsi daftar gambar di panel melanggar WCAG 2.5.3 *Label in Name*: teks terlihat "Gambar 1 dari 5" + keterangan disambung tanpa spasi sehingga bukan bagian dari `aria-label` | Satu spasi di antara judul & keterangan (`content.js`, `renderList`); tampilan & nama yang dibacakan NVDA tidak berubah. Dicegah berulang oleh audit axe-core di E2E |
 
 Evaluasi lengkap (cakupan, performa, keamanan, aksesibilitas): `docs/EVALUASI.md`.
+
+## Lampiran A — Catatan uji yang dijalankan agen (bukan uji manual)
+
+Dicatat apa adanya agar tidak hilang. Uji ini **tidak** menggantikan kolom hasil di bagian 4, karena dijalankan
+dengan skrip, bukan oleh manusia dengan perangkat sungguhan.
+
+- **M-02, 16 Oktober 2026** (timing jaringan Playwright pada stack MySQL): `GET /history` 8–23 ms, `GET /me` 7–16 ms dari
+  5 kali muat.
+- **M-06, 16 Oktober 2026** (MySQL 8.0.30 Laragon; diperiksa dengan kueri SQL, bukan DBeaver): registrasi & login, 10
+  deskripsi model asli (`riwayat_deskripsi`, `kuota_harian`), laporan (`laporan_deskripsi`), kecepatan suara 1.5
+  (`pengaturan_aksesibilitas`), lihat/hapus riwayat, beli Premium simulasi (`transaksi` berhasil → `langganan` sampai
+  2026-11-14), Admin meninjau laporan, Admin menghapus 5 akun uji (riwayat ikut terhapus, transaksi dianonimkan
+  `user_id = NULL`). Permintaan yang gagal karena batas waktu tidak mengurangi kuota (9 riwayat = 9 kuota). Dijalankan
+  sebelum Langkah 2, jadi belum mencakup konfirmasi email dan perlindungan Admin terakhir.

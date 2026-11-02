@@ -202,8 +202,41 @@ async function step(name, fn) {
 }
 const section = (t) => console.log(`\n${t}`);
 
-/** Audit aksesibilitas ringan: kontrol berlabel, tombol bernama, gambar ber-alt, satu h1. */
+/**
+ * Audit aksesibilitas: (1) pemeriksaan ringan buatan sendiri (kontrol berlabel, tombol bernama, gambar ber-alt,
+ * satu h1, lang) + (2) axe-core dengan aturan WCAG 2.0/2.1/2.2 level A & AA. Hasil = daftar masalah (kosong = lulus).
+ */
 async function a11yAudit(page, root = 'document') {
+  return [...(await basicAudit(page, root)), ...(await axeAudit(page, root))];
+}
+
+const AXE_SOURCE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+/** Jumlah audit axe yang dijalankan (dicetak di ringkasan sebagai bukti RNF-02). */
+const axeStats = { runs: 0, rules: new Set() };
+
+async function axeAudit(page, root) {
+  // Dijalankan lewat DevTools Protocol, jadi tidak terhalang CSP halaman/extension.
+  if (!(await page.evaluate(() => typeof window.axe !== 'undefined'))) await page.evaluate(AXE_SOURCE);
+  const res = await page.evaluate(
+    async ({ rootSel, tags }) => {
+      const context = rootSel === 'document' ? document : { include: [rootSel] };
+      const r = await window.axe.run(context, { runOnly: { type: 'tag', values: tags }, resultTypes: ['violations'] });
+      return {
+        rules: [...r.passes, ...r.violations, ...r.incomplete].map((x) => x.id),
+        violations: r.violations.map(
+          (v) => `axe ${v.id} (${v.impact}): ${v.nodes.length}× ${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(', ')} — ${v.help}`,
+        ),
+      };
+    },
+    { rootSel: root, tags: AXE_TAGS },
+  );
+  axeStats.runs += 1;
+  for (const id of res.rules) axeStats.rules.add(id);
+  return res.violations;
+}
+
+async function basicAudit(page, root = 'document') {
   return page.evaluate((rootSel) => {
     const scope = rootSel === 'document' ? document : document.querySelector(rootSel).shadowRoot;
     const problems = [];
@@ -1783,4 +1816,5 @@ try {
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} skenario lulus`);
+console.log(`Audit axe-core ${require('axe-core/package.json').version}: ${axeStats.runs} kali dijalankan, ${axeStats.rules.size} aturan WCAG 2.x A/AA diperiksa`);
 process.exit(failed.length ? 1 : 0);
