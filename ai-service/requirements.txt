@@ -1,27 +1,25 @@
-# Layanan AI NaraVisi — Python 3.12
-fastapi>=0.162       # membawa starlette 1.x (perbaikan keamanan, lihat docs/PENGUJIAN.md bagian 3b)
-starlette>=1.3.1
-uvicorn[standard]>=0.30
-pydantic>=2.7
-pillow>=13.0
+# Layanan AI NaraVisi — Python 3.12 — dependensi untuk MENJALANKAN layanan.
+# Batas bawah = versi yang sudah diuji / batas keamanan; batas atas = versi mayor berikutnya (belum diuji).
+# Alat tes, grafik, dan notebook ada di requirements-dev.txt.
+fastapi>=0.162,<1        # membawa starlette 1.x (perbaikan keamanan, lihat docs/PENGUJIAN.md bagian 3b)
+starlette>=1.3.1,<2
+uvicorn[standard]>=0.30,<1
+pydantic>=2.7,<3
+pillow>=13.0,<14
 
 # Provider Gemini (Google AI Studio)
-google-genai>=1.0
+google-genai>=1.0,<3
 
 # Model gratis yang berjalan lokal (CPU cukup).
 # Untuk CPU saja, pasang torch dari indeks CPU agar unduhan lebih kecil:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
-torch>=2.6          # torch.load aman (weights_only) secara bawaan
+torch>=2.6,<3           # torch.load aman (weights_only) secara bawaan
 transformers>=4.44,<5   # <5: BLIP & MarianMT belum diuji ulang di v5 (risiko diterima, lihat PENGUJIAN.md 3b)
-sentencepiece>=0.2   # tokenizer MarianMT (terjemahan en→id)
-sacremoses>=0.1      # menghilangkan peringatan tokenizer Marian
+sentencepiece>=0.2,<0.3 # tokenizer MarianMT (terjemahan en→id)
+sacremoses>=0.1,<0.3    # menghilangkan peringatan tokenizer Marian
 
 # Batas minimum keamanan untuk dependensi tidak langsung (hasil pip-audit 2 November 2026)
 certifi>=2026.10.18
 filelock>=4.2.1
 pyasn1>=0.6.5
 setuptools>=84.1.0
-
-# Pengujian
-pytest>=8
-httpx>=0.27          # dibutuhkan fastapi.testclient

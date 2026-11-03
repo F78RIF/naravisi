@@ -1,0 +1,4 @@
+run,provider,model,n_ok,n_attempted,n_rated,acc,jenis_acc,jenis_n,p50,p95,fast
+gemini-1,Gemini,gemini-3.5-flash,2,9,0,,1.0,1,9769.0,12044.2,0.0
+gemini-2,Gemini,gemini-3.5-flash,6,9,0,,1.0,6,10227.0,20340.25,0.0
+blip-1,BLIP,Salesforce/blip-image-captioning-base + Helsinki-NLP/opus-mt-en-id,9,9,0,,,0,2796.0,4091.2,1.0

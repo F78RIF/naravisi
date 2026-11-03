@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="520" viewBox="0 0 420 520">
+  <!-- Contoh infografis buatan sendiri. Isi bersifat umum, hanya untuk demo. -->
+  <rect width="420" height="520" fill="#e8f3fb"/>
+  <rect x="0" y="0" width="420" height="96" fill="#1f5f99"/>
+  <text x="210" y="44" font-family="sans-serif" font-size="24" font-weight="700" fill="#ffffff" text-anchor="middle">5 Kebiasaan Minum Air</text>
+  <text x="210" y="74" font-family="sans-serif" font-size="15" fill="#e8f3fb" text-anchor="middle">Infografis contoh NaraVisi</text>
+  <g font-family="sans-serif" font-size="16" fill="#0b2a44">
+    <g transform="translate(28,128)">
+      <circle cx="22" cy="22" r="22" fill="#2a78d6"/><text x="22" y="28" fill="#fff" text-anchor="middle" font-weight="700">1</text>
+      <text x="60" y="20">Minum segelas air</text><text x="60" y="40">setelah bangun tidur.</text>
+    </g>
+    <g transform="translate(28,200)">
+      <circle cx="22" cy="22" r="22" fill="#2a78d6"/><text x="22" y="28" fill="#fff" text-anchor="middle" font-weight="700">2</text>
+      <text x="60" y="20">Bawa botol minum</text><text x="60" y="40">saat bepergian.</text>
+    </g>
+    <g transform="translate(28,272)">
+      <circle cx="22" cy="22" r="22" fill="#2a78d6"/><text x="22" y="28" fill="#fff" text-anchor="middle" font-weight="700">3</text>
+      <text x="60" y="20">Jangan menunggu haus.</text>
+    </g>
+    <g transform="translate(28,344)">
+      <circle cx="22" cy="22" r="22" fill="#2a78d6"/><text x="22" y="28" fill="#fff" text-anchor="middle" font-weight="700">4</text>
+      <text x="60" y="20">Tambah minum saat</text><text x="60" y="40">cuaca panas.</text>
+    </g>
+    <g transform="translate(28,416)">
+      <circle cx="22" cy="22" r="22" fill="#2a78d6"/><text x="22" y="28" fill="#fff" text-anchor="middle" font-weight="700">5</text>
+      <text x="60" y="20">Perhatikan warna urine:</text><text x="60" y="40">kuning muda = cukup.</text>
+    </g>
+  </g>
+  <path d="M352 150 C352 150 322 192 322 214 a30 30 0 0 0 60 0 C382 192 352 150 352 150 Z" fill="#7cc0f0"/>
+  <text x="210" y="506" font-family="sans-serif" font-size="12" fill="#52514e" text-anchor="middle">Contoh untuk demo. Bukan saran medis.</text>
+</svg>

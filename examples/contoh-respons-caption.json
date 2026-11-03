@@ -1,0 +1,70 @@
+{
+  "_catatan": "CONTOH DATA TIRUAN untuk dokumentasi. Bukan keluaran model sungguhan dan bukan data nyata. Bentuknya mengikuti CaptionResponse di ai-service/app/main.py (POST /caption). Kalimat 'text' dirangkai dengan app.service.compose_text dari field terstruktur.",
+  "permintaan_contoh": {
+    "image_base64": "<base64 gambar, dipotong untuk contoh>",
+    "lang": "id",
+    "context": { "alt": "gambar", "page_title": "Halaman Uji NaraVisi" }
+  },
+  "contoh": [
+    {
+      "_label": "CONTOH 1 — Gemini, grafik (examples/gambar/grafik-batang.svg)",
+      "text": "Grafik: Batang jumlah pengunjung perpustakaan per bulan, naik dari Januari sampai Juni. Enam batang biru dari kiri ke kanan makin tinggi; Januari sekitar 100 pengunjung dan Juni 290 pengunjung. Tulisan di gambar: Contoh: pengunjung perpustakaan per bulan (data tiruan). Jan Feb Mar Apr Mei Jun. 290.",
+      "text_en": "",
+      "lang": "id",
+      "model": "contoh-gemini-flash",
+      "latency_ms": 4200,
+      "jenis": "grafik",
+      "ringkasan": "Grafik batang jumlah pengunjung perpustakaan per bulan, naik dari Januari sampai Juni.",
+      "detail": "Enam batang biru dari kiri ke kanan makin tinggi; Januari sekitar 100 pengunjung dan Juni 290 pengunjung.",
+      "teks_dalam_gambar": "Contoh: pengunjung perpustakaan per bulan (data tiruan)\nJan Feb Mar Apr Mei Jun\n290",
+      "keyakinan": "tinggi",
+      "provider": "gemini",
+      "fallback": false
+    },
+    {
+      "_label": "CONTOH 2 — Gemini, foto tanpa tulisan (examples/gambar/foto-pantai.png)",
+      "text": "Foto: Pemandangan pantai saat matahari terbenam. Langit jingga keunguan, matahari di dekat garis laut, bukit gelap di kiri dan perahu layar kecil di tengah laut.",
+      "text_en": "",
+      "lang": "id",
+      "model": "contoh-gemini-flash",
+      "latency_ms": 3900,
+      "jenis": "foto",
+      "ringkasan": "Pemandangan pantai saat matahari terbenam.",
+      "detail": "Langit jingga keunguan, matahari di dekat garis laut, bukit gelap di kiri dan perahu layar kecil di tengah laut.",
+      "teks_dalam_gambar": "",
+      "keyakinan": "sedang",
+      "provider": "gemini",
+      "fallback": false
+    },
+    {
+      "_label": "CONTOH 3 — keyakinan rendah: kalimat peringatan ditambahkan otomatis",
+      "text": "Foto: Gambar buram seseorang di depan gedung. Wajah dan tulisan tidak terbaca karena gambar sangat kecil. Deskripsi ini mungkin kurang tepat karena gambar kurang jelas.",
+      "text_en": "",
+      "lang": "id",
+      "model": "contoh-gemini-flash",
+      "latency_ms": 3100,
+      "jenis": "foto",
+      "ringkasan": "Gambar buram seseorang di depan gedung.",
+      "detail": "Wajah dan tulisan tidak terbaca karena gambar sangat kecil.",
+      "teks_dalam_gambar": "",
+      "keyakinan": "rendah",
+      "provider": "gemini",
+      "fallback": false
+    },
+    {
+      "_label": "CONTOH 4 — cadangan BLIP (Gemini gagal/kuota habis): tanpa jenis & keyakinan, ada text_en",
+      "text": "Pantai saat matahari terbenam dengan perahu.",
+      "text_en": "A beach at sunset with a boat.",
+      "lang": "id",
+      "model": "Salesforce/blip-image-captioning-base + Helsinki-NLP/opus-mt-en-id",
+      "latency_ms": 2800,
+      "jenis": null,
+      "ringkasan": "Pantai saat matahari terbenam dengan perahu.",
+      "detail": "",
+      "teks_dalam_gambar": "",
+      "keyakinan": null,
+      "provider": "blip",
+      "fallback": true
+    }
+  ]
+}

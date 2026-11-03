@@ -26,6 +26,47 @@ API `docs/API.md`.
 | `ai-service/` | Image captioning | Python 3.12, FastAPI 0.162, BLIP + MarianMT (lokal) atau Gemini Flash (Google AI Studio) |
 | `e2e/` | Uji end-to-end di Chromium | Playwright |
 | `docs/` | API, keputusan desain, pengujian, log Agentic SDLC | – |
+| `scripts/`, `plotting/`, `notebooks/`, `examples/` | Skrip proyek, grafik evaluasi, eksplorasi, halaman uji | PowerShell, Python 3.12 (matplotlib) |
+
+## Organisasi Kode
+
+Pedoman organisasi kode mata kuliah dipetakan ke folder NaraVisi sebagai berikut:
+
+| Pola pedoman | Di NaraVisi | Isi |
+|---|---|---|
+| `source/` (kode utama) | `extension/` · `backend/src/` · `ai-service/app/` | Kode tiga komponen (lihat alasan di bawah) |
+| `scripts/` (skrip per tahap) | `scripts/` · `backend/scripts/` · `ai-service/eval/` | Proyek: `start-demo.ps1` (jalankan stack + tunggu `/health`), `run-all-tests.ps1`, `paket_extension.py`, `pindai_rahasia.py`. Backend: `setup-db.js`, `bench.js`. Evaluasi AI: `collect` → `annotate` → `run_eval predict` → `run_eval score` |
+| `plotting/` (grafik akhir) | `plotting/` | `buat_grafik.py` → `docs/gambar/evaluasi/*.png` (latensi p50/p95, akurasi per jenis gambar) |
+| `docs/` (dokumentasi) | `docs/` | Alur, API, keputusan desain, pengujian, evaluasi, SRS/SDD |
+| `notebooks/` (eksplorasi) | `notebooks/` | `eksplorasi_evaluasi.ipynb`: tabel Gemini vs BLIP |
+| `tests/` (tes) | `backend/test/` · `ai-service/tests/` · `e2e/` | Unit & API (node --test), pytest, end-to-end Playwright |
+| `examples/` (contoh/demo) | `examples/` | `halaman-uji.html` + panduan coba, contoh respons `/caption` |
+| `README.md` | `README.md` | Dokumen ini; tiap folder baru punya README sendiri |
+| `requirements.txt` | `ai-service/requirements.txt` + `requirements-dev.txt` | Python: dependensi jalan / dependensi tes-grafik-notebook. Padanan Node: `backend/package.json` dan `e2e/package.json` (+ `package-lock.json` yang mematok versi persis) |
+| `LICENSE.txt` | `LICENSE.txt` + `THIRD_PARTY_NOTICES.md` | MIT untuk kode NaraVisi; lisensi huruf, model, dan pustaka pihak ketiga |
+
+**Mengapa kode tidak disatukan di satu folder `source/`?** NaraVisi terdiri dari tiga program yang berjalan terpisah,
+dengan bahasa dan alat yang berbeda: extension Chrome (JavaScript, dimuat langsung oleh Chrome dari folder
+`extension/` dan dipaketkan menjadi ZIP), backend (Node.js + `package.json`), dan layanan AI (Python + venv +
+`requirements.txt`). Setiap komponen punya dependensi, cara menjalankan, dan tesnya sendiri, dan berkomunikasi hanya
+lewat HTTP. Dengan folder per komponen, masing-masing bisa dipasang, diuji, dan dideploy sendiri tanpa ikut
+membawa dependensi komponen lain. Memindahkan semuanya ke `source/` juga akan mengubah jalur `manifest.json`, import,
+dan tes yang sudah berjalan. Jadi `source/` di pedoman berpadanan dengan tiga folder kode tersebut, sedangkan folder
+pendukung (`scripts/`, `plotting/`, `docs/`, `notebooks/`, `examples/`) berada di akar repo seperti pada pedoman.
+
+```
+naravisi/
+├── extension/        source: Chrome Extension MV3
+├── backend/          source (src/), tes (test/), skrip (scripts/)
+├── ai-service/       source (app/), tes (tests/), evaluasi (eval/), requirements*.txt
+├── e2e/              tes end-to-end Playwright
+├── scripts/          skrip tingkat proyek (demo, semua tes, paket, pindai rahasia)
+├── plotting/         grafik akhir evaluasi
+├── notebooks/        eksplorasi data
+├── examples/         halaman uji & contoh respons
+├── docs/             dokumentasi (+ gambar/evaluasi/ hasil plotting)
+├── README.md · LICENSE.txt · THIRD_PARTY_NOTICES.md
+```
 
 ## Progres Prototype: 30/30 RF (100%)
 
@@ -146,6 +187,7 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # opsional: tes (pytest), grafik, notebook
 cp .env.example .env        # Windows: copy .env.example .env
 ```
 
@@ -258,15 +300,19 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 ## Pengujian
 
 ```bash
+powershell -ExecutionPolicy Bypass -File scripts/run-all-tests.ps1   # ketiga bagian sekaligus + ringkasan
 cd backend && npm test                         # 121 tes unit + integrasi API (SQLite di memori)
-cd ai-service && python -m pytest              # 85 tes (Gemini dengan klien palsu, metrik & dataset evaluasi; tanpa internet)
+cd ai-service && python -m pytest              # (butuh requirements-dev.txt) 85 tes (Gemini dengan klien palsu, metrik & dataset evaluasi; tanpa internet)
 cd e2e && npm install && npm test              # 113 skenario + audit axe-core, termasuk alur manual Alt+Shift+K
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur p50/p95 waktu respons (RNF-05)
 cd backend && npm audit && cd ../e2e && npm audit   # kerentanan dependensi Node
 python -I scripts/pindai_rahasia.py            # pindai kunci di berkas & riwayat git (keluar 1 bila ada temuan)
 python -I scripts/paket_extension.py           # buat dist/naravisi-extension-<versi>.zip
+python -I plotting/buat_grafik.py              # grafik evaluasi → docs/gambar/evaluasi/ (venv ai-service)
 ```
+
+Coba cepat tanpa situs nyata: `examples/README.md` (halaman uji + `scripts/start-demo.ps1 -Contoh`).
 
 Matriks RF/RNF → tes dan rencana uji manual: `docs/PENGUJIAN.md`. `pip-audit` dijalankan dari venv terpisah, lihat
 `docs/PENGUJIAN.md` bagian 3b.

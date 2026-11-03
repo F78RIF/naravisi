@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halaman Uji NaraVisi</title>
+  <style>
+    :root { color-scheme: light; --ink: #0b0b0b; --muted: #52514e; --paper: #fcfcfb; --line: #e2e1dc; }
+    body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); background: var(--paper); line-height: 1.6; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 32px; }
+    header { grid-column: 1 / -1; border-bottom: 1px solid var(--line); }
+    main img, main svg, aside img { max-width: 100%; height: auto; display: block; }
+    figure { margin: 24px 0; }
+    figcaption, .catatan { color: var(--muted); font-size: 0.95rem; }
+    code { background: #f0efec; padding: 0 4px; border-radius: 4px; }
+    .baris { display: flex; align-items: center; gap: 8px; }
+    @media (max-width: 760px) { .wrap { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="catatan">Halaman contoh statis untuk mencoba NaraVisi. Semua gambar dibuat sendiri dengan kode; data di grafik adalah <strong>data tiruan</strong>.</p>
+  </header>
+
+  <main>
+    <article>
+      <h1>Halaman Uji NaraVisi</h1>
+      <p>Tekan <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>. Panel NaraVisi seharusnya menampilkan <strong>6 gambar</strong>
+        dengan urutan seperti nomor di bawah (atas → bawah, gambar di <code>&lt;main&gt;</code> lebih dulu, gambar di
+        samping paling akhir).</p>
+
+      <!-- [1] Foto tanpa alt, dengan figcaption → label panel memakai keterangan. -->
+      <figure>
+        <img id="foto" src="gambar/foto-pantai.png" width="640" height="400">
+        <figcaption>[1] Contoh foto tanpa alt: pantai saat senja (digambar dengan kode).</figcaption>
+      </figure>
+
+      <!-- Hiasan alt="" → dekoratif menurut WCAG, TIDAK didaftarkan. -->
+      <img id="hiasan" src="gambar/pembatas-hias.svg" alt="" width="600" height="120">
+
+      <!-- [2] Grafik dengan alt generik "gambar" → setelah dideskripsikan alt digabung dengan deskripsi. -->
+      <h2>Grafik</h2>
+      <img id="grafik-batang" src="gambar/grafik-batang.svg" alt="gambar" width="560" height="340">
+      <p class="catatan">[2] Grafik batang ber-alt generik <code>alt="gambar"</code>.</p>
+
+      <!-- [3] Infografis dengan alt bermakna → alt TIDAK ditimpa. -->
+      <h2>Infografis</h2>
+      <img id="infografis" src="gambar/infografis-air.svg"
+           alt="Infografis contoh berisi lima kebiasaan minum air, dari minum setelah bangun tidur sampai memperhatikan warna urine"
+           width="420" height="520">
+      <p class="catatan">[3] Infografis dengan alt yang sudah bermakna (tidak akan ditimpa NaraVisi).</p>
+
+      <!-- [4] SVG inline (diagram alur) dengan aria-label → dikirim sebagai JPEG. -->
+      <h2>Diagram</h2>
+      <svg id="diagram" role="img" aria-label="Diagram alur NaraVisi" width="560" height="160" viewBox="0 0 560 160">
+        <rect width="560" height="160" fill="#f4f8fc"/>
+        <g font-family="sans-serif" font-size="15" text-anchor="middle">
+          <rect x="16" y="50" width="150" height="60" rx="8" fill="#2a78d6"/><text x="91" y="85" fill="#fff">Halaman web</text>
+          <rect x="205" y="50" width="150" height="60" rx="8" fill="#1baf7a"/><text x="280" y="85" fill="#fff">Layanan AI</text>
+          <rect x="394" y="50" width="150" height="60" rx="8" fill="#6250d6"/><text x="469" y="85" fill="#fff">Suara (TTS)</text>
+        </g>
+        <g stroke="#52514e" stroke-width="3" fill="#52514e">
+          <line x1="166" y1="80" x2="196" y2="80"/><path d="M196 72 L205 80 L196 88 Z"/>
+          <line x1="355" y1="80" x2="385" y2="80"/><path d="M385 72 L394 80 L385 88 Z"/>
+        </g>
+      </svg>
+      <p class="catatan">[4] SVG inline: halaman web → layanan AI → suara.</p>
+
+      <!-- Simbol 32×32 → terlalu kecil (sisi < 100 px), TIDAK didaftarkan. -->
+      <p class="baris"><img id="info" src="gambar/info-kecil.svg" alt="Info" width="32" height="32">
+        Simbol kecil ini tidak masuk daftar karena ukurannya di bawah 100 px.</p>
+
+      <!-- [5] Grafik garis dengan alt berupa nama file → digabung dengan deskripsi. -->
+      <h2>Grafik garis</h2>
+      <img id="grafik-garis" src="gambar/grafik-garis.png" alt="IMG_0412.png" width="640" height="360">
+      <p class="catatan">[5] Grafik garis ber-alt nama file <code>alt="IMG_0412.png"</code>.</p>
+    </article>
+  </main>
+
+  <aside aria-label="Samping">
+    <h2>Buletin</h2>
+    <!-- [6] Di luar <main> → paling akhir walau di layar lebar tampil di samping atas. -->
+    <img id="sampul" src="gambar/sampul-buletin.svg" width="260" height="340">
+    <p class="catatan">[6] Sampul buletin fiktif tanpa alt, di luar &lt;main&gt;.</p>
+  </aside>
+</div>
+</body>
+</html>
