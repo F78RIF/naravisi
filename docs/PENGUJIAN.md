@@ -240,6 +240,34 @@ deskripsi acuan yang ditulis manusia lewat `eval.annotate` **sebelum** melihat k
 - BLIP pertama kali **gagal dijalankan** (`DefaultCPUAllocator: not enough memory`, RAM bebas 1,5 GB); berhasil setelah
   aplikasi lain ditutup.
 
+**Uji Gemini 3 November 2026** (dijalankan agen). Konfigurasi `.env`: `CAPTION_PROVIDER=gemini`, `FALLBACK_PROVIDER=blip`,
+`GEMINI_MODEL=gemini-3.5-flash` (tanpa few-shot). Layanan dijalankan dengan `uvicorn app.main:app --host 127.0.0.1 --port 8000`
+(tanpa `--env-file`). Log start: `Layanan AI siap: gemini-3.5-flash (cadangan: blip)`, lalu `Provider cadangan siap: BLIP base + MarianMT`
+±20 dtk kemudian. `GET /health` → `status=ok, provider=gemini, fallback=blip, fallback_ready=true`; backend `GET /api/v1/health` → `status=ok, ai.ok=true`.
+Permintaan langsung ke `POST /caption` (bukan lewat extension). `latency_ms` = waktu provider yang menjawab; "total" = waktu dari permintaan HTTP sampai jawaban.
+
+| Gambar | Provider | Cadangan | Jenis | latency_ms | Total (ms) | Catatan |
+|---|---|---|---|---|---|---|
+| img-0001 | gemini | tidak | infografis | 28436 | 28492 | Gemini 504 sekali, berhasil setelah diulang 1× |
+| img-0002 | blip | **ya** | – | 5491 | 24371 | Gemini 504 dua kali (`MODEL_UNAVAILABLE`), lalu otomatis pindah ke BLIP |
+| img-0003 | gemini | tidak | infografis | 11164 | 11180 | – |
+| img-0004 (uji cadangan) | blip | **ya** | – | 5391 | 5772 | Kunci palsu sementara di proses uji → `MODEL_AUTH` → BLIP; log `cadangan=True` |
+
+- **Latensi rata-rata:** Gemini (2 berhasil) 19800 ms; 3 gambar utama 15030 ms (`latency_ms`) / 21348 ms (total). Masih jauh di atas
+  RNF-04 (≤ 5 dtk).
+- **Contoh deskripsi Gemini (img-0003, dipotong):** "Infografis: Hari Kesehatan Mental Sedunia menyajikan data kesehatan mental
+  remaja, tips mengelola emosi, dan kontak layanan bantuan. Gambar berlatar putih krem dengan ilustrasi pita hijau transparan. …
+  Tulisan di gambar: Hari Kesehatan Mental Sedunia | rri RADIO REPUBLIK INDONESIA | 1.101 Kasus Bunuh Diri …" (±1.900 karakter).
+- **Contoh deskripsi BLIP (cadangan):** img-0002 "Poster untuk acara."; img-0004 "Kadal monitor berjalan di jalan tanah."
+- **Kunci kosong:** dengan `GEMINI_API_KEY=` (kosong) di proses uji, layanan **menolak start** (`ValueError: GEMINI_API_KEY wajib
+  diisi …`), sesuai desain (`app/config.py`). Jadi cadangan BLIP hanya dipakai saat Gemini gagal ketika menjawab permintaan
+  (kunci salah, kuota habis, 5xx, waktu habis), dan tidak menggantikan kunci yang kosong.
+- **Temuan & perbaikan:** tanpa `--env-file`, uvicorn tidak membaca `.env` sehingga layanan diam-diam memakai BLIP dengan
+  `cadangan: none`. Sekarang `app/main.py` memuat `ai-service/.env` sendiri (tanpa menimpa variabel lingkungan yang sudah ada).
+  Tes: `test_env_file_dimuat_tanpa_menimpa`.
+- Dua instance BLIP berjalan bersamaan (port 8000 + 8001) membuat instance kedua crash (exit 139) di laptop 7,7 GB. Uji cadangan
+  dijalankan setelah instance utama dihentikan sementara.
+
 ### M-02 — Respons non-AI di peramban (RNF-05)
 Jalankan stack lengkap dengan MySQL (`DB_DRIVER=mysql`). Buka DevTools → Network, lalu muat halaman Riwayat, Profil,
 Pengaturan, dan dashboard Admin masing-masing 5 kali. Lulus bila semua permintaan `/api/v1/*` < 2 detik.

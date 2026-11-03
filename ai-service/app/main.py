@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from .config import Settings, load_settings
+from .config import Settings, load_env_file, load_settings
 from .image_utils import ImageError, decode_base64_image
 from .prompts import MAX_HINT_CHARS, load_fewshot
 from .providers import MockCaptioner, MockTranslator, ProviderError
@@ -202,4 +202,5 @@ def create_app(settings: Settings | None = None, service: CaptionService | Capti
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+load_env_file()
 app = create_app()

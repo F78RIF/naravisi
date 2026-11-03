@@ -14,7 +14,9 @@ import httpx
 from google.genai import errors, types
 from PIL import Image
 
-from app.config import Settings, load_settings
+from pathlib import Path
+
+from app.config import Settings, load_env_file, load_settings
 from app.gemini import GeminiCaptioner, GeminiCaption, redact
 from app.main import RedactSecrets, create_app
 from app.prompts import SYSTEM_INSTRUCTION, build_system_instruction, build_user_prompt, load_fewshot
@@ -326,6 +328,20 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "MODEL_BAD_OUTPUT")
         self.assertIn("terpotong (MAX_TOKENS", "\n".join(logs.output))
         self.assertIn("GEMINI_MAX_OUTPUT_TOKENS", "\n".join(logs.output))
+
+    def test_env_file_dimuat_tanpa_menimpa(self):
+        # Tanpa --env-file, uvicorn dulu memakai bawaan (blip, cadangan: none) walau .env berisi gemini.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / ".env"
+            path.write_text("# komentar\nCAPTION_PROVIDER=gemini\nFALLBACK_PROVIDER='blip'\nGEMINI_API_KEY=dari-file\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "dari-proses"}, clear=True):
+                load_env_file(path)
+                self.assertEqual(os.environ["CAPTION_PROVIDER"], "gemini")
+                self.assertEqual(os.environ["FALLBACK_PROVIDER"], "blip")
+                self.assertEqual(os.environ["GEMINI_API_KEY"], "dari-proses")
+            with mock.patch.dict(os.environ, {}, clear=True):
+                load_env_file(Path(tmp) / "tidak-ada.env")
+                self.assertNotIn("CAPTION_PROVIDER", os.environ)
 
     def test_cadangan_tidak_valid_ditolak(self):
         with self.env(CAPTION_PROVIDER="mock", FALLBACK_PROVIDER="gemini"):
