@@ -19,6 +19,7 @@ bisa langsung tampil di GitHub atau disalin ke slide.
 | [Tahap 8](#tahap-8--langkah-3-bukti-rnf-kinerja-aksesibilitas-keamanan) | Langkah 3: bukti RNF | RNF-01..13 |
 | [Tahap 9](#tahap-9--langkah-4-penutup-100) | Langkah 4: rilis 1.1.0 & dokumentasi final | – |
 | [Tahap 10](#tahap-10--online-langkah-1-mode-production) | Online Langkah 1: mode production | RNF-07, RF-25, PF-04 |
+| [Tahap 11](#tahap-11--online-langkah-2-dari-laptop-lewat-cloudflare-tunnel) | Online Langkah 2: Cloudflare Tunnel | RNF-07 |
 
 ---
 
@@ -987,4 +988,50 @@ harus tahu tidak ada uang yang ditagih). Kata "demo" dan "uji" yang tersisa di t
 | `backend/test/production.test.js` (16) | semua masalah dilaporkan sekaligus; tiap variabel kosong disebut namanya; JWT pendek, `http://`, Midtrans produksi ditolak; `node src/server.js` keluar kode 1 dengan pesan jelas tanpa stack trace; `/pay/simulate` 404 di production dan tetap ada di development |
 | `ai-service/tests/test_production.py` (8) | tanpa kunci ditolak; mock & tanpa cadangan ditolak; `import app.main` keluar kode 1 tanpa *Traceback* |
 | e2e "gambar data: URL … model cadangan diumumkan sopan" | status memuat kalimat cadangan, tanpa istilah teknis; deskripsi tetap dibacakan |
+
+---
+
+## Tahap 11 — Online Langkah 2: dari laptop lewat Cloudflare Tunnel
+
+### Ide besarnya
+
+Laptop menjadi server. `cloudflared` membuka sambungan **keluar** dari laptop ke Cloudflare, lalu Cloudflare memberi
+alamat `https://<acak>.trycloudflare.com`. Permintaan ke alamat itu diteruskan ke `http://localhost:3000` (backend).
+Karena sambungannya keluar, tidak perlu membuka port di router dan tidak perlu IP publik. HTTPS (RNF-07) disediakan
+Cloudflare.
+
+### Urutan `scripts/start-online.ps1`
+
+| # | Langkah | Kenapa urutannya begini |
+|---|---|---|
+| 0 | periksa `.venv`, `.env`, `node_modules`, cloudflared, port 3000/8000 kosong | gagal cepat dengan pesan jelas |
+| 1 | MySQL (service Windows → Laragon → XAMPP → `-MysqldPath`) bila `DB_DRIVER=mysql` | backend butuh database saat start |
+| 2 | layanan AI, tunggu `/health` | backend memeriksa AI di `/health` |
+| 3 | cloudflared; alamat https dibaca dari log | alamat baru diketahui setelah tunnel terbuka |
+| 4 | backend dengan `APP_ENV` & `PUBLIC_URL` dari skrip | `PUBLIC_URL` dipakai saat start (halaman kembali Midtrans) dan wajib https di production |
+| 5 | cek `<alamat>/api/v1/health` dari internet, cetak alamat, salin ke clipboard | memastikan alamat benar-benar bisa dijangkau |
+
+Rencana awal menyebut "backend lalu cloudflared". Urutannya dibalik karena backend membaca `PUBLIC_URL` sekali saat
+start, sedangkan alamat tunnel baru diketahui setelah cloudflared jalan. Tunnel yang terbuka sebelum backend siap
+hanya menjawab 502 selama beberapa detik.
+
+### `PUBLIC_URL` otomatis tanpa mengubah `.env`
+
+Skrip menjalankan backend dengan `$env:PUBLIC_URL='https://…'; npm start`. `node --env-file` tidak menimpa variabel
+yang sudah ada di proses, jadi nilai dari skrip yang dipakai, sedangkan `backend/.env` tetap utuh. Cara yang sama
+dipakai untuk `APP_ENV` di backend dan layanan AI.
+
+### Batasan
+
+- Alamat berganti setiap kali dijalankan → pengguna memasukkan alamat baru di Pengaturan extension.
+- Laptop harus menyala dan terhubung internet.
+- Quick Tunnel ditujukan untuk uji coba: tanpa jaminan ketersediaan, dengan batas permintaan bersamaan.
+
+Rincian, pemasangan cloudflared, dan keamanan: `deploy/CLOUDFLARE_TUNNEL.md`.
+
+### Bukti
+
+Skrip lolos pemeriksa sintaks PowerShell (`Parser.ParseFile`, 0 galat) dan hanya memakai karakter ASCII (aman untuk
+Windows PowerShell 5.1). Uji jalan sungguhan (tunnel terbuka, alamat terbaca, backend terjangkau dari internet) harus
+dilakukan manusia setelah cloudflared terpasang. Langkahnya ada di `deploy/CLOUDFLARE_TUNNEL.md` bagian 3.
 

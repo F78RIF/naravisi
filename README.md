@@ -302,6 +302,17 @@ selalu lewat Midtrans **Sandbox** (tidak ada uang sungguhan yang ditagih). Bila 
 otomatis dibuat BLIP dan panel memberi tahu dengan sopan: "Layanan AI utama sedang sibuk, jadi deskripsi ini dibuat oleh
 model cadangan dan mungkin lebih singkat."
 
+### 7. Online dari laptop (Cloudflare Tunnel, gratis)
+
+```
+winget install --id Cloudflare.cloudflared                          # sekali saja
+powershell -ExecutionPolicy Bypass -File scripts\start-online.ps1   # MySQL → AI → tunnel → backend
+```
+
+Skrip mencetak alamat `https://….trycloudflare.com` dan mengisi `PUBLIC_URL` backend otomatis (berkas `.env` tidak
+diubah). Alamat **berganti setiap kali** dijalankan dan laptop harus tetap menyala. Langkah lengkap, cara menyambungkan
+extension, dan batasannya: `deploy/CLOUDFLARE_TUNNEL.md`.
+
 ## Aturan bisnis (ringkas)
 
 | | Gratis | Premium (Rp15.000 / 30 hari) |
