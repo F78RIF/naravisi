@@ -1,5 +1,4 @@
 """Renderer diagram use case sederhana (PIL) untuk SRS/SDD NaraVisi v1.1."""
-import math
 import sys
 from PIL import Image, ImageDraw, ImageFont
 
@@ -30,13 +29,6 @@ def actor(d, x, y, label):
         w = d.textlength(ln, font=font)
         d.text((x - w / 2, y + 66 * S + i * 20 * S), ln, font=font, fill=INK)
     return (x, y)
-
-
-def ellipse_point(cx, cy, rx, ry, tx, ty):
-    ang = math.atan2(ty - cy, tx - cx)
-    # titik pada elips searah sudut
-    t = math.atan2(math.sin(ang) * rx, math.cos(ang) * ry)
-    return cx + rx * math.cos(t), cy + ry * math.sin(t)
 
 
 def render(path, title, ucs, left, right=(), assoc=(), gen=None):
