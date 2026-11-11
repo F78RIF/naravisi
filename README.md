@@ -306,6 +306,7 @@ cd ai-service && python -m pytest              # (butuh requirements-dev.txt) 85
 cd e2e && npm install && npm test              # 113 skenario + audit axe-core, termasuk alur manual Alt+Shift+K
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur p50/p95 waktu respons (RNF-05)
+cd backend && npm run cek:penanda                   # setiap RF punya penanda [RF-xx] di kode & tes (docs/PETA_KODE.md)
 cd backend && npm audit && cd ../e2e && npm audit   # kerentanan dependensi Node
 python -I scripts/pindai_rahasia.py            # pindai kunci di berkas & riwayat git (keluar 1 bila ada temuan)
 python -I scripts/paket_extension.py           # buat dist/naravisi-extension-<versi>.zip

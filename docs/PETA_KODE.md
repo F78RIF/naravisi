@@ -21,6 +21,7 @@ Isi:
 4. [Tabel endpoint API](#4-tabel-endpoint-api)
 5. [Pertanyaan dosen yang mungkin muncul](#5-pertanyaan-dosen-yang-mungkin-muncul)
 6. [Cara mencari cepat di VS Code](#6-cara-mencari-cepat-di-vs-code)
+7. [Pemeriksa otomatis](#7-pemeriksa-otomatis)
 
 ---
 
@@ -322,4 +323,21 @@ Skema tabel: `backend/src/db/schema.mysql.sql` (MySQL) dan `schema.sqlite.sql` (
 Tips:
 - Pencarian `[RF-` (dengan kurung siku) hanya menemukan penanda, bukan teks biasa. Contoh lain: `[PF-04]`, `[RNF-08]`.
 - Di kotak "files to include" pada Ctrl+Shift+F, isi `backend/src` untuk membatasi ke backend saja.
-- `npm run cek:penanda` (dibuat di Langkah 4) memeriksa bahwa setiap RF punya penanda dan tes.
+- Tes juga diberi penanda di atas skenario yang mengujinya, mis. `// [RF-08] Memilih gambar — diuji: panah memilih gambar`
+  di `e2e/run.mjs`. Jadi pencarian `[RF-08]` menunjukkan kode **dan** tesnya.
+
+## 7. Pemeriksa otomatis
+
+```
+cd backend
+npm run cek:penanda          # = node ../scripts/cek-penanda.js
+```
+
+`scripts/cek-penanda.js` memindai `extension/`, `backend/src/`, `backend/public/`, `ai-service/app/` (kode) dan
+`backend/test/`, `ai-service/tests/`, `e2e/run.mjs` (tes), lalu mencetak tabel per kebutuhan: jumlah penanda, ada/tidak tes,
+dan nama file tesnya. Tes dihitung bila file tes menyebut kode RF, kode use case-nya (mis. `UC-GBR-04`, bukan rentang
+`UC-GBR-01..07`), atau memuat penanda `[RF-xx]`. Keluar dengan kode 1 (gagal) bila:
+- ada RF-01..RF-30 tanpa penanda di kode atau tanpa tes,
+- ada penanda dengan kode tak dikenal atau format bukan `[KODE] <nama resmi> — <penjelasan>`.
+
+Nama resmi setiap kode ada di tabel `KEBUTUHAN` di awal skrip. Menambah kebutuhan baru = tambah satu baris di sana.

@@ -140,6 +140,7 @@ class TestGeminiStructured(unittest.TestCase):
         self.assertEqual(res.keyakinan, "rendah")
         self.assertTrue(res.text.endswith("Deskripsi ini mungkin kurang tepat karena gambar kurang jelas."))
 
+    # [PF-04] Cadangan AI Gemini → BLIP — diuji: JSON rusak → BLIP
     def test_json_rusak_memakai_cadangan(self):
         client = FakeClient(response('{"jenis": "foto", "ringkasan": '))
         res = router(client).describe(image(), "id")
@@ -159,6 +160,7 @@ class TestGeminiStructured(unittest.TestCase):
             router(client, fallback=False).describe(image(), "id")
         self.assertEqual(ctx.exception.code, "MODEL_BAD_OUTPUT")
 
+    # [PF-04] Cadangan AI Gemini → BLIP — diuji: kuota Gemini habis (429) → BLIP
     def test_429_model_busy_otomatis_ke_cadangan_dan_provider_tercatat(self):
         client = FakeClient(api_error(errors.ClientError, 429, "Resource has been exhausted", "RESOURCE_EXHAUSTED"))
         with self.assertLogs("naravisi.ai", level="INFO") as logs:

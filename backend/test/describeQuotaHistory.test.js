@@ -19,6 +19,8 @@ describe('Deskripsi + kuota + riwayat (UC-GBR-04/05, UC-RWY-01..04)', () => {
     assert.equal(res.status, 401);
   });
 
+  // [RF-10] Menerima & menyimpan deskripsi — diuji: deskripsi dikembalikan & disimpan
+  // [RF-13] Menyimpan riwayat — diuji: riwayat tercipta
   it('deskripsi tersimpan ke riwayat dan kuota berkurang', async () => {
     const u = await app.register();
     const res = await app.describe(u.token);
@@ -63,6 +65,7 @@ describe('Deskripsi + kuota + riwayat (UC-GBR-04/05, UC-RWY-01..04)', () => {
     assert.equal(results.filter((r) => r.status === 429).length, 5);
   });
 
+  // [RF-13] Menyimpan riwayat — diuji: riwayat tidak tercipta bila AI gagal
   it('AI gagal → kuota dikembalikan & riwayat tidak dibuat (RNF-06)', async () => {
     const u = await app.register();
     app.ai.fail = Errors.aiUnavailable();

@@ -344,6 +344,7 @@ try {
 
   // =========================================================================
   section('Pemandu suara saat pertama dipasang');
+  // [PF-01] Pemandu suara — diuji: sambutan dibacakan saat dipasang
   await step('tab sambutan terbuka, fokus di judul, sambutan dibacakan; Tab → kolom Email', async () => {
     const welcome =
       context.pages().find((p) => p.url().includes('selamat-datang.html')) ??
@@ -660,6 +661,10 @@ try {
 
   // =========================================================================
   section('Alur manual Alt+Shift+K (tidak boleh berubah)');
+  // [RF-08] Memilih gambar — diuji: panah memilih gambar
+  // [RF-09] Mengirim gambar ke AI — diuji: Enter mengirim gambar
+  // [RF-11] Menampilkan deskripsi teks — diuji: deskripsi tampil di panel
+  // [RF-12] Membacakan deskripsi — diuji: deskripsi dibacakan, lalu Esc menutup panel
   await step('ALUR MANUAL: Alt+Shift+K → panel → panah → Enter → dibacakan → Esc', async () => {
     // 1. Pintasan di manifest tetap Alt+Shift+K dengan teks yang sama.
     const manifest = JSON.parse(readFileSync(path.join(extensionDir, 'manifest.json'), 'utf8'));
@@ -717,6 +722,7 @@ try {
   const text = page.locator('#nv-text');
   const attached = (sel, timeout = 10000) => page.locator(sel).waitFor({ state: 'attached', timeout });
 
+  // [RF-07] Menampilkan gambar terdeteksi — diuji: 5 gambar tampil di daftar & ditandai di halaman
   await step('UC-GBR-01/02: 5 gambar ditemukan & ditandai (ikon, tersembunyi, duplikat diabaikan)', async () => {
     const res = await toggleOn(`${SITE}/berita.html`);
     assert.equal(res.count, 5);
@@ -744,6 +750,9 @@ try {
     assert.equal(manifest.web_accessible_resources, undefined);
   });
 
+  // [RF-10] Menerima & menyimpan deskripsi — diuji: deskripsi diterima dari server
+  // [RF-11] Menampilkan deskripsi teks — diuji: teks tampil
+  // [RF-12] Membacakan deskripsi — diuji: teks dikirim ke Web Speech API
   await step('UC-GBR-04..07: Enter → deskripsi tampil, dibacakan, sisa kuota diumumkan', async () => {
     await page.keyboard.press('Enter');
     await text.filter({ hasText: 'gambar PNG' }).waitFor({ timeout: 10000 });
@@ -1120,6 +1129,7 @@ try {
   const autoTab = await context.newPage();
   watch(autoTab);
 
+  // [RF-07] Menampilkan gambar terdeteksi — diuji: label "Gambar n dari N · keterangan"
   await step('filter: ikon 50×50, alt="", logo situs dibuang; <main> dulu (tetap urutan DOM); label "Gambar n dari N · keterangan"', async () => {
     await setUsed(0);
     await autoTab.goto(`${SITE}/artikel.html`);
@@ -1152,6 +1162,7 @@ try {
   }
   const optionLabels = (tab) => tab.locator('#nv-list [role="option"]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
 
+  // [RF-07] Menampilkan gambar terdeteksi — diuji: daftar mengikuti urutan baca
   await step('urutan baca = urutan DOM (bukan ukuran, bukan posisi absolut)', async () => {
     await autoTab.goto(`${SITE}/urutan-dom.html`);
     await toggleOn(`${SITE}/urutan-dom.html`);
@@ -1170,6 +1181,7 @@ try {
     await autoTab.keyboard.press('Escape');
   });
 
+  // [PF-03] Deskripsi ke alt gambar — diuji: alt bermakna tidak ditimpa, tanpa alt diisi
   await step('setelah dideskripsikan: alt asli bermakna tidak ditimpa, alt generik digabung, tanpa alt diisi; terbaca di pohon aksesibilitas', async () => {
     await setUsed(0);
     await autoTab.goto(`${SITE}/alt.html`);
@@ -1202,6 +1214,7 @@ try {
     assert.equal(await autoTab.locator('[data-naravisi]').count(), 0);
   });
 
+  // [PF-02] Baca berurutan — diuji: persetujuan wajib sebelum aktif
   await step('Pengaturan "Baca berurutan": persetujuan dibacakan; Batal → tetap mati, Ya → aktif; jumlah 1–10', async () => {
     await set.bringToFront();
     await set.reload();
@@ -1281,6 +1294,7 @@ try {
     await autoTab.keyboard.press('Escape');
   });
 
+  // [PF-02] Baca berurutan — diuji: satu per satu, maks. N gambar
   await step('baca berurutan: maks. N gambar, SATU PER SATU, yang terlihat dulu, lanjut saat digulir; progres via aria-live', async () => {
     await setUsed(0);
     await sw.evaluate(() => chrome.storage.sync.set({ autoMax: 3 }));
@@ -1424,6 +1438,7 @@ try {
   });
   await autoTab.close();
 
+  // [PF-01] Pemandu suara — diuji: sapaan & sisa kuota saat Chrome dibuka
   await step('Chrome dibuka: sapaan sisa kuota; pintasan belum diatur → dibacakan & Pengaturan dibuka', async () => {
     const shortcut = await sw.evaluate(async () => (await chrome.commands.getAll()).find((c) => c.name === 'scan-page')?.shortcut || '');
     if (shortcut) {

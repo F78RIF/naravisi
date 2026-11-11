@@ -11,7 +11,8 @@
     "start": "node --env-file-if-exists=.env src/server.js",
     "dev": "node --watch --env-file-if-exists=.env src/server.js",
     "db:setup": "node --env-file-if-exists=.env scripts/setup-db.js",
-    "test": "node --no-warnings=ExperimentalWarning --test \"test/**/*.test.js\""
+    "test": "node --no-warnings=ExperimentalWarning --test \"test/**/*.test.js\"",
+    "cek:penanda": "node ../scripts/cek-penanda.js"
   },
   "dependencies": {
     "express": "^5.1.0",
