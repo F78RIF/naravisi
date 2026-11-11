@@ -12,7 +12,7 @@ const PROD = {
   JWT_SECRET: 'k'.repeat(48),
   PUBLIC_URL: 'https://naravisi.example',
   ALLOWED_ORIGINS: 'chrome-extension://pkkfgojmmeddfaagcajmgamghbienlhh',
-  MIDTRANS_SERVER_KEY: 'SB-Mid-server-kunci-uji',
+  MIDTRANS_SERVER_KEY: 'kunci-sandbox-palsu-uji',
   MIDTRANS_IS_PRODUCTION: 'false',
 };
 const without = (key) => Object.fromEntries(Object.entries(PROD).filter(([k]) => k !== key));
