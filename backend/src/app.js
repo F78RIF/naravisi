@@ -23,6 +23,9 @@ export function createApp(services) {
   const { config } = services;
   const app = express();
   app.disable('x-powered-by');
+  // [RNF-09] Autentikasi token — di belakang proxy (nginx / cloudflared), IP asli diambil dari X-Forwarded-For
+  // agar batas login gagal tetap per (email, IP pengguna), bukan per IP proxy yang sama untuk semua orang.
+  if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');

@@ -1,0 +1,7 @@
+# Skrip & konfigurasi yang dijalankan di Linux (VM Oracle, container Docker) harus berakhir baris LF,
+# walau repo di-clone di Windows dengan core.autocrlf=true.
+*.sh       text eol=lf
+*.template text eol=lf
+*.Dockerfile text eol=lf
+*.dockerignore text eol=lf
+deploy/docker-compose.prod.yml text eol=lf

@@ -1,0 +1,51 @@
+# NaraVisi · deploy/nginx/https.conf.template — HTTPS dengan sertifikat Let's Encrypt (RNF-07).
+# ${DOMAIN} diisi start-nginx.sh. Semua permintaan diteruskan ke backend:3000 (jaringan internal Docker).
+
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    server_tokens off;
+
+    # Gambar base64 maks. 5 MB (MAX_IMAGE_BYTES) ≈ 6,7 MB JSON; backend tetap menolak yang lebih besar (413).
+    client_max_body_size 10m;
+
+    location / {
+        proxy_pass http://backend:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        # Backend menunggu AI maks. 25 dtk (AI_TIMEOUT_MS); beri ruang.
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+}

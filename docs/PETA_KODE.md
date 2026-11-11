@@ -52,7 +52,8 @@ naravisi/
 │   └── tests/              tes otomatis ai-service (pytest)
 ├── e2e/                  uji ujung ke ujung dengan Chromium sungguhan (Playwright): run.mjs
 ├── docs/                 dokumentasi: ALUR, API, PENGUJIAN, KEPUTUSAN, SRS/SDD, peta kode ini
-├── scripts/              run-all-tests.ps1, start-demo.ps1, paket_extension.py, pindai_rahasia.py
+├── deploy/               online: CLOUDFLARE_TUNNEL.md (laptop), ORACLE_FREE.md + docker-compose.prod.yml (server), nginx/, docker/, oracle/
+├── scripts/              run-all-tests.ps1, start-demo.ps1, start-online.ps1, cek-penanda.js, paket_extension.py, pindai_rahasia.py
 ├── examples/, notebooks/, plotting/   contoh pemakaian, eksplorasi & grafik hasil evaluasi
 └── dist/                 ZIP extension hasil paket (tidak masuk git)
 ```

@@ -28,6 +28,14 @@ export class ConfigError extends Error {
   }
 }
 
+/** TRUST_PROXY: bilangan bulat ≥ 0 (jumlah proxy tepercaya). */
+function trustProxyFrom(raw) {
+  if (raw === undefined || String(raw).trim() === '') return 0;
+  const n = Number(String(raw).trim());
+  if (!Number.isInteger(n) || n < 0) throw new Error(`TRUST_PROXY harus bilangan bulat ≥ 0, didapat "${raw}"`);
+  return n;
+}
+
 /** APP_ENV=development|production; kosong → production bila NODE_ENV=production, selain itu development. */
 export function appEnvFrom(env) {
   const raw = (env.APP_ENV || '').trim().toLowerCase();
@@ -80,6 +88,8 @@ export function loadConfig(env = process.env) {
   return {
     appEnv,
     port: intFromEnv('PORT', 3000),
+    // Jumlah proxy tepercaya di depan backend (1 = nginx atau cloudflared). 0/kosong = langsung (tanpa proxy).
+    trustProxy: trustProxyFrom(env.TRUST_PROXY),
     // Origin yang boleh memanggil API dari browser (mis. chrome-extension://<ID>); kosong = localhost saja.
     allowedOrigins: parseAllowedOrigins(env.ALLOWED_ORIGINS),
     publicUrl: (env.PUBLIC_URL || `http://localhost:${env.PORT || 3000}`).replace(/\/+$/, ''),

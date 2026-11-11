@@ -1,0 +1,131 @@
+# NaraVisi · deploy/docker-compose.prod.yml
+# Fungsi   : Menjalankan NaraVisi di VM Oracle Cloud Always Free (ARM64 Ubuntu): nginx HTTPS → backend → ai-service, MySQL.
+# Kebutuhan: RNF-07 (HTTPS Let's Encrypt), semua RF lewat backend
+# Terkait  : deploy/ORACLE_FREE.md (langkah demi langkah), deploy/.env.example, deploy/*.prod.env.example
+#
+# Pemakaian (di VM, dari folder naravisi):
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+#
+# Hanya nginx yang membuka port (80, 443). backend, ai-service, dan mysql TIDAK punya "ports:", jadi tidak bisa
+# dijangkau dari internet; mereka hanya saling bicara di jaringan internal Docker.
+# Semua layanan: restart otomatis (unless-stopped) + healthcheck.
+
+name: naravisi
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  mysql:
+    <<: *restart
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?isi MYSQL_ROOT_PASSWORD di deploy/.env}
+      MYSQL_DATABASE: naravisi
+      MYSQL_USER: naravisi
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?isi MYSQL_PASSWORD di deploy/.env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  ai-service:
+    <<: *restart
+    build:
+      context: ../ai-service
+      dockerfile: ../deploy/docker/ai-service.Dockerfile
+    env_file: ai.prod.env
+    environment:
+      APP_ENV: production
+      HF_HOME: /models
+    volumes:
+      - ai-models:/models                          # model BLIP/MarianMT diunduh sekali, tidak hilang saat rebuild
+      - ../ai-service/eval/data:/app/eval/data:ro  # few-shot opsional (eval/data/fewshot.json bila ada)
+
+  backend:
+    <<: *restart
+    build:
+      context: ../backend
+      dockerfile: ../deploy/docker/backend.Dockerfile
+    env_file: backend.prod.env
+    environment:
+      APP_ENV: production
+      PORT: "3000"
+      PUBLIC_URL: https://${DOMAIN:?isi DOMAIN di deploy/.env}
+      TRUST_PROXY: "1"                 # di belakang nginx: IP asli dari X-Forwarded-For
+      DB_DRIVER: mysql
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: naravisi
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: naravisi
+      AI_SERVICE_URL: http://ai-service:8000
+      MIDTRANS_IS_PRODUCTION: "false"  # Midtrans Sandbox
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+
+  nginx:
+    <<: *restart
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    entrypoint: ["/bin/sh", "/etc/naravisi-nginx/start-nginx.sh"]
+    volumes:
+      - ./nginx:/etc/naravisi-nginx:ro
+      - certbot-www:/var/www/certbot:ro
+      - letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Perpanjang sertifikat Let's Encrypt (berlaku 90 hari) — dicek tiap 12 jam; nginx memuat ulang sendiri.
+  certbot:
+    <<: *restart
+    image: certbot/certbot:v2.11.0
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 43200 & wait $${!}; done"]
+    volumes:
+      - certbot-www:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+
+  # Menjaga nama DuckDNS tetap menunjuk ke IP publik VM (dicek tiap 5 menit).
+  duckdns:
+    <<: *restart
+    image: curlimages/curl:8.10.1
+    environment:
+      DUCKDNS_SUBDOMAIN: ${DUCKDNS_SUBDOMAIN:?isi DUCKDNS_SUBDOMAIN di deploy/.env}
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN:?isi DUCKDNS_TOKEN di deploy/.env}
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do curl -fsS \"https://www.duckdns.org/update?domains=$${DUCKDNS_SUBDOMAIN}&token=$${DUCKDNS_TOKEN}&ip=\" -o /dev/null || echo 'DuckDNS gagal diperbarui'; sleep 300 & wait $${!}; done"]
+
+  # Cadangan MySQL harian ke deploy/backups/ (disimpan 7 hari). Pulihkan: lihat ORACLE_FREE.md bagian 11.
+  backup:
+    <<: *restart
+    image: mysql:8.4
+    environment:
+      MYSQL_PWD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do f=/backups/naravisi-$$(date +%Y%m%d-%H%M).sql.gz; if mysqldump -h mysql -uroot --single-transaction --routines --databases naravisi | gzip > $$f; then echo \"Cadangan dibuat: $$f\"; else echo 'Cadangan GAGAL'; rm -f $$f; fi; find /backups -name 'naravisi-*.sql.gz' -mtime +7 -delete; sleep 86400 & wait $${!}; done"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  ai-models:
+  certbot-www:
+  letsencrypt:

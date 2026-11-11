@@ -1,0 +1,21 @@
+# NaraVisi · deploy/nginx/http-only.conf.template — dipakai SEBELUM sertifikat ada (lihat start-nginx.sh).
+# Hanya melayani verifikasi Let's Encrypt dan /healthz; aplikasi belum dibuka tanpa HTTPS.
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        default_type text/plain;
+        return 503 "NaraVisi: sertifikat HTTPS belum dibuat. Lihat deploy/ORACLE_FREE.md bagian 9.\n";
+    }
+}

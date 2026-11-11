@@ -27,3 +27,6 @@ ai-service/eval/sources.txt
 
 # Paket rilis extension (dibuat ulang dengan: python -I scripts/paket_extension.py)
 dist/
+
+# Cadangan MySQL di server (deploy/docker-compose.prod.yml, layanan backup)
+deploy/backups/

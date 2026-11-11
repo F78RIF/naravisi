@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
+import { createApp } from '../src/app.js';
 import { ConfigError, loadConfig } from '../src/config.js';
 import { startTestApp } from './support/testApp.js';
 
@@ -127,5 +128,50 @@ describe('APP_ENV=production: rute simulasi pembayaran tidak terdaftar', () => {
     const { body: plans } = await dev.api('GET', '/api/v1/plans');
     const pay = await dev.api('POST', '/api/v1/payments', { token: u.token, body: { paket_id: plans.items[0].paket_id } });
     assert.equal((await dev.api('GET', `/pay/simulate/${pay.body.order_id}`)).status, 200);
+  });
+});
+
+describe('TRUST_PROXY: batas login gagal memakai IP asli di belakang proxy (nginx / cloudflared)', () => {
+  async function expressWith(env) {
+    const t = await startTestApp({ env });
+    const server = createApp(t.services).listen(0, '127.0.0.1');
+    await new Promise((r) => server.once('listening', r));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const login = (email, kata_sandi, ip) =>
+      fetch(`${base}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+        body: JSON.stringify({ email, kata_sandi }),
+      });
+    return { t, login, close: async () => { server.close(); await t.close(); } };
+  }
+
+  it('TRUST_PROXY harus bilangan bulat ≥ 0', () => {
+    assert.equal(loadConfig({ JWT_SECRET: 'rahasia-uji', TRUST_PROXY: '1' }).trustProxy, 1);
+    assert.equal(loadConfig({ JWT_SECRET: 'rahasia-uji' }).trustProxy, 0);
+    assert.throws(() => loadConfig({ JWT_SECRET: 'rahasia-uji', TRUST_PROXY: 'ya' }), /TRUST_PROXY harus bilangan bulat/);
+  });
+
+  it('TRUST_PROXY=1: penyerang dari IP lain tidak bisa mengunci akun korban', async () => {
+    const s = await expressWith({ TRUST_PROXY: '1' });
+    try {
+      const u = await s.t.register();
+      for (let i = 0; i < 10; i += 1) assert.equal((await s.login(u.email, 'salah-salah', '203.0.113.9')).status, 401);
+      assert.equal((await s.login(u.email, u.password, '203.0.113.9')).status, 429, 'IP penyerang dikunci');
+      assert.equal((await s.login(u.email, u.password, '198.51.100.7')).status, 200, 'pemilik akun dari IP lain tetap bisa masuk');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('tanpa TRUST_PROXY: X-Forwarded-For diabaikan (tidak bisa dipalsukan bila tanpa proxy)', async () => {
+    const s = await expressWith({});
+    try {
+      const u = await s.t.register();
+      for (let i = 0; i < 10; i += 1) await s.login(u.email, 'salah-salah', `203.0.113.${i}`);
+      assert.equal((await s.login(u.email, u.password, '198.51.100.7')).status, 429);
+    } finally {
+      await s.close();
+    }
   });
 });

@@ -20,6 +20,7 @@ bisa langsung tampil di GitHub atau disalin ke slide.
 | [Tahap 9](#tahap-9--langkah-4-penutup-100) | Langkah 4: rilis 1.1.0 & dokumentasi final | – |
 | [Tahap 10](#tahap-10--online-langkah-1-mode-production) | Online Langkah 1: mode production | RNF-07, RF-25, PF-04 |
 | [Tahap 11](#tahap-11--online-langkah-2-dari-laptop-lewat-cloudflare-tunnel) | Online Langkah 2: Cloudflare Tunnel | RNF-07 |
+| [Tahap 12](#tahap-12--online-langkah-3-server-oracle-cloud-always-free) | Online Langkah 3: Oracle Always Free | RNF-07, RNF-09 |
 
 ---
 
@@ -1034,4 +1035,59 @@ Rincian, pemasangan cloudflared, dan keamanan: `deploy/CLOUDFLARE_TUNNEL.md`.
 Skrip lolos pemeriksa sintaks PowerShell (`Parser.ParseFile`, 0 galat) dan hanya memakai karakter ASCII (aman untuk
 Windows PowerShell 5.1). Uji jalan sungguhan (tunnel terbuka, alamat terbaca, backend terjangkau dari internet) harus
 dilakukan manusia setelah cloudflared terpasang. Langkahnya ada di `deploy/CLOUDFLARE_TUNNEL.md` bagian 3.
+
+---
+
+## Tahap 12 — Online Langkah 3: server Oracle Cloud Always Free
+
+### Ide besarnya
+
+Satu VM ARM64 gratis menjalankan semua komponen sebagai container Docker. Hanya **nginx** yang membuka port ke
+internet. Ia memegang sertifikat HTTPS dan meneruskan permintaan ke backend di jaringan internal Docker.
+
+| Layanan (`deploy/docker-compose.prod.yml`) | Tugas | Port ke internet |
+|---|---|---|
+| `nginx` | HTTPS (Let's Encrypt), alihkan http → https, batas body 10 MB | **80, 443** |
+| `backend` | REST API + Dashboard Admin; saat start menjalankan `setup-db.js` (idempoten) | – |
+| `ai-service` | Gemini + cadangan BLIP; model disimpan di volume `ai-models` | – |
+| `mysql` | basis data (volume `mysql-data`) | – |
+| `certbot` | perpanjang sertifikat tiap 12 jam | – |
+| `duckdns` | jaga nama DuckDNS menunjuk IP VM (tiap 5 menit) | – |
+| `backup` | `mysqldump` harian ke `deploy/backups/`, simpan 7 hari | – |
+
+### Sertifikat pertama: masalah ayam dan telur
+
+nginx tidak bisa menyala di port 443 tanpa sertifikat, sedangkan Let's Encrypt butuh nginx untuk memverifikasi domain
+lewat port 80. `deploy/nginx/start-nginx.sh` memecahkannya: bila berkas sertifikat **belum ada**, nginx memakai
+`http-only.conf.template` (hanya `/.well-known/acme-challenge/` dan `/healthz`). Setelah `certbot certonly` berhasil,
+`docker compose restart nginx` membuat skrip memilih `https.conf.template`.
+
+### Perbaikan keamanan yang ikut: `TRUST_PROXY`
+
+Di belakang proxy (nginx di sini, cloudflared di Tahap 11), backend melihat semua permintaan datang dari **satu** IP,
+yaitu IP proxy. Batas "10 login gagal → dikunci 15 menit" (per email + IP) jadi praktis per email saja, sehingga
+siapa pun bisa mengunci akun orang lain. `TRUST_PROXY=1` (`backend/src/config.js` `trustProxyFrom`, `app.js`) membuat
+Express memakai IP asli dari `X-Forwarded-For` yang ditambahkan proxy. Nilai ini diisi otomatis oleh
+`docker-compose.prod.yml` dan `start-online.ps1`. Tanpa proxy dibiarkan kosong, karena `X-Forwarded-For` dari klien
+bisa dipalsukan.
+
+### Firewall dua lapis
+
+1. **Security List** di konsol Oracle: ingress hanya 22, 80, 443.
+2. **iptables** di VM (`deploy/oracle/firewall.sh`): sisipkan izin 80/443 sebelum aturan REJECT bawaan image Ubuntu
+   Oracle, lalu simpan permanen.
+
+Ditambah lapis ketiga yang paling penting: backend, ai-service, dan MySQL **tidak punya `ports:`**, jadi tidak ada
+yang mendengarkan di antarmuka publik VM.
+
+### Bukti
+
+| Tes / pemeriksaan | Yang dibuktikan |
+|---|---|
+| `backend/test/production.test.js` "TRUST_PROXY" (3) | IP penyerang dikunci, pemilik akun dari IP lain tetap bisa masuk; tanpa `TRUST_PROXY`, `X-Forwarded-For` diabaikan; nilai tidak valid ditolak |
+| YAML `docker-compose.prod.yml` dimuat PyYAML | semua layanan `restart: unless-stopped`; hanya `nginx` punya `ports` |
+| `.gitattributes` | `*.sh`, template nginx, Dockerfile tetap LF walau di-clone di Windows |
+
+Docker tidak tersedia di laptop pengembangan, jadi build image dan jalannya compose **belum diuji di sini**. Uji di VM
+mengikuti `deploy/ORACLE_FREE.md` langkah 7–9.
 

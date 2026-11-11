@@ -313,6 +313,13 @@ Skrip mencetak alamat `https://….trycloudflare.com` dan mengisi `PUBLIC_URL` b
 diubah). Alamat **berganti setiap kali** dijalankan dan laptop harus tetap menyala. Langkah lengkap, cara menyambungkan
 extension, dan batasannya: `deploy/CLOUDFLARE_TUNNEL.md`.
 
+### 8. Server tetap gratis (Oracle Cloud Always Free)
+
+Alamat tetap `https://<nama>.duckdns.org`, menyala 24 jam tanpa laptop: VM ARM64 Ubuntu + Docker Compose
+(`deploy/docker-compose.prod.yml`: nginx HTTPS Let's Encrypt → backend → ai-service, MySQL; hanya port 80/443 terbuka;
+cadangan MySQL harian; restart otomatis; healthcheck). Langkah demi langkah dan peringatan agar tetap di batas
+"Always Free": `deploy/ORACLE_FREE.md`.
+
 ## Aturan bisnis (ringkas)
 
 | | Gratis | Premium (Rp15.000 / 30 hari) |

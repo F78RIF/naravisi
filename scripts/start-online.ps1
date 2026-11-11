@@ -166,7 +166,7 @@ Write-Host " $url" -ForegroundColor Green
 Write-Host "Menjalankan backend (port 3000, APP_ENV=$Mode, PUBLIC_URL=$url) ..."
 # Variabel proses menang atas backend\.env (node --env-file tidak menimpa variabel yang sudah ada).
 Start-Process powershell -WorkingDirectory $backend -ArgumentList @(
-  '-NoExit', '-Command', "`$env:APP_ENV='$Mode'; `$env:PUBLIC_URL='$url'; npm start"
+  '-NoExit', '-Command', "`$env:APP_ENV='$Mode'; `$env:PUBLIC_URL='$url'; `$env:TRUST_PROXY='1'; npm start"
 ) | Out-Null
 if (-not (Tunggu-Sehat 'backend' 'http://localhost:3000/api/v1/health')) {
   Gagal 'backend tidak siap. Di mode production, baca daftar yang belum lengkap di jendela backend.'
