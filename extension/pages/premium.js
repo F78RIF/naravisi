@@ -52,7 +52,7 @@ function planCard(plan, premium, mode) {
     el('p', { class: 'price' }, rupiah(plan.harga), el('small', {}, ` / ${plan.durasi_hari} hari`)),
     el('ul', { class: 'benefits' }, plan.manfaat.map((m) => el('li', {}, m))),
     mode === 'simulasi'
-      ? el('p', { class: 'hint', id: hintId }, el('strong', {}, 'SIMULASI: '), 'pembayaran demo, tidak ada uang yang ditagih.')
+      ? el('p', { class: 'hint', id: hintId }, el('strong', {}, 'SIMULASI: '), 'mode pengembangan, tidak ada uang yang ditagih.')
       : el('p', { class: 'hint', id: hintId }, 'Pembayaran diproses Midtrans: QRIS, e-wallet, atau transfer bank.'),
     el('div', { class: 'row' }, btn),
   );

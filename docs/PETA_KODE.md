@@ -144,6 +144,7 @@ Tidak tercantum di SRS v1.1; dicatat di `docs/PERUBAHAN_SRS_SDD.md` bagian 1.
 | RNF-02 | Pembaca layar | ct `:472` `buildPanel`, `:853` `announce` (live region) |
 | RNF-03 | Navigasi keyboard | ct `:1151` `onKeyDown`, `:665` `closePanel` |
 | RNF-06 | Pesan error jelas | `backend/src/lib/errors.js:21` `Errors`; `http/dispatch.js:25` `errorResult`; ct `:694` `friendlyError` |
+| RNF-07 | HTTPS/TLS (mode production) | `backend/src/config.js` `productionProblems` (PUBLIC_URL wajib https, kunci wajib); `server.js` pesan gagal start; `routes.js` `simulationRoutes` hanya development; `ai-service/app/config.py` `production_problems` |
 | RNF-08 | Sandi ter-hash | `backend/src/lib/password.js:15` `hashPassword`, `:22` `verifyPassword` |
 | RNF-09 | Autentikasi token | `lib/jwt.js:13` `signJwt`, `:25` `verifyJwt`; `accountService.js:103` `authenticate`; `http/dispatch.js:12` `dispatch`; `extension/shared/config.js:97` `apiFetch` |
 | RNF-10 | Hak akses per peran | `http/dispatch.js:12` `dispatch` (rute `auth: 'admin'`); `accountService.js:103` (peran dibaca dari DB) |

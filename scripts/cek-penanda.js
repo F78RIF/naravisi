@@ -50,6 +50,7 @@ const KEBUTUHAN = {
   'RNF-02': ['Pembaca layar', null],
   'RNF-03': ['Navigasi keyboard', null],
   'RNF-06': ['Pesan error jelas', null],
+  'RNF-07': ['HTTPS/TLS', null],
   'RNF-08': ['Sandi ter-hash', null],
   'RNF-09': ['Autentikasi token', null],
   'RNF-10': ['Hak akses per peran', null],

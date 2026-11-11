@@ -740,6 +740,9 @@
     return res.data;
   }
 
+  // [PF-04] Cadangan AI Gemini → BLIP — pemberitahuan sopan saat deskripsi dibuat model cadangan (mis. kuota Gemini habis)
+  const FALLBACK_NOTE = ' Layanan AI utama sedang sibuk, jadi deskripsi ini dibuat oleh model cadangan dan mungkin lebih singkat.';
+
   // [RF-09] Mengirim gambar ke AI — Enter pada gambar terpilih → minta deskripsi
   // [RF-11] Menampilkan deskripsi teks — hasil ditampilkan lalu dibacakan
   async function describeCurrent() {
@@ -763,7 +766,7 @@
     setStatus(`Mendeskripsikan gambar ${number}… mohon tunggu.`);
 
     try {
-      const { text, riwayat_id: riwayatId, kuota, jenis } = await fetchDescription(item);
+      const { text, riwayat_id: riwayatId, kuota, jenis, fallback } = await fetchDescription(item);
       if (!state.open) return; // panel ditutup saat menunggu
 
       state.current = { text, riwayatId, jenis };
@@ -773,7 +776,7 @@
       state.host.dataset.state = 'done';
       setAction(null);
       const sisa = kuota && kuota.batas != null ? ` Sisa kuota hari ini: ${kuota.sisa}.` : '';
-      setStatus(`Deskripsi gambar ${number} siap.${sisa}`);
+      setStatus(`Deskripsi gambar ${number} siap.${fallback ? FALLBACK_NOTE : ''}${sisa}`);
       speak(text);
     } catch (err) {
       if (!state.open) return;

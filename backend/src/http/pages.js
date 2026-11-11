@@ -42,7 +42,7 @@ export function simulatePage(trx) {
     `<p class="sim-banner" aria-hidden="true">SIMULASI</p>
      <h1>SIMULASI — pembayaran Premium (bukan pembayaran sungguhan)</h1>
      <p class="note" id="sim-note"><strong>Ini halaman SIMULASI.</strong> Server berjalan tanpa kunci Midtrans,
-     jadi halaman ini menggantikan halaman pembayaran untuk keperluan demo. Tidak ada uang yang ditagih.</p>
+     jadi halaman ini menggantikan halaman pembayaran untuk keperluan pengembangan. Tidak ada uang yang ditagih.</p>
      <dl>
        <dt>Order</dt><dd>${esc(trx.order_id)}</dd>
        <dt>Paket</dt><dd>Premium ${esc(trx.nama_paket)}</dd>

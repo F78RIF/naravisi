@@ -131,6 +131,13 @@ export function buildRoutes(s) {
     // --- Halaman pembayaran -----------------------------------------------
     // [RF-25] Pembayaran & aktivasi Premium — halaman kembali dari Midtrans
     { method: 'GET', path: '/pay/finish', handler: async () => ({ status: 200, html: finishPage() }) },
+    ...(s.config?.appEnv === 'production' ? [] : simulationRoutes(s)),
+  ];
+}
+
+// [RF-25] Pembayaran & aktivasi Premium — halaman SIMULASI hanya untuk development/tes; production tidak mendaftarkannya
+function simulationRoutes(s) {
+  return [
     // [RF-25] Pembayaran & aktivasi Premium — halaman bayar SIMULASI (tanpa server key)
     {
       method: 'GET', path: '/pay/simulate/:orderId',

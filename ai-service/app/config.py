@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PROVIDERS = {"gemini", "blip", "mock"}
+APP_ENVS = {"development", "production"}
 FALLBACKS = PROVIDERS - {"gemini"} | {"none"}
 
 DEFAULT_FEWSHOT_PATH = Path(__file__).resolve().parent.parent / "eval" / "data" / "fewshot.json"
@@ -33,6 +34,37 @@ def load_env_file(path: Path = DEFAULT_ENV_PATH) -> None:
         os.environ.setdefault(key.strip(), value)
 
 
+class ConfigError(ValueError):
+    """Konfigurasi production belum lengkap; `problems` = daftar yang harus diperbaiki."""
+
+    def __init__(self, problems: list[str]):
+        self.problems = problems
+        super().__init__("Konfigurasi production belum lengkap:\n" + "\n".join(f"  - {p}" for p in problems))
+
+
+def app_env() -> str:
+    raw = os.getenv("APP_ENV", "").strip().lower() or "development"
+    if raw not in APP_ENVS:
+        raise ValueError(f"APP_ENV harus 'development' atau 'production', didapat '{raw}'")
+    return raw
+
+
+# [PF-04] Cadangan AI Gemini → BLIP — production wajib Gemini + kunci + cadangan BLIP; provider mock hanya untuk development/tes
+def production_problems() -> list[str]:
+    problems = []
+    provider = os.getenv("CAPTION_PROVIDER", "").strip().lower()
+    if provider != "gemini":
+        problems.append(f"CAPTION_PROVIDER harus 'gemini' (didapat '{provider or 'kosong'}').")
+    if not os.getenv("GEMINI_API_KEY", "").strip():
+        problems.append("GEMINI_API_KEY kosong — buat kunci gratis di https://aistudio.google.com/apikey")
+    if not os.getenv("GEMINI_MODEL", "").strip():
+        problems.append("GEMINI_MODEL kosong — pilih model Flash/Flash-Lite gratis di Google AI Studio.")
+    fallback = os.getenv("FALLBACK_PROVIDER", "").strip().lower() or "blip"
+    if fallback != "blip":
+        problems.append(f"FALLBACK_PROVIDER harus 'blip' agar tetap menjawab saat kuota Gemini habis (didapat '{fallback}').")
+    return problems
+
+
 @dataclass(frozen=True)
 class Settings:
     provider: str
@@ -47,6 +79,7 @@ class Settings:
     gemini_thinking_budget: int | None = None
     fallback_provider: str = "blip"
     fewshot_path: str = str(DEFAULT_FEWSHOT_PATH)
+    app_env: str = "development"
     # "en" = keluaran BLIP berbahasa Inggris lalu diterjemahkan; "id" = model hasil fine-tune (Tahap 5) sudah berbahasa Indonesia.
     blip_lang: str = "en"
 
@@ -57,6 +90,12 @@ def _int_or_none(name: str) -> int | None:
 
 
 def load_settings() -> Settings:
+    env = app_env()
+    if env == "production":
+        problems = production_problems()
+        if problems:
+            raise ConfigError(problems)
+
     provider = os.getenv("CAPTION_PROVIDER", "blip").strip().lower()
     if provider not in PROVIDERS:
         raise ValueError(f"CAPTION_PROVIDER harus 'gemini', 'blip', atau 'mock', didapat '{provider}'")
@@ -83,6 +122,7 @@ def load_settings() -> Settings:
         raise ValueError(f"BLIP_LANG harus 'en' atau 'id', didapat '{blip_lang}'")
 
     return Settings(
+        app_env=env,
         provider=provider,
         blip_model=os.getenv("BLIP_MODEL", "Salesforce/blip-image-captioning-base"),
         translation_model=os.getenv("TRANSLATION_MODEL", "Helsinki-NLP/opus-mt-en-id"),

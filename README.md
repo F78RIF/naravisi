@@ -284,8 +284,23 @@ Buka `http://localhost:3000/admin/` dan masuk dengan akun Admin dari `.env`.
 
 ### 5. Pembayaran Premium
 
-- **Mode simulasi** (bawaan, `MIDTRANS_SERVER_KEY` kosong): tombol beli membuka halaman simulasi lokal — cocok untuk demo, tanpa tagihan.
+- **Mode simulasi** (hanya `APP_ENV=development`, `MIDTRANS_SERVER_KEY` kosong): tombol beli membuka halaman simulasi lokal — untuk pengembangan, tanpa tagihan.
 - **Midtrans Sandbox**: daftar di dashboard.sandbox.midtrans.com, salin *Server Key* ke `MIDTRANS_SERVER_KEY`. Status pembayaran diperbarui lewat webhook (`POST /api/v1/payments/notification`, butuh URL publik seperti ngrok) **atau** otomatis saat pengguna membuka halaman Premium (cek langsung ke Midtrans) — jadi tetap jalan di localhost.
+
+### 6. Mode production (`APP_ENV=production`)
+
+Untuk dipakai orang lain lewat internet, isi `APP_ENV=production` di `backend/.env` **dan** `ai-service/.env`.
+Server sengaja **menolak start** dan menuliskan daftar yang perlu diperbaiki (tanpa jejak galat teknis) bila:
+
+| Layanan | Wajib |
+|---|---|
+| backend | `JWT_SECRET` ≥ 32 karakter · `PUBLIC_URL` diawali `https://` · `ALLOWED_ORIGINS` terisi · `MIDTRANS_SERVER_KEY` (Sandbox) terisi · `MIDTRANS_IS_PRODUCTION=false` |
+| ai-service | `CAPTION_PROVIDER=gemini` · `GEMINI_API_KEY` & `GEMINI_MODEL` terisi · `FALLBACK_PROVIDER=blip` |
+
+Di production halaman simulasi pembayaran (`/pay/simulate/…`) tidak didaftarkan dan provider `mock` ditolak; pembayaran
+selalu lewat Midtrans **Sandbox** (tidak ada uang sungguhan yang ditagih). Bila kuota gratis Gemini habis (429), deskripsi
+otomatis dibuat BLIP dan panel memberi tahu dengan sopan: "Layanan AI utama sedang sibuk, jadi deskripsi ini dibuat oleh
+model cadangan dan mungkin lebih singkat."
 
 ## Aturan bisnis (ringkas)
 

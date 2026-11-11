@@ -44,7 +44,9 @@ backend.ai.caption = async ({ lang, imageBase64, context }) => {
   if (backend.ai.delayMs) await new Promise((r) => setTimeout(r, backend.ai.delayMs));
   backend.ai.inFlight -= 1;
   const mime = Buffer.from(imageBase64, 'base64')[0] === 0xff ? 'JPEG' : 'PNG';
-  return { text: `Deskripsi uji untuk gambar ${mime}.`, textEn: null, lang, model: 'fake', latencyMs: 1, jenis: 'foto', provider: 'fake' };
+  const fallback = backend.ai.nextFallback === true; // meniru Gemini 429 → jawaban dari cadangan BLIP
+  backend.ai.nextFallback = false;
+  return { text: `Deskripsi uji untuk gambar ${mime}.`, textEn: null, lang, model: 'fake', latencyMs: 1, jenis: 'foto', provider: fallback ? 'blip' : 'fake', fallback };
 };
 const API = `${backend.base}/api/v1`;
 backend.services.config.publicUrl = backend.base; // halaman bayar simulasi di server uji
@@ -820,10 +822,16 @@ try {
     assert.equal(await text.innerText(), 'Deskripsi uji untuk gambar JPEG.');
   });
 
-  await step('gambar data: URL dideskripsikan; tersimpan di riwayat tanpa URL gambar', async () => {
+  // [PF-04] Cadangan AI Gemini → BLIP — diuji: jawaban cadangan diumumkan dengan sopan, tanpa kode galat
+  await step('gambar data: URL dideskripsikan; tersimpan di riwayat tanpa URL gambar; model cadangan diumumkan sopan', async () => {
+    backend.ai.nextFallback = true;
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     await status.filter({ hasText: 'Sisa kuota hari ini: 6.' }).waitFor({ timeout: 10000 });
+    const said = await status.innerText();
+    assert.match(said, /Layanan AI utama sedang sibuk, jadi deskripsi ini dibuat oleh model cadangan/);
+    assert.doesNotMatch(said, /429|MODEL_|Gemini|error|galat/i, 'tanpa istilah teknis');
+    assert.match(await host.getAttribute('data-last-spoken'), /^Deskripsi uji untuk gambar /, 'deskripsi tetap dibacakan');
     const last = await backend.db.get('SELECT url_gambar, url_halaman FROM riwayat_deskripsi ORDER BY riwayat_id DESC LIMIT 1');
     assert.equal(last.url_gambar, null);
     assert.equal(last.url_halaman, `${SITE}/berita.html`);

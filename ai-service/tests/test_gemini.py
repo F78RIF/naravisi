@@ -291,7 +291,7 @@ class TestPrompt(unittest.TestCase):
 
 class TestConfig(unittest.TestCase):
     def env(self, **values):
-        base = {k: "" for k in ("CAPTION_PROVIDER", "GEMINI_API_KEY", "GEMINI_MODEL", "FALLBACK_PROVIDER", "GEMINI_THINKING_BUDGET")}
+        base = {k: "" for k in ("APP_ENV", "CAPTION_PROVIDER", "GEMINI_API_KEY", "GEMINI_MODEL", "FALLBACK_PROVIDER", "GEMINI_THINKING_BUDGET")}
         base.update(values)
         return mock.patch.dict(os.environ, base)
 

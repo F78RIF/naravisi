@@ -155,7 +155,7 @@ export const REPORT_CATEGORIES = [
   ['lainnya', 'Lainnya'],
 ];
 
-const PROVIDER_LABEL = { gemini: 'Google Gemini', blip: 'BLIP (model lokal)', mock: 'Mode uji (mock)' };
+const PROVIDER_LABEL = { gemini: 'Google Gemini', blip: 'BLIP (model lokal)', mock: 'Model contoh (pengembangan)' };
 export const providerLabel = (provider) => PROVIDER_LABEL[provider] ?? (provider || '-');
 
 // [RF-12] Membacakan deskripsi — membacakan di halaman extension (Riwayat, Coba suara)

@@ -10,6 +10,7 @@ Jalankan:  uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file .env
 from __future__ import annotations
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from typing import Literal
@@ -213,4 +214,10 @@ def create_app(settings: Settings | None = None, service: CaptionService | Capti
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 load_env_file()
-app = create_app()
+try:
+    app = create_app()
+except ValueError as err:  # termasuk ConfigError: pesan jelas tanpa jejak tumpukan, keluar dengan kode 1
+    raise SystemExit(
+        f"\nLayanan AI NaraVisi tidak dapat dijalankan (APP_ENV={os.getenv('APP_ENV') or 'development'}).\n"
+        f"{err}\nPerbaiki berkas ai-service/.env lalu jalankan ulang. Lihat ai-service/.env.example.\n"
+    ) from None

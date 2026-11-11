@@ -18,6 +18,7 @@ bisa langsung tampil di GitHub atau disalin ke slide.
 | [Tahap 7](#tahap-7--langkah-2-admin-yang-aman-rf-21-rf-22-rf-27rf-30) | Langkah 2: Admin aman | RF-21, 22, 27..30 |
 | [Tahap 8](#tahap-8--langkah-3-bukti-rnf-kinerja-aksesibilitas-keamanan) | Langkah 3: bukti RNF | RNF-01..13 |
 | [Tahap 9](#tahap-9--langkah-4-penutup-100) | Langkah 4: rilis 1.1.0 & dokumentasi final | – |
+| [Tahap 10](#tahap-10--online-langkah-1-mode-production) | Online Langkah 1: mode production | RNF-07, RF-25, PF-04 |
 
 ---
 
@@ -912,3 +913,78 @@ masuk `.gitignore`, karena paket selalu bisa dibuat ulang dari kode.
 | M-05 pengguna tunanetra | menilai kemudahan, bukan kebenaran | idem |
 | M-06 MySQL asli | butuh server MySQL di laptop | idem |
 | Penilaian akurasi M-01 | butuh mata manusia (fase "nilai" `eval.annotate`) | `ai-service/eval` |
+
+---
+
+## Tahap 10 — Online Langkah 1: mode production
+
+### Ide besarnya
+
+NaraVisi kini punya dua mode, dipilih dengan `APP_ENV` di `backend/.env` dan `ai-service/.env`:
+
+| | development (bawaan) | production |
+|---|---|---|
+| Dipakai oleh | Anda sendiri di laptop, tes otomatis | orang lain lewat internet |
+| Kunci kosong | boleh (memakai bawaan pengembangan) | **server menolak start** |
+| Pembayaran | halaman SIMULASI lokal bila tanpa kunci Midtrans | selalu Midtrans **Sandbox**; halaman simulasi tidak ada |
+| Provider AI | gemini / blip / mock | wajib Gemini + cadangan BLIP; mock ditolak |
+
+Alasannya sederhana: lebih baik server **tidak menyala** daripada menyala dengan kunci contoh yang ada di repo publik
+(siapa pun bisa memalsukan token) atau dengan halaman "bayar berhasil" palsu yang bisa diklik siapa saja.
+
+### Pemeriksaan saat start (backend)
+
+1. `server.js` memanggil `loadConfig()` (`backend/src/config.js`).
+2. `appEnvFrom` membaca `APP_ENV` (kosong = development; nilai lain selain development/production ditolak).
+3. Bila production, `productionProblems` memeriksa **semua** syarat sekaligus:
+   `JWT_SECRET` ≥ 32 karakter, `PUBLIC_URL` diawali `https://`, `ALLOWED_ORIGINS` terisi,
+   `MIDTRANS_SERVER_KEY` terisi, dan `MIDTRANS_IS_PRODUCTION` bukan `true`.
+4. Ada masalah → `ConfigError` berisi daftar. `server.js` mencetak daftar itu dengan kalimat biasa, tanpa jejak
+   tumpukan, lalu keluar dengan kode 1. Contoh:
+
+```
+NaraVisi tidak dapat dijalankan (APP_ENV=production).
+Konfigurasi production belum lengkap:
+  - JWT_SECRET kosong — isi teks acak minimal 32 karakter.
+  - PUBLIC_URL harus diawali https:// (didapat "http://localhost:3000").
+Perbaiki berkas backend/.env lalu jalankan ulang. Lihat backend/.env.example.
+```
+
+5. `routes.js`: di production, `simulationRoutes` tidak ikut didaftarkan, jadi `/pay/simulate/…` dijawab 404
+   seperti alamat yang tidak ada. (Lapis kedua yang sudah ada sejak Tahap 6: `paymentService.simulationInfo` menolak
+   bila kunci Midtrans terisi.)
+
+### Pemeriksaan saat start (ai-service)
+
+`load_settings` (`ai-service/app/config.py`) memanggil `production_problems`: `CAPTION_PROVIDER` harus `gemini`,
+`GEMINI_API_KEY` dan `GEMINI_MODEL` terisi, `FALLBACK_PROVIDER` harus `blip`. Gagal → `main.py` mengubahnya menjadi
+pesan singkat (`SystemExit`) tanpa *traceback*. `GEMINI_API_KEY` diperiksa di sini, bukan di backend, karena kunci itu
+memang hanya disimpan di `ai-service/.env` dan backend tidak pernah memegangnya.
+
+### Kuota Gemini habis → BLIP, diumumkan dengan sopan
+
+1. Gemini menjawab 429 → `gemini.py` `_call` mengubahnya menjadi `MODEL_BUSY`.
+2. `CaptionRouter.describe` (`service.py`) melihat kode itu ada di `FALLBACK_CODES` → memanggil BLIP, menandai
+   `fallback = true`.
+3. Backend meneruskan `fallback` apa adanya (`descriptionService.describe`).
+4. Panel (`content.js` `describeCurrent`) tetap membacakan deskripsinya, lalu status (live region sopan) menambahkan:
+   "Layanan AI utama sedang sibuk, jadi deskripsi ini dibuat oleh model cadangan dan mungkin lebih singkat."
+   Tidak ada kata "429", "Gemini", atau kode galat yang sampai ke pengguna.
+5. Bila BLIP juga belum siap, pengguna mendengar pesan yang sudah ada: "Layanan AI sedang sibuk atau kuotanya habis.
+   Coba lagi beberapa saat lagi." dan kuotanya dikembalikan.
+
+### Teks "uji coba / simulasi / demo / tiruan"
+
+Di production tidak ada satu pun yang tampil, karena halaman dan label SIMULASI hanya muncul dalam mode simulasi, dan
+mode simulasi tidak mungkin terjadi di production. Di development label SIMULASI **sengaja tetap ada** (RF-24: pengguna
+harus tahu tidak ada uang yang ditagih). Kata "demo" dan "uji" yang tersisa di teks development diganti dengan
+"pengembangan".
+
+### Bukti (tes)
+
+| Tes | Yang dibuktikan |
+|---|---|
+| `backend/test/production.test.js` (16) | semua masalah dilaporkan sekaligus; tiap variabel kosong disebut namanya; JWT pendek, `http://`, Midtrans produksi ditolak; `node src/server.js` keluar kode 1 dengan pesan jelas tanpa stack trace; `/pay/simulate` 404 di production dan tetap ada di development |
+| `ai-service/tests/test_production.py` (8) | tanpa kunci ditolak; mock & tanpa cadangan ditolak; `import app.main` keluar kode 1 tanpa *Traceback* |
+| e2e "gambar data: URL … model cadangan diumumkan sopan" | status memuat kalimat cadangan, tanpa istilah teknis; deskripsi tetap dibacakan |
+
