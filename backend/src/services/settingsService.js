@@ -1,7 +1,7 @@
 // NaraVisi · backend/src/services/settingsService.js
 // Fungsi   : Pengaturan aksesibilitas & TTS per pengguna.
 // Kebutuhan: RF-17, RF-18, RF-19
-// Terkait  : tabel pengaturan_pengguna, extension/pages/pengaturan.js
+// Terkait  : tabel pengaturan_aksesibilitas, extension/pages/pengaturan.js
 
 import { Errors } from '../lib/errors.js';
 import * as v from '../lib/validate.js';

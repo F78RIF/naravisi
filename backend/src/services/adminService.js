@@ -1,7 +1,7 @@
 // NaraVisi · backend/src/services/adminService.js
 // Fungsi   : Pengelolaan pengguna oleh Admin.
 // Kebutuhan: RF-27, RF-28, RF-29, RF-30
-// Terkait  : accountService.js, subscriptionService.js, tabel pengguna/riwayat_deskripsi/transaksi
+// Terkait  : accountService.js, subscriptionService.js, tabel users/riwayat_deskripsi/transaksi
 
 import { Errors } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';

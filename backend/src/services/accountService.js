@@ -1,7 +1,7 @@
 // NaraVisi · backend/src/services/accountService.js
 // Fungsi   : Akun & profil: daftar, masuk, profil, ubah, hapus, autentikasi JWT.
 // Kebutuhan: RF-01..RF-05, RNF-08, RNF-09, RNF-10
-// Terkait  : lib/password.js, lib/jwt.js, lib/rateLimit.js, tabel pengguna
+// Terkait  : lib/password.js, lib/jwt.js, lib/rateLimit.js, tabel users
 
 import { Errors } from '../lib/errors.js';
 import { signJwt, verifyJwt } from '../lib/jwt.js';

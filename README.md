@@ -17,7 +17,7 @@ Halaman web ──Alt+Shift+K──▶ Extension (scan, pilih, panel, TTS)
 
 **Versi 1.1.0** · Progres **30/30 RF (100%)** · Dokumen pendukung: alur sistem bergambar `docs/ALUR.md`, pengujian
 `docs/PENGUJIAN.md`, perubahan sejak SRS/SDD v1.1 `docs/PERUBAHAN_SRS_SDD.md`, keputusan desain `docs/KEPUTUSAN.md`,
-API `docs/API.md`.
+API `docs/API.md`, peta kode (fitur → file & fungsi, penanda `[RF-xx]`) `docs/PETA_KODE.md`.
 
 | Folder | Isi | Stack (SRS 2.4) |
 |---|---|---|
