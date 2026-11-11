@@ -1,9 +1,13 @@
-// Profil: RF-02..RF-04 (UC-AKUN-02..04)
+// NaraVisi · extension/pages/profil.js
+// Fungsi   : Halaman Profil: lihat, ubah, hapus akun.
+// Kebutuhan: RF-02, RF-03, RF-04
+// Terkait  : profil.html, common.js, backend accountService.js
 import { apiFetch, logout, refreshProfile } from '../shared/config.js';
 import { $, el, fmtDate, fmtDateTime, requireSession, say, sayError, shell } from './common.js';
 
 shell('profil', 'Profil saya');
 
+// [RF-02] Lihat profil — kartu data profil
 function infoCard(user) {
   const k = user.kuota;
   return el(
@@ -24,6 +28,7 @@ function infoCard(user) {
   );
 }
 
+// [RF-03] Ubah profil — ubah nama & kata sandi lewat PATCH /me
 function editCard(user) {
   const nama = el('input', { id: 'e-nama', value: user.nama, autocomplete: 'name', minlength: 2, maxlength: 100 });
   const email = el('input', { id: 'e-email', type: 'email', value: user.email, autocomplete: 'email', maxlength: 100 });
@@ -81,6 +86,7 @@ function editCard(user) {
   return form;
 }
 
+// [RF-04] Hapus akun — hapus akun: ketik HAPUS + kata sandi → DELETE /me
 // UC-AKUN-04: konfirmasi dengan mengetik "HAPUS" (bisa dilakukan sepenuhnya dengan keyboard & pembaca layar).
 function dangerCard() {
   const konfirmasi = el('input', { id: 'd-konfirmasi', autocomplete: 'off', spellcheck: 'false', 'aria-describedby': 'd-konfirmasi-hint' });
@@ -124,6 +130,7 @@ function dangerCard() {
   return form;
 }
 
+// [RF-02] Lihat profil — memuat GET /me
 async function load() {
   const user = await refreshProfile();
   const out = el('div', { class: 'row' }, el('button', {

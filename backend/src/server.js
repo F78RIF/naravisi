@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/server.js
+// Fungsi   : Titik masuk server produksi: baca konfigurasi, siapkan DB, rangkai service, jalankan Express.
+// Kebutuhan: semua RF (lewat routes.js)
+// Terkait  : app.js, config.js, container.js, db/index.js
+
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createServices } from './container.js';

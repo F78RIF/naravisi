@@ -1,3 +1,8 @@
+// NaraVisi · extension/popup/popup.js
+// Fungsi   : Popup toolbar: masuk/daftar, sapaan, status & kuota, tombol Pindai, status server.
+// Kebutuhan: RF-05, RF-06, RF-18, RF-26, RNF-12
+// Terkait  : popup.html, shared/auth-forms.js, shared/config.js, background.js
+
 import { mountAuthForms } from '../shared/auth-forms.js';
 import { getSession, logout, refreshProfile } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage } from '../shared/guide.js';
@@ -27,6 +32,7 @@ $('retry').addEventListener('click', () => {
   retryAction?.();
 });
 
+// [RF-26] Status & masa aktif langganan — menampilkan status Gratis/Premium & sisa kuota harian
 /** Kartu kuota: angka besar "7 / 10", dibangun dengan DOM (tanpa innerHTML). */
 function renderQuota(user) {
   const figure = $('quota');
@@ -63,6 +69,7 @@ function renderQuota(user) {
   }
 }
 
+// [RF-18] Ubah bahasa & pintasan — menampilkan pintasan yang aktif
 /** Pintasan yang sedang berlaku (bisa diubah pengguna di chrome://extensions/shortcuts), bukan teks tetap. */
 async function showShortcut() {
   const shortcut = await currentShortcut();
@@ -94,6 +101,7 @@ function render(user) {
   }
 }
 
+// [RNF-12] Info saat AI/server mati — status server & AI di popup
 /** Titik + teks di kaki popup: hijau = terhubung, marigold = AI belum siap, merah bata = tidak aktif. */
 async function checkHealth() {
   const health = await chrome.runtime.sendMessage({ type: 'NV_HEALTH' });
@@ -115,12 +123,14 @@ async function checkHealth() {
 // UC-AKUN-05 & UC-AKUN-01: setelah daftar langsung masuk, tanpa login ulang.
 const auth = mountAuthForms($('auth'), { say, onSuccess: (user) => render(user) });
 
+// [RF-05] Login — tombol Keluar
 $('logout').addEventListener('click', async () => {
   await logout();
   render(null);
   say('Anda sudah keluar.');
 });
 
+// [RF-06] Memindai gambar — tombol Pindai = sama dengan Alt+Shift+K
 $('scan').addEventListener('click', async () => {
   say('Memindai…');
   const res = await chrome.runtime.sendMessage({ type: 'NV_TOGGLE_ACTIVE' });

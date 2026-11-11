@@ -1,9 +1,15 @@
+// NaraVisi · backend/src/lib/jwt.js
+// Fungsi   : JWT HS256 minimal memakai crypto bawaan Node.js.
+// Kebutuhan: RNF-09
+// Terkait  : services/accountService.js
+
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 // JWT HS256 minimal (RNF-09) memakai modul crypto bawaan Node.js.
 
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 
+// [RNF-09] Autentikasi token — membuat token HS256
 export function signJwt(payload, secret, { expiresInSeconds, now = Date.now() } = {}) {
   const iat = Math.floor(now / 1000);
   const body = { ...payload, iat };
@@ -14,6 +20,7 @@ export function signJwt(payload, secret, { expiresInSeconds, now = Date.now() } 
   return `${header}.${content}.${signature}`;
 }
 
+// [RNF-09] Autentikasi token — cek tanda tangan & masa berlaku token
 /** Mengembalikan payload, atau null bila token rusak / tanda tangan salah. Melempar 'expired'. */
 export function verifyJwt(token, secret, { now = Date.now() } = {}) {
   if (typeof token !== 'string') return null;

@@ -1,3 +1,7 @@
+# NaraVisi · ai-service/app/main.py
+# Fungsi   : Layanan AI (FastAPI): endpoint /health dan /caption.
+# Kebutuhan: RF-09, RF-10, PF-04, RNF-12
+# Terkait  : service.py, gemini.py, providers.py, backend/src/services/aiClient.js
 """Layanan AI Image Captioning NaraVisi (FastAPI).
 
 Jalankan:  uvicorn app.main:app --host 127.0.0.1 --port 8000 --env-file .env
@@ -61,6 +65,7 @@ def build_plain_service(provider: str, settings: Settings) -> CaptionService:
     return CaptionService(captioner, MarianTranslator(settings.translation_model))
 
 
+# [PF-04] Cadangan AI Gemini → BLIP — merangkai Gemini (utama) + BLIP (cadangan)
 def build_service(settings: Settings) -> CaptionRouter:
     if settings.provider == "gemini":
         from .gemini import GeminiCaptioner
@@ -109,12 +114,14 @@ class CaptionContext(BaseModel):
     page_title: str | None = Field(default=None, max_length=MAX_HINT_CHARS)
 
 
+# [RF-09] Mengirim gambar ke AI — skema permintaan dari backend (gambar base64, bahasa, petunjuk)
 class CaptionRequest(BaseModel):
     image_base64: str = Field(..., min_length=1, description="Gambar dalam base64 atau data URL")
     lang: Literal["id", "en"] = "id"
     context: CaptionContext | None = None
 
 
+# [RF-10] Menerima & menyimpan deskripsi — skema jawaban deskripsi
 class CaptionResponse(BaseModel):
     # Field lama (kontrak v1) — tetap ada.
     text: str
@@ -165,6 +172,7 @@ def create_app(settings: Settings | None = None, service: CaptionService | Capti
 
     app = FastAPI(title="NaraVisi AI Service", version="1.1.0", lifespan=lifespan)
 
+    # [RNF-12] Info saat AI/server mati — status model & cadangan untuk backend
     @app.get("/health")
     def health():
         svc = state["service"]
@@ -177,6 +185,8 @@ def create_app(settings: Settings | None = None, service: CaptionService | Capti
             "fallback_ready": bool(fb and fb.service),
         }
 
+    # [RF-09] Mengirim gambar ke AI — POST /caption menerima gambar dari backend
+    # [RF-10] Menerima & menyimpan deskripsi — mengembalikan deskripsi; galat provider → kode HTTP yang jelas
     @app.post("/caption", response_model=CaptionResponse)
     async def caption(req: CaptionRequest):
         svc = state["service"]

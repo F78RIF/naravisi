@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/quotaService.js
+// Fungsi   : Kuota harian Pengguna Gratis (reset 00.00 WITA): pesan & kembalikan.
+// Kebutuhan: RF-09, RF-26
+// Terkait  : descriptionService.js, subscriptionService.js, tabel kuota_harian
+
 import { Errors } from '../lib/errors.js';
 
 /**
@@ -16,6 +21,7 @@ export function createQuotaService({ db, config, subscriptions }) {
     return row ? Number(row.jumlah_permintaan) : 0;
   }
 
+  // [RF-26] Status & masa aktif langganan — sisa kuota harian untuk popup & profil
   async function summary(userId, premium) {
     const date = subscriptions.today();
     const count = await used(userId, date);
@@ -27,6 +33,7 @@ export function createQuotaService({ db, config, subscriptions }) {
     };
   }
 
+  // [RF-09] Mengirim gambar ke AI — penambahan kuota atomik (UPDATE … WHERE jumlah < batas)
   async function increment(userId, date, max) {
     const cond = max == null ? '' : ' AND jumlah_permintaan < ?';
     const params = max == null ? [userId, date] : [userId, date, max];
@@ -52,6 +59,7 @@ export function createQuotaService({ db, config, subscriptions }) {
     }
   }
 
+  // [RF-09] Mengirim gambar ke AI — kuota dipesan; release() mengembalikan bila AI gagal
   /** UC-GBR-04 langkah 1: memeriksa & memesan kuota. Mengembalikan fungsi release(). */
   async function reserve(userId, premium) {
     const date = subscriptions.today();

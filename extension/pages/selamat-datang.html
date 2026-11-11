@@ -1,4 +1,10 @@
 <!doctype html>
+<!--
+  NaraVisi · extension/pages/selamat-datang.html
+  Fungsi   : Kerangka tab sambutan.
+  Kebutuhan: PF-01, RF-01, RF-05
+  Terkait  : selamat-datang.js
+-->
 <html lang="id">
 <head>
   <meta charset="utf-8">
@@ -22,6 +28,7 @@
     <p>NaraVisi mendeskripsikan gambar di halaman web dengan AI lalu membacakannya dengan suara.</p>
     <p id="msg" class="message" role="status" aria-live="polite" tabindex="-1"></p>
 
+    <!-- [PF-01] Pemandu suara — tab sambutan: formulir Masuk/Daftar -->
     <section id="guest" class="card auth" aria-labelledby="guest-title">
       <h2 id="guest-title">Masuk atau daftar</h2>
       <div id="auth"></div>

@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/paymentService.js
+// Fungsi   : Paket & pembayaran Premium (Midtrans atau simulasi lokal).
+// Kebutuhan: RF-23, RF-24, RF-25, RF-26
+// Terkait  : midtransClient.js, subscriptionService.js, tabel paket_premium/transaksi
+
 import { randomBytes } from 'node:crypto';
 import { Errors } from '../lib/errors.js';
 import { sqlToIso, toSqlDateTime } from '../lib/time.js';
@@ -21,12 +26,14 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
     manfaat: String(p.manfaat).split('\n').filter(Boolean),
   });
 
+  // [RF-23] Daftar paket Premium — paket Premium dari tabel paket_premium
   // UC-PRM-01
   async function listPlans() {
     const rows = await db.all('SELECT * FROM paket_premium WHERE aktif = 1 ORDER BY harga ASC');
     return { items: rows.map(mapPlan), mode_pembayaran: mode };
   }
 
+  // [RF-24] Memilih paket — harga diambil dari database, jumlah kiriman klien diabaikan
   // UC-PRM-02 + UC-PRM-03 langkah 1–2
   async function create(user, body) {
     const paketId = v.id(body?.paket_id, 'Paket');
@@ -72,6 +79,7 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
     };
   }
 
+  // [RF-25] Pembayaran & aktivasi Premium — ubah status transaksi & aktifkan Premium (idempoten)
   /**
    * Menerapkan status pembayaran secara idempoten dan aman dari balapan:
    * transaksi hanya berpindah ke "berhasil" satu kali, lalu langganan dibuat dalam transaksi DB yang sama.
@@ -120,6 +128,7 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
   const sameAmount = (a, b) => !Number.isNaN(toCents(a)) && toCents(a) === toCents(b);
   const matches = (trx, n) => n?.order_id === trx.order_id && sameAmount(n.gross_amount, trx.jumlah);
 
+  // [RF-25] Pembayaran & aktivasi Premium — webhook tiga lapis: tanda tangan → database → Status API
   // UC-PRM-03 langkah 4: notifikasi dari Midtrans (webhook)
   async function handleNotification(body) {
     // Mode simulasi tidak punya webhook: aktivasi simulasi lewat /pay/simulate (tanpa konfirmasi Midtrans).
@@ -147,6 +156,7 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
     return { diterima: true, status_pembayaran: status };
   }
 
+  // [RF-25] Pembayaran & aktivasi Premium — status transaksi milik pengguna
   /** Status transaksi milik pengguna. Bila masih menunggu, cek langsung ke Midtrans (berguna saat webhook tak bisa menjangkau localhost). */
   async function get(user, orderId) {
     let trx = await db.get('SELECT * FROM transaksi WHERE order_id = ? AND user_id = ?', [String(orderId), user.id]);
@@ -172,6 +182,7 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
     };
   }
 
+  // [RF-25] Pembayaran & aktivasi Premium — data halaman bayar SIMULASI
   // Mode simulasi (tanpa Midtrans)
   async function simulationInfo(orderId) {
     if (midtrans.enabled) throw Errors.notFound('Halaman');
@@ -185,6 +196,7 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
     return trx;
   }
 
+  // [RF-25] Pembayaran & aktivasi Premium — hasil bayar SIMULASI (mode tanpa server key)
   async function simulate(orderId, outcome) {
     await simulationInfo(orderId);
     const status = outcome === 'berhasil' ? 'berhasil' : 'gagal';
@@ -192,6 +204,7 @@ export function createPaymentService({ db, config, clock, subscriptions, midtran
     return status;
   }
 
+  // [RF-26] Status & masa aktif langganan — status & riwayat langganan
   // UC-PRM-04
   async function subscription(userId) {
     return { ...(await subscriptions.status(userId)), riwayat: await subscriptions.history(userId) };

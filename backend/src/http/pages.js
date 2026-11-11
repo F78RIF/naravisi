@@ -1,4 +1,7 @@
-// Halaman HTML kecil yang disajikan backend (selesai bayar & simulasi pembayaran).
+// NaraVisi · backend/src/http/pages.js
+// Fungsi   : Halaman HTML kecil: selesai bayar, bayar SIMULASI, halaman galat.
+// Kebutuhan: RF-25
+// Terkait  : routes.js, services/paymentService.js
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -27,6 +30,7 @@ function layout(title, body) {
 
 const rupiah = (n) => `Rp${Number(n).toLocaleString('id-ID')}`;
 
+// [RF-25] Pembayaran & aktivasi Premium — halaman bayar SIMULASI (mode tanpa server key)
 /**
  * RF-24: halaman bayar mode simulasi. Kata "SIMULASI" ada di judul tab, judul halaman, kotak peringatan, dan setiap
  * tombol, sehingga pembaca layar mengucapkannya di mana pun pengguna mendarat. Tidak ada uang yang ditagih.
@@ -72,6 +76,7 @@ export function simulateResultPage(status) {
   );
 }
 
+// [RF-25] Pembayaran & aktivasi Premium — halaman selesai bayar dari Midtrans
 export function finishPage() {
   return layout(
     'Pembayaran diproses',

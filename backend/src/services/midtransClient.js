@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/midtransClient.js
+// Fungsi   : Klien Midtrans Snap: transaksi, Status API, cek tanda tangan.
+// Kebutuhan: RF-25
+// Terkait  : paymentService.js
+
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Errors } from '../lib/errors.js';
 
@@ -26,6 +31,7 @@ export function createMidtransClient({ serverKey, isProduction, fetchImpl = glob
     return { status: res.status, body };
   }
 
+  // [RF-25] Pembayaran & aktivasi Premium — membuat transaksi Snap Midtrans
   async function createTransaction({ orderId, amount, itemName, itemId, customer, finishUrl }) {
     const { status, body } = await call(`${snapBase}/snap/v1/transactions`, {
       method: 'POST',
@@ -40,6 +46,7 @@ export function createMidtransClient({ serverKey, isProduction, fetchImpl = glob
     return { token: body.token, redirectUrl: body.redirect_url };
   }
 
+  // [RF-25] Pembayaran & aktivasi Premium — konfirmasi ulang ke Status API Midtrans
   async function getStatus(orderId) {
     const { status, body } = await call(`${apiBase}/v2/${encodeURIComponent(orderId)}/status`);
     if (status === 404 || body?.status_code === '404') return null; // belum dibayar / belum dibuat
@@ -47,6 +54,7 @@ export function createMidtransClient({ serverKey, isProduction, fetchImpl = glob
     return body;
   }
 
+  // [RF-25] Pembayaran & aktivasi Premium — cek signature_key SHA-512(order_id+status_code+gross_amount+server_key)
   /** signature_key = SHA512(order_id + status_code + gross_amount + server_key) */
   function verifySignature(n) {
     if (!enabled || typeof n?.signature_key !== 'string') return false;
@@ -60,6 +68,7 @@ export function createMidtransClient({ serverKey, isProduction, fetchImpl = glob
   return { enabled, createTransaction, getStatus, verifySignature };
 }
 
+// [RF-25] Pembayaran & aktivasi Premium — status Midtrans → berhasil/menunggu/gagal/kedaluwarsa
 /** Status Midtrans → status_pembayaran NaraVisi. */
 export function mapMidtransStatus(n) {
   switch (n?.transaction_status) {

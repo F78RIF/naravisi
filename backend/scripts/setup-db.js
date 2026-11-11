@@ -1,5 +1,8 @@
-// Menyiapkan basis data: membuat database & tabel, mengisi paket Premium, membuat akun Admin.
+// NaraVisi · backend/scripts/setup-db.js
+// Fungsi   : Menyiapkan basis data: database & tabel, paket Premium, akun Admin.
 // Pemakaian: npm run db:setup   (membaca .env)
+// Kebutuhan: RF-23, RF-27
+// Terkait  : src/db/index.js, src/db/seed.js
 import { loadConfig } from '../src/config.js';
 import { createDb, mysqlSchemaSql } from '../src/db/index.js';
 import { seedAdmin, seedPlans } from '../src/db/seed.js';

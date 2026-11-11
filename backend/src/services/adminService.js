@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/adminService.js
+// Fungsi   : Pengelolaan pengguna oleh Admin.
+// Kebutuhan: RF-27, RF-28, RF-29, RF-30
+// Terkait  : accountService.js, subscriptionService.js, tabel pengguna/riwayat_deskripsi/transaksi
+
 import { Errors } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';
 import { sqlToIso } from '../lib/time.js';
@@ -19,6 +24,7 @@ export function createAdminService({ db, accounts, subscriptions }) {
     };
   }
 
+  // [RF-28] Admin: daftar pengguna — daftar & cari pengguna, berhalaman
   // UC-ADM-02 (alur alternatif: pencarian)
   async function listUsers(query) {
     const { page, limit, offset } = v.pagination(query);
@@ -34,6 +40,7 @@ export function createAdminService({ db, accounts, subscriptions }) {
     return { items: await Promise.all(rows.map(mapUser)), total, page, limit };
   }
 
+  // [RF-28] Admin: daftar pengguna — detail satu pengguna
   async function getUser(userId) {
     const u = await db.get(
       'SELECT user_id, nama, email, peran, status_akun, tanggal_registrasi FROM users WHERE user_id = ?',
@@ -43,6 +50,7 @@ export function createAdminService({ db, accounts, subscriptions }) {
     return mapUser(u);
   }
 
+  // [RF-27] Admin: tambah pengguna — Admin menambah pengguna
   // UC-ADM-01
   async function createUser(body) {
     const nama = v.str(body, 'nama', { label: 'Nama', min: 2, max: 100 });
@@ -53,6 +61,7 @@ export function createAdminService({ db, accounts, subscriptions }) {
     return getUser(id);
   }
 
+  // [RF-29] Admin: ubah pengguna — ubah nama, peran, status; tak bisa menonaktifkan diri sendiri
   // UC-ADM-03
   async function updateUser(adminId, userId, body) {
     const id = v.id(userId, 'Pengguna');
@@ -91,6 +100,7 @@ export function createAdminService({ db, accounts, subscriptions }) {
     return getUser(id);
   }
 
+  // [RF-29] Admin: ubah pengguna — Admin aktif terakhir tidak boleh diturunkan/dinonaktifkan/dihapus (409)
   /**
    * RF-30: sistem harus selalu punya minimal satu Admin aktif. Bila `userId` adalah Admin aktif dan tidak ada Admin
    * aktif lain, perubahan yang membuatnya bukan Admin aktif (hapus, turunkan, nonaktifkan) ditolak.
@@ -106,6 +116,7 @@ export function createAdminService({ db, accounts, subscriptions }) {
     if (ids.includes(userId) && ids.length <= 1) throw Errors.lastAdmin();
   }
 
+  // [RF-30] Admin: hapus pengguna — ketik email; riwayat dihapus + transaksi dianonimkan dalam satu transaksi DB
   // UC-ADM-04 / RF-30
   async function deleteUser(adminId, userId, body) {
     const id = v.id(userId, 'Pengguna');

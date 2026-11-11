@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/lib/errors.js
+// Fungsi   : Galat aplikasi dengan kode stabil & pesan bahasa Indonesia.
+// Kebutuhan: RNF-06, RNF-12
+// Terkait  : http/dispatch.js, semua services
+
 /**
  * Error aplikasi dengan kode stabil (dipakai extension & dashboard) dan pesan
  * berbahasa Indonesia yang aman dibacakan ke pengguna (RNF-06, RNF-12).
@@ -12,6 +17,7 @@ export class AppError extends Error {
   }
 }
 
+// [RNF-06] Pesan error jelas — semua kode galat & pesan bahasa Indonesia
 export const Errors = {
   invalidRequest: (msg) => new AppError(400, 'INVALID_REQUEST', msg),
   validation: (field, msg) => new AppError(400, 'VALIDATION_ERROR', msg, { field }),

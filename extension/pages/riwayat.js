@@ -1,5 +1,7 @@
-// Riwayat deskripsi: RF-14..RF-16, RF-20 (UC-RWY-02..04, UC-LAP-01)
-// Daftar (Gratis 7 hari, Premium semua; berhalaman) · detail ?id=N · putar ulang · hapus satu & semua.
+// NaraVisi · extension/pages/riwayat.js
+// Fungsi   : Halaman Riwayat: daftar berhalaman (Gratis 7 hari), detail ?id=N, putar ulang, hapus, lapor.
+// Kebutuhan: RF-12, RF-14, RF-15, RF-16, RF-20
+// Terkait  : riwayat.html, common.js, backend historyService.js, reportService.js
 import { apiFetch } from '../shared/config.js';
 import { $, el, fmtDateTime, jenisLabel, providerLabel, REPORT_CATEGORIES, requireSession, say, sayError, shell, speak, stopSpeaking } from './common.js';
 
@@ -7,6 +9,7 @@ const detailId = new URLSearchParams(location.search).get('id');
 shell('riwayat', detailId ? 'Detail riwayat' : 'Riwayat deskripsi');
 const state = { page: 1, limit: 10 };
 
+// [RF-20] Melaporkan deskripsi — formulir laporan dari halaman Riwayat
 // UC-LAP-01 / RF-20: pilih alasan + catatan (wajib untuk "Lainnya").
 function reportForm(item, holder) {
   if (holder.querySelector('form')) {
@@ -58,6 +61,7 @@ function reportForm(item, holder) {
   kategori.focus();
 }
 
+// [RF-15] Detail riwayat — tombol Putar ulang, Detail, Laporkan, Hapus
 /** Tombol bersama di daftar & detail. */
 function actions(item, holder, { inDetail = false, headingId } = {}) {
   return el(
@@ -72,6 +76,7 @@ function actions(item, holder, { inDetail = false, headingId } = {}) {
   );
 }
 
+// [RF-14] Daftar riwayat — satu butir riwayat
 function renderItem(item, index, total) {
   const holder = el('div');
   const headingId = `h-${item.riwayat_id}`;
@@ -96,6 +101,7 @@ function renderItem(item, index, total) {
   );
 }
 
+// [RF-16] Hapus riwayat — hapus satu riwayat dengan konfirmasi
 async function remove(item, inDetail) {
   // UC-RWY-04: konfirmasi sebelum menghapus
   if (!window.confirm(`Hapus deskripsi "${item.teks_deskripsi}" dari riwayat?`)) {
@@ -115,6 +121,7 @@ async function remove(item, inDetail) {
   }
 }
 
+// [RF-16] Hapus riwayat — hapus semua riwayat dengan konfirmasi
 async function removeAll(total) {
   if (!window.confirm(`Hapus SEMUA riwayat (${total} deskripsi)? Tindakan ini tidak dapat dibatalkan.`)) {
     say('Penghapusan dibatalkan. Riwayat tetap tersimpan.');
@@ -130,6 +137,7 @@ async function removeAll(total) {
   }
 }
 
+// [RF-14] Daftar riwayat — GET /history berhalaman (Gratis 7 hari, Premium semua)
 async function load() {
   const content = $('content');
   let data;
@@ -189,6 +197,7 @@ function go(delta) {
   load().then(() => $('main').focus());
 }
 
+// [RF-15] Detail riwayat — GET /history/:id lalu tampilkan detail
 // UC-RWY-03: detail satu riwayat + putar ulang suara.
 async function loadDetail(id) {
   let item;

@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/aiClient.js
+// Fungsi   : Klien HTTP ke layanan AI (FastAPI) dengan batas waktu.
+// Kebutuhan: RF-09, RNF-12
+// Terkait  : descriptionService.js, ai-service/app/main.py
+
 import { Errors } from '../lib/errors.js';
 
 const str = (v) => (typeof v === 'string' ? v : '');
@@ -7,6 +12,8 @@ const str = (v) => (typeof v === 'string' ? v : '');
  * fetchImpl dapat diganti saat pengujian.
  */
 export function createAiClient({ baseUrl, timeoutMs, fetchImpl = globalThis.fetch }) {
+  // [RF-09] Mengirim gambar ke AI — meneruskan gambar ke layanan AI (POST /caption) dengan batas waktu
+  // [RNF-12] Info saat AI/server mati — AI mati/lambat → galat 503/504 yang jelas
   async function caption({ imageBase64, lang, context }) {
     let response;
     try {
@@ -61,6 +68,7 @@ export function createAiClient({ baseUrl, timeoutMs, fetchImpl = globalThis.fetc
     };
   }
 
+  // [RNF-12] Info saat AI/server mati — status layanan AI untuk /health
   async function health() {
     try {
       const response = await fetchImpl(`${baseUrl}/health`, {

@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/db/migrate.js
+// Fungsi   : Migrasi aman: hanya menambah kolom NULL yang belum ada.
+// Kebutuhan: RF-10, RF-20
+// Terkait  : db/index.js, schema.*.sql
+
 /**
  * Migrasi aman untuk basis data yang sudah ada: hanya MENAMBAH kolom yang boleh NULL,
  * tidak pernah menghapus atau mengubah data. Dijalankan setiap start (idempoten).

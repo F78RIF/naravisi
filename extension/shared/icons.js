@@ -1,5 +1,7 @@
-// Ikon SVG inline NaraVisi (tanpa font ikon / gambar luar). Dibangun dengan DOM, selalu aria-hidden:
-// nama aksesibel ada di tombol/tautan yang memuatnya.
+// NaraVisi · extension/shared/icons.js
+// Fungsi   : Ikon SVG inline (aria-hidden; nama aksesibel ada di tombol pemuatnya).
+// Kebutuhan: RNF-02
+// Terkait  : popup/popup.js, pages/common.js
 const NS = 'http://www.w3.org/2000/svg';
 
 function svg(viewBox, children, { size = 24, className = 'icon', attrs = {} } = {}) {

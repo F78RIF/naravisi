@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/lib/password.js
+// Fungsi   : Hash & verifikasi kata sandi (scrypt bergaram).
+// Kebutuhan: RNF-08
+// Terkait  : services/accountService.js, adminService.js
+
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
@@ -5,6 +10,7 @@ const scrypt = promisify(scryptCb);
 const N = 16384;
 const KEYLEN = 32;
 
+// [RNF-08] Sandi ter-hash — kata sandi di-hash scrypt + salt acak
 /** RNF-08: kata sandi disimpan sebagai hash scrypt bergaram, bukan teks asli. */
 export async function hashPassword(password) {
   const salt = randomBytes(16);
@@ -12,6 +18,7 @@ export async function hashPassword(password) {
   return `scrypt$${N}$${salt.toString('base64')}$${hash.toString('base64')}`;
 }
 
+// [RNF-08] Sandi ter-hash — pembandingan waktu-konstan (timingSafeEqual)
 export async function verifyPassword(password, stored) {
   if (typeof stored !== 'string') return false;
   const [algo, nStr, saltB64, hashB64] = stored.split('$');

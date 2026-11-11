@@ -1,3 +1,7 @@
+# NaraVisi · ai-service/app/service.py
+# Fungsi   : Logika deskripsi & CaptionRouter (Gemini → cadangan BLIP).
+# Kebutuhan: RF-10, PF-04
+# Terkait  : main.py, gemini.py, providers.py
 """Logika deskripsi gambar.
 
 - Provider terstruktur (Gemini): JSON {jenis, ringkasan, detail, teks_dalam_gambar, keyakinan}
@@ -61,6 +65,7 @@ def inline_text_lines(text: str) -> str:
     return ", ".join(ln for ln in lines if ln)
 
 
+# [RF-10] Menerima & menyimpan deskripsi — JSON Gemini → satu teks siap dibacakan
 def compose_text(jenis: str, ringkasan: str, detail: str = "", teks: str = "", keyakinan: str | None = None, lang: str = "id") -> str:
     """'<Jenis>: <ringkasan>. <detail> Tulisan di gambar: <teks>.' — kalimat yang dibacakan & disimpan di alt."""
     labels = JENIS_LABEL.get(lang, JENIS_LABEL["id"])
@@ -112,6 +117,7 @@ class CaptionService:
     def provider(self) -> str:
         return getattr(self.captioner, "provider", self.captioner.name)
 
+    # [RF-10] Menerima & menyimpan deskripsi — caption → bersihkan → terjemahkan → kalimat
     def describe(self, image: Image.Image, lang: str = "id", context: dict | None = None) -> CaptionResult:
         started = time.perf_counter()
         elapsed = lambda: round((time.perf_counter() - started) * 1000)  # noqa: E731
@@ -185,6 +191,7 @@ class FallbackSlot:
         threading.Thread(target=self.load, name=f"fallback-{self.name}", daemon=True).start()
 
 
+# [PF-04] Cadangan AI Gemini → BLIP — provider utama gagal → provider cadangan
 class CaptionRouter:
     """Provider utama → bila gagal (kuota habis, offline, JSON rusak, kunci salah) → provider cadangan."""
 
@@ -200,6 +207,7 @@ class CaptionRouter:
     def provider(self) -> str:
         return self.primary.provider
 
+    # [PF-04] Cadangan AI Gemini → BLIP — coba Gemini; kode galat di FALLBACK_CODES → BLIP
     def describe(self, image: Image.Image, lang: str = "id", context: dict | None = None) -> CaptionResult:
         try:
             result = self.primary.describe(image, lang, context)

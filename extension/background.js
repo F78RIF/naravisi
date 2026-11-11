@@ -1,6 +1,7 @@
-// Service worker NaraVisi (Manifest V3).
-// Tugas: menyuntik panel ke halaman, mengambil byte gambar, memanggil REST API,
-// dan pemandu suara (chrome.tts) yang tetap bekerja tanpa halaman terbuka.
+// NaraVisi · extension/background.js
+// Fungsi   : Service worker (Manifest V3): menyuntik panel, mengambil & mengecilkan gambar, memanggil REST API, pemandu suara chrome.tts.
+// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, RNF-09, RNF-12
+// Terkait  : content/content.js, offscreen/offscreen.js, shared/config.js, shared/guide.js, backend/src/http/routes.js
 
 import {
   ApiError, apiFetch, AUTO_DAILY_MAX, AUTO_MAX_PER_PAGE, AUTO_RESERVE, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession,
@@ -26,6 +27,7 @@ class NvError extends Error {
 // ---------------------------------------------------------------------------
 const spokenLog = []; // dipakai uji otomatis
 
+// [PF-01] Pemandu suara — membacakan satu kalimat pemandu lewat chrome.tts
 export async function speakGuide(text) {
   spokenLog.push({ text, at: Date.now() });
   if (spokenLog.length > 50) spokenLog.shift();
@@ -42,6 +44,7 @@ async function sendToLogin(message) {
   return message;
 }
 
+// [PF-01] Pemandu suara — saat dipasang: buka tab Selamat datang & ucapkan sambutan
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (reason !== chrome.runtime.OnInstalledReason.INSTALL) return;
   // Popup sulit ditemukan pembaca layar; tab biasa langsung mendapat fokus.
@@ -52,6 +55,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
 // ---------------------------------------------------------------------------
 // Membuka / menutup panel (UC-GBR-01)
 // ---------------------------------------------------------------------------
+// [RF-06] Memindai gambar — menyuntik content script lalu membuka/menutup panel
 export async function togglePanel(tabId) {
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: [CONTENT_FILE] });
@@ -73,6 +77,7 @@ async function toggleActiveTab() {
   return togglePanel(tab.id);
 }
 
+// [RF-06] Memindai gambar — Alt+Shift+K masuk ke sini; halaman chrome:// ditolak dengan pesan suara
 export async function handleScanCommand(tab) {
   if (!(await getSession())?.token) {
     await sendToLogin('Anda belum masuk. Halaman masuk dibuka.');
@@ -81,6 +86,7 @@ export async function handleScanCommand(tab) {
   return tab?.id ? togglePanel(tab.id) : toggleActiveTab();
 }
 
+// [RF-06] Memindai gambar — pintasan keyboard (chrome.commands) → handleScanCommand
 /** Pintasan Chrome (manifest "commands"): Alt+Shift+K = "scan-page" → buka/tutup panel. */
 export function onCommand(command, tab) {
   if (command === 'scan-page') return handleScanCommand(tab);
@@ -106,6 +112,7 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   }, ANNOUNCE_DELAY_MS);
 });
 
+// [PF-01] Pemandu suara — mengumumkan jumlah gambar saat halaman selesai dimuat
 export async function announceImageCount(tabId) {
   const tab = await chrome.tabs.get(tabId);
   if (!tab.active || !isWebPage(tab.url)) return;
@@ -141,6 +148,7 @@ function logAuto(entry) {
 
 const todayWita = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Makassar' }); // kuota direset 00.00 WITA
 
+// [PF-02] Baca berurutan — situs di daftar pengecualian tidak diproses otomatis
 /** "gopay" cocok dengan bagian domain mana pun; "bri.co.id" cocok dengan domain itu & subdomainnya. */
 export function isExcluded(url, list) {
   let host;
@@ -190,6 +198,7 @@ async function noticeReserve(sisa, page) {
   else await speakGuide(text);
 }
 
+// [PF-02] Baca berurutan — cek http/https, Incognito, pengecualian & sisa kuota sebelum permintaan otomatis
 /** Dipanggil untuk setiap NV_DESCRIBE bertanda auto; melempar NvError bila tidak boleh. */
 async function autoGate(auto, sender, session) {
   const settings = await getSettings();
@@ -217,6 +226,7 @@ function autoSummary({ described = 0, stopped, kuota }) {
   return parts.join(' ');
 }
 
+// [PF-02] Baca berurutan — menjalankan mode Baca berurutan di tab
 /**
  * Setelah halaman selesai dimuat: deskripsikan maks. N gambar tanpa alt bermakna, satu per satu dari atas ke bawah.
  * Progres & alasan berhenti diumumkan content script lewat aria-live; di sini hanya dicatat (autoLog).
@@ -250,6 +260,7 @@ export async function autoDescribePage(tabId) {
   return logAuto({ ...base, result: res?.skipped || 'done', described: res?.described ?? 0, stopped: res?.stopped ?? null, summary });
 }
 
+// [PF-02] Baca berurutan — deskripsi otomatis saat gambar mendapat fokus
 /** Pasang pendengar fokus di halaman bila "Deskripsikan saat gambar mendapat fokus" aktif. */
 export async function enableFocusDescribe(tabId) {
   const tab = await chrome.tabs.get(tabId);
@@ -267,6 +278,7 @@ chrome.runtime.onStartup.addListener(() => {
   startupGreeting().catch(() => {});
 });
 
+// [PF-01] Pemandu suara — sapaan saat browser dibuka (status sesi & sisa kuota)
 export async function startupGreeting() {
   const { greetOnStartup } = await getSettings();
   if (!greetOnStartup || !(await getSession())?.token) return null;
@@ -302,6 +314,7 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+// [RF-09] Mengirim gambar ke AI — byte gambar diunduh oleh extension, bukan server (mencegah SSRF, ADR-04)
 async function fetchImageBlob(src) {
   let response;
   try {
@@ -351,6 +364,7 @@ async function rasterizeSvg(blob) {
   return (await fetch(res.dataUrl)).blob();
 }
 
+// [RF-09] Mengirim gambar ke AI — AVIF/SVG/format lain → JPEG, sisi terpanjang maks. 1280 px
 /** Ubah format tak didukung (AVIF, SVG, dll.) atau gambar besar menjadi JPEG. */
 async function normalizeBlob(blob) {
   const type = (blob.type || '').toLowerCase().split(';')[0].trim();
@@ -376,6 +390,7 @@ async function normalizeBlob(blob) {
   return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
 }
 
+// [RF-09] Mengirim gambar ke AI — gambar → base64 siap dikirim ke backend
 async function imageToBase64({ src, dataUrl }) {
   const source = dataUrl || src;
   if (!source) throw new NvError('IMAGE_MISSING', 'Alamat gambar kosong.');
@@ -399,6 +414,8 @@ function pageContext(raw) {
   return Object.keys(out).length ? out : undefined;
 }
 
+// [RF-09] Mengirim gambar ke AI — memanggil POST /api/v1/descriptions dengan token
+// [RF-10] Menerima & menyimpan deskripsi — menerima deskripsi + sisa kuota dari server
 async function requestDescription({ src, dataUrl, pageUrl, auto, context }, sender) {
   const session = await getSession();
   if (auto) {
@@ -439,6 +456,7 @@ async function requestDescription({ src, dataUrl, pageUrl, auto, context }, send
   return data;
 }
 
+// [RF-20] Melaporkan deskripsi — mengirim laporan ke POST /api/v1/reports
 async function sendReport({ riwayatId, kategori, catatan }) {
   const text = (v) => (typeof v === 'string' ? v.slice(0, 1000) : undefined);
   try {
@@ -448,6 +466,7 @@ async function sendReport({ riwayatId, kategori, catatan }) {
   }
 }
 
+// [RNF-12] Info saat AI/server mati — memeriksa server & layanan AI untuk pesan status
 async function backendHealth() {
   const { apiBase } = await getSettings();
   try {
@@ -509,6 +528,7 @@ const EXTENSION_PAGE_TYPES = new Set([
 ]);
 const EXTENSION_ORIGIN = chrome.runtime.getURL('');
 
+// [RNF-09] Autentikasi token — hanya pesan dari extension sendiri yang dilayani; token tak pernah sampai ke situs
 /** 'sender' = pengirim tidak dikenal, 'type' = tipe tidak dikenal/tidak diizinkan, null = boleh. */
 export function rejectReason(message, sender) {
   if (!sender || sender.id !== chrome.runtime.id) return 'sender';

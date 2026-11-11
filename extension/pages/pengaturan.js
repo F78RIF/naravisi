@@ -1,4 +1,7 @@
-// Pengaturan aksesibilitas & TTS: RF-17..RF-19 (UC-AKS-01..03)
+// NaraVisi · extension/pages/pengaturan.js
+// Fungsi   : Halaman Pengaturan: bahasa, pintasan, suara, mode otomatis, server, privasi.
+// Kebutuhan: RF-17, RF-18, RF-19, PF-02, RNF-13
+// Terkait  : pengaturan.html, common.js, backend settingsService.js
 import { apiFetch, apiHost, AUTO_MAX_PER_PAGE, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage, SHORTCUTS_URL, speakGuide } from '../shared/guide.js';
 import { $, el, requireSession, say, sayError, shell, speak } from './common.js';
@@ -25,6 +28,7 @@ function voicesFor(lang) {
 }
 
 // --- Koneksi server (dipindah dari popup): alamat API + status titik/teks
+// [RF-17] Halaman pengaturan — alamat server API & status koneksi
 async function renderServer() {
   const { apiBase } = await getSettings();
   const input = el('input', { id: 'api-base', type: 'url', value: apiBase, spellcheck: 'false', required: true, 'aria-describedby': 'api-base-hint' });
@@ -80,6 +84,7 @@ async function renderServer() {
 }
 
 // --- Pemberitahuan privasi (ADR-22): selalu tampil, juga sebelum masuk.
+// [RNF-13] File gambar tidak disimpan — pemberitahuan privasi: gambar terpilih diteruskan ke Gemini
 function privacyCard() {
   return el(
     'section',
@@ -95,6 +100,7 @@ function privacyCard() {
 const CONSENT_TEXT =
   'Gambar dari halaman yang Anda buka akan dikirim ke server NaraVisi untuk dideskripsikan dan memakai kuota harian. Server meneruskannya ke Google Gemini. Lanjutkan?';
 
+// [PF-02] Baca berurutan — persetujuan wajib sebelum Baca berurutan aktif
 /** Dialog persetujuan (modal, dibacakan). Fokus awal di "Batal" agar tidak tersetujui tanpa sengaja. */
 function askConsent() {
   const yes = el('button', { type: 'button', class: 'primary' }, 'Ya, aktifkan');
@@ -134,6 +140,7 @@ function parseSites(text) {
   return [...new Set(sites)];
 }
 
+// [PF-02] Baca berurutan — pengaturan mode otomatis & daftar situs dikecualikan
 async function autoSection() {
   const stored = await getSettings();
   const check = (id, key, label, hint) => {
@@ -223,6 +230,9 @@ function field(id, label, control, hint) {
   return el('div', { class: 'stack' }, el('label', { for: id }, label), control, hint ? el('p', { class: 'hint', id: `${id}-hint` }, hint) : null);
 }
 
+// [RF-17] Halaman pengaturan — menampilkan pengaturan dari GET /settings
+// [RF-18] Ubah bahasa & pintasan — bahasa deskripsi & pintasan aktif
+// [RF-19] Ubah kecepatan, nada & suara — kecepatan (Gratis), nada & jenis suara (Premium)
 async function render(settings) {
   const premium = settings.fitur_premium;
   // Pintasan yang benar-benar berlaku dibaca dari chrome.commands.getAll(), bukan dari teks tetap.
@@ -325,6 +335,8 @@ async function render(settings) {
     el('div', { class: 'row' }, el('button', { type: 'submit', class: 'primary' }, 'Simpan pengaturan')),
   );
 
+  // [RF-18] Ubah bahasa & pintasan — simpan bahasa & pintasan lewat PUT /settings
+  // [RF-19] Ubah kecepatan, nada & suara — simpan kecepatan, nada & suara lewat PUT /settings
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = {

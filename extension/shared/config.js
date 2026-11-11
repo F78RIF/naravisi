@@ -1,4 +1,8 @@
-// Konfigurasi & sesi bersama untuk background, popup, dan halaman extension.
+// NaraVisi · extension/shared/config.js
+// Fungsi   : Konfigurasi & sesi bersama: alamat API, token, pengaturan TTS, apiFetch.
+// Kebutuhan: RF-02, RF-05, RF-19, RNF-06, RNF-09
+// Terkait  : background.js, popup/popup.js, pages/*.js, shared/auth-forms.js
+
 // Situs yang tidak pernah diproses mode otomatis (bisa diedit di Pengaturan). Entri tanpa titik
 // ("gopay") cocok dengan bagian nama domain mana pun, mis. gopay.co.id.
 export const DEFAULT_AUTO_EXCLUDE = Object.freeze([
@@ -40,6 +44,7 @@ export async function getSettings() {
 // Sesi login (W8): token disimpan di chrome.storage.local milik extension,
 // tidak dapat dibaca situs web, dan dihapus saat keluar atau saat server menolak.
 // ---------------------------------------------------------------------------
+// [RNF-09] Autentikasi token — token hanya di chrome.storage.local, tidak pernah di halaman web
 export async function getSession() {
   const { nvSession } = await chrome.storage.local.get('nvSession');
   return nvSession ?? null;
@@ -53,6 +58,7 @@ export async function clearSession() {
   await chrome.storage.local.remove(['nvSession', 'nvTts']);
 }
 
+// [RF-19] Ubah kecepatan, nada & suara — pengaturan suara tersimpan lokal untuk panel
 export async function getTts() {
   const { nvTts } = await chrome.storage.local.get('nvTts');
   return { ...DEFAULT_TTS, ...(nvTts ?? {}) };
@@ -85,6 +91,8 @@ export function apiHost(apiBase) {
   }
 }
 
+// [RNF-09] Autentikasi token — setiap panggilan API membawa Authorization: Bearer <token>
+// [RNF-06] Pesan error jelas — galat server → ApiError berpesan bahasa Indonesia
 /** Memanggil REST API NaraVisi dengan token sesi. */
 export async function apiFetch(path, { method = 'GET', body, timeoutMs = 15000, auth = true } = {}) {
   const { apiBase } = await getSettings();
@@ -138,6 +146,7 @@ export async function apiFetch(path, { method = 'GET', body, timeoutMs = 15000, 
   return data;
 }
 
+// [RF-05] Login — menyimpan token & profil setelah masuk/daftar
 /** Login/registrasi berhasil → simpan sesi & ambil pengaturan TTS dari server. */
 export async function startSession({ token, user }) {
   await setSession({ token, user, savedAt: Date.now() });
@@ -145,6 +154,7 @@ export async function startSession({ token, user }) {
   return user;
 }
 
+// [RF-02] Lihat profil — memuat ulang profil & kuota dari GET /me
 export async function refreshProfile() {
   const user = await apiFetch('/me');
   const session = await getSession();
@@ -162,6 +172,7 @@ export async function refreshTts() {
   }
 }
 
+// [RF-05] Login — keluar: sesi lokal dihapus
 export async function logout() {
   await clearSession();
 }

@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/accountService.js
+// Fungsi   : Akun & profil: daftar, masuk, profil, ubah, hapus, autentikasi JWT.
+// Kebutuhan: RF-01..RF-05, RNF-08, RNF-09, RNF-10
+// Terkait  : lib/password.js, lib/jwt.js, lib/rateLimit.js, tabel pengguna
+
 import { Errors } from '../lib/errors.js';
 import { signJwt, verifyJwt } from '../lib/jwt.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from '../lib/password.js';
@@ -10,6 +15,7 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
   // Maksimal 10 login gagal per (email, alamat IP) dalam 15 menit.
   const loginLimiter = createFailureLimiter({ max: 10, windowMs: 15 * 60 * 1000, clock });
 
+  // [RNF-09] Autentikasi token — membuat JWT berisi id, peran & waktu registrasi
   // "reg" = waktu registrasi akun: token akun yang sudah dihapus tidak berlaku untuk akun baru ber-ID sama.
   function issueToken(user) {
     return signJwt({ sub: user.user_id, role: user.peran, reg: String(user.tanggal_registrasi) }, config.jwtSecret, {
@@ -18,6 +24,7 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
     });
   }
 
+  // [RF-02] Lihat profil — profil + status Premium + sisa kuota
   async function profile(userId) {
     const u = await db.get(
       'SELECT user_id, nama, email, peran, status_akun, tanggal_registrasi FROM users WHERE user_id = ?',
@@ -38,6 +45,7 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
     };
   }
 
+  // [RF-01] Registrasi akun — validasi, hash kata sandi, simpan pengguna (dipakai juga Admin RF-27)
   /** Dipakai juga oleh Admin (UC-ADM-01). */
   async function createUser(conn, { nama, email, kataSandi, peran = 'pengguna' }) {
     const hash = await hashPassword(kataSandi);
@@ -55,6 +63,7 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
     return res.insertId;
   }
 
+  // [RF-01] Registrasi akun — daftar akun baru lalu langsung masuk
   // UC-AKUN-01
   async function register(body) {
     const nama = v.str(body, 'nama', { label: 'Nama', min: 2, max: 100 });
@@ -65,6 +74,8 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
     return { token: issueToken(user), user: await profile(userId) };
   }
 
+  // [RF-05] Login — cek email & kata sandi, terbitkan token
+  // [RNF-09] Autentikasi token — 10 kali gagal per email+IP → dikunci 15 menit
   // UC-AKUN-05
   async function login(body, { ip = '-' } = {}) {
     const email = v.email(body);
@@ -86,6 +97,8 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
     return { token: issueToken(user), user: await profile(user.user_id) };
   }
 
+  // [RNF-09] Autentikasi token — verifikasi JWT; akun nonaktif/terhapus ditolak
+  // [RNF-10] Hak akses per peran — peran dibaca ulang dari database setiap permintaan
   /** Middleware autentikasi: memverifikasi token & memuat pengguna aktif (RNF-10). */
   async function authenticate(authorizationHeader) {
     const match = /^Bearer\s+(.+)$/i.exec(authorizationHeader || '');
@@ -108,6 +121,7 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
     return { id: user.user_id, nama: user.nama, email: user.email, peran: user.peran };
   }
 
+  // [RF-03] Ubah profil — ubah nama/kata sandi (sandi lama wajib)
   // UC-AKUN-03 — nama bebas diubah; email & kata sandi wajib kata sandi saat ini.
   async function updateProfile(userId, body) {
     const nama = v.str(body, 'nama', { label: 'Nama', min: 2, max: 100, optional: true });
@@ -138,6 +152,7 @@ export function createAccountService({ db, config, clock, subscriptions, quota }
     return profile(userId);
   }
 
+  // [RF-04] Hapus akun — hapus permanen: ketik HAPUS + kata sandi
   // UC-AKUN-04 — konfirmasi ketik "HAPUS" + kata sandi (ADR-19). Profil, pengaturan, kuota, riwayat, dan
   // laporan terhapus lewat ON DELETE CASCADE (ADR-13); token langsung tidak berlaku karena akunnya hilang.
   async function deleteAccount(userId, body) {

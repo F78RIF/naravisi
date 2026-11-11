@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/container.js
+// Fungsi   : Merangkai semua service; dependensi luar bisa diganti saat pengujian.
+// Kebutuhan: semua RF
+// Terkait  : services/*.js, test/support/testApp.js
+
 import { systemClock } from './lib/time.js';
 import { createAccountService } from './services/accountService.js';
 import { createAdminService } from './services/adminService.js';

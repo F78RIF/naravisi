@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/lib/image.js
+// Fungsi   : Validasi gambar base64: format (magic bytes) & ukuran.
+// Kebutuhan: RF-09
+// Terkait  : services/descriptionService.js
+
 import { Errors } from './errors.js';
 
 const SIGNATURES = [
@@ -20,6 +25,7 @@ const SIGNATURES = [
 
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 
+// [RF-09] Mengirim gambar ke AI — format gambar dicek dari byte awal (magic bytes), bukan dari nama
 /** Mengenali format gambar dari magic bytes, bukan dari header yang dikirim klien. */
 export function sniffImageMime(buffer) {
   if (!buffer || buffer.length < 12) return null;
@@ -27,6 +33,7 @@ export function sniffImageMime(buffer) {
   return hit ? hit.mime : null;
 }
 
+// [RF-09] Mengirim gambar ke AI — validasi base64, format & ukuran maksimal gambar
 /**
  * Menerima base64 murni atau data URL ("data:image/png;base64,...").
  * Mengembalikan { buffer, mime, base64 } atau melempar AppError.

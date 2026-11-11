@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/http/nodeServer.js
+// Fungsi   : Adaptor node:http untuk tabel rute yang sama (dipakai pengujian).
+// Kebutuhan: semua RF (lewat routes.js)
+// Terkait  : routes.js, dispatch.js, test/support/testApp.js
+
 import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';

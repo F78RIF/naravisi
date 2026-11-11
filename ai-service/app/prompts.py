@@ -1,3 +1,7 @@
+# NaraVisi · ai-service/app/prompts.py
+# Fungsi   : Teks prompt Gemini: aturan, petunjuk halaman, few-shot.
+# Kebutuhan: RF-10
+# Terkait  : gemini.py, eval/make_fewshot.py
 """Instruksi untuk Gemini: aturan menulis deskripsi, petunjuk dari halaman, dan contoh (few-shot).
 
 Semua teks prompt ada di sini supaya mudah ditinjau dan diuji tanpa memanggil model.
@@ -65,6 +69,7 @@ def _quote(text: str) -> str:
     return json.dumps(clean, ensure_ascii=False)  # tanda kutip & karakter khusus ter-escape
 
 
+# [RF-10] Menerima & menyimpan deskripsi — prompt berisi petunjuk dari halaman
 def build_user_prompt(context: dict | None, lang: str = "id") -> str:
     lines = ["Deskripsikan gambar ini sesuai aturan."]
     hints = [(label, (context or {}).get(key)) for key, label in _HINT_FIELDS]
@@ -77,6 +82,7 @@ def build_user_prompt(context: dict | None, lang: str = "id") -> str:
     return "\n".join(lines)
 
 
+# [RF-10] Menerima & menyimpan deskripsi — contoh few-shot dari dataset evaluasi
 def load_fewshot(path: str | Path, limit: int = 5) -> list[dict]:
     """Contoh dari dataset kita (eval/make_fewshot.py). Berkas tidak ada atau rusak → tanpa contoh."""
     p = Path(path)
@@ -97,6 +103,7 @@ def load_fewshot(path: str | Path, limit: int = 5) -> list[dict]:
     return valid[:limit]
 
 
+# [RF-10] Menerima & menyimpan deskripsi — aturan menulis deskripsi untuk Gemini
 def build_system_instruction(fewshot: list[dict] | None = None) -> str:
     if not fewshot:
         return SYSTEM_INSTRUCTION

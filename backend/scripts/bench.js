@@ -1,6 +1,8 @@
-// Mengukur waktu respons endpoint non-AI (RNF-05: ≤ 2 detik) dan overhead backend
-// pada /descriptions (model AI dipalsukan agar yang terukur hanya kerja backend).
+// NaraVisi · backend/scripts/bench.js
+// Fungsi   : Mengukur waktu respons endpoint non-AI & overhead /descriptions.
 // Pemakaian: node --no-warnings scripts/bench.js [jumlah_permintaan]
+// Kebutuhan: RNF-05
+// Terkait  : test/support/testApp.js, docs/PENGUJIAN.md (3a)
 import { performance } from 'node:perf_hooks';
 import { startTestApp } from '../test/support/testApp.js';
 

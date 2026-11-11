@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/settingsService.js
+// Fungsi   : Pengaturan aksesibilitas & TTS per pengguna.
+// Kebutuhan: RF-17, RF-18, RF-19
+// Terkait  : tabel pengaturan_pengguna, extension/pages/pengaturan.js
+
 import { Errors } from '../lib/errors.js';
 import * as v from '../lib/validate.js';
 
@@ -7,6 +12,7 @@ import * as v from '../lib/validate.js';
  *         Premium → semua suara di perangkat + pengaturan nada.
  */
 
+// [RF-18] Ubah bahasa & pintasan — pintasan yang bentrok dengan Chrome/NVDA/JAWS ditolak
 // Pintasan yang dipakai browser Chrome atau pembaca layar umum (NVDA/JAWS) — UC-AKS-02 alur alternatif.
 const RESERVED_SHORTCUTS = new Set(
   [
@@ -19,6 +25,7 @@ const RESERVED_SHORTCUTS = new Set(
 );
 const SHORTCUT_RE = /^(Ctrl|Alt|Command|MacCtrl)(\+(Shift|Alt|Ctrl))?(\+(Shift))?\+([A-Z0-9])$/i;
 
+// [RF-18] Ubah bahasa & pintasan — "shift+alt+k" → "Alt+Shift+K"
 export function normalizeShortcut(value) {
   const parts = String(value).split('+').map((p) => p.trim());
   const key = parts.pop().toUpperCase();
@@ -38,6 +45,7 @@ export function createSettingsService({ db }) {
     fitur_premium: premium,
   });
 
+  // [RF-17] Halaman pengaturan — baris pengaturan bawaan dibuat bila belum ada
   async function ensureRow(userId) {
     let row = await db.get('SELECT * FROM pengaturan_aksesibilitas WHERE user_id = ?', [userId]);
     if (!row) {
@@ -51,11 +59,14 @@ export function createSettingsService({ db }) {
     return row;
   }
 
+  // [RF-17] Halaman pengaturan — membaca pengaturan pengguna
   // UC-AKS-01
   async function get(userId, premium) {
     return mapRow(await ensureRow(userId), premium);
   }
 
+  // [RF-18] Ubah bahasa & pintasan — bahasa & pintasan
+  // [RF-19] Ubah kecepatan, nada & suara — Gratis: kecepatan saja; Premium: nada & jenis suara
   // UC-AKS-02 & UC-AKS-03
   async function update(userId, premium, body) {
     await ensureRow(userId);

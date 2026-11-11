@@ -1,9 +1,13 @@
-// Tab sambutan: form Masuk/Daftar yang sama dengan popup (shared/auth-forms.js).
+// NaraVisi · extension/pages/selamat-datang.js
+// Fungsi   : Tab sambutan setelah dipasang: formulir Masuk/Daftar & atur pintasan.
+// Kebutuhan: PF-01, RF-01, RF-05, RF-18
+// Terkait  : selamat-datang.html, shared/auth-forms.js, shared/guide.js
 import { mountAuthForms } from '../shared/auth-forms.js';
 import { getSession } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage } from '../shared/guide.js';
 import { $, say } from './common.js';
 
+// [PF-01] Pemandu suara — tab sambutan: tampilan setelah masuk
 function showMember(text) {
   $('guest').hidden = true;
   $('member').hidden = false;

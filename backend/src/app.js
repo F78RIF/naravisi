@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/app.js
+// Fungsi   : Adaptor Express: CORS, batas ukuran body, tabel rute, berkas statis Admin.
+// Kebutuhan: semua RF (lewat routes.js)
+// Terkait  : http/routes.js, http/dispatch.js, http/cors.js
+
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';

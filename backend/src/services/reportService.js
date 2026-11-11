@@ -1,7 +1,13 @@
+// NaraVisi · backend/src/services/reportService.js
+// Fungsi   : Laporan deskripsi: buat (pengguna), daftar & tinjau (Admin).
+// Kebutuhan: RF-20, RF-21, RF-22
+// Terkait  : historyService.js, tabel laporan_deskripsi
+
 import { Errors } from '../lib/errors.js';
 import { sqlToIso, toSqlDateTime } from '../lib/time.js';
 import * as v from '../lib/validate.js';
 
+// [RF-20] Melaporkan deskripsi — enam pilihan alasan laporan
 /** Pilihan alasan (RF-20). Kunci disimpan di kolom `kategori`; label + catatan disimpan di `alasan`. */
 export const KATEGORI_LAPORAN = {
   objek_salah: 'Objek atau orang disebut salah',
@@ -17,6 +23,7 @@ export const CATATAN_MAKS = 500;
 
 /** Laporan deskripsi tidak akurat: RF-20..RF-22 (UC-LAP-01..03). */
 export function createReportService({ db, clock, history }) {
+  // [RF-20] Melaporkan deskripsi — validasi alasan & catatan ≤ 500 karakter
   /** {kategori, catatan?} → { kategori, alasan }. Alasan wajib dipilih; teks bebas tanpa kategori ditolak. */
   function reason(body) {
     if (body?.kategori === undefined || body.kategori === null || body.kategori === '') {
@@ -31,6 +38,7 @@ export function createReportService({ db, clock, history }) {
     return { kategori, alasan: catatan ? `${label}: ${catatan}` : label };
   }
 
+  // [RF-20] Melaporkan deskripsi — laporan hanya untuk riwayat milik sendiri
   // UC-LAP-01 — hanya riwayat milik sendiri yang masih terlihat (findVisible → 404 bila bukan miliknya)
   async function create(userId, premium, body) {
     const riwayat = await history.findVisible(userId, premium, body?.riwayat_id);
@@ -67,6 +75,7 @@ export function createReportService({ db, clock, history }) {
                     JOIN users u ON u.user_id = l.user_id
                LEFT JOIN users a ON a.user_id = l.admin_id`;
 
+  // [RF-21] Admin: daftar laporan — daftar laporan untuk Admin
   // UC-LAP-02
   async function list(query) {
     const { page, limit, offset } = v.pagination(query);
@@ -82,6 +91,7 @@ export function createReportService({ db, clock, history }) {
     return { items: rows.map(mapRow), total, page, limit };
   }
 
+  // [RF-22] Admin: ubah status laporan — status baru/ditinjau + tindak lanjut + peninjau
   // UC-LAP-03
   async function updateStatus(adminId, laporanId, body) {
     const id = v.id(laporanId, 'Laporan');

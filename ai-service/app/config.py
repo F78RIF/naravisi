@@ -1,3 +1,7 @@
+# NaraVisi · ai-service/app/config.py
+# Fungsi   : Membaca pengaturan layanan AI dari .env (provider, model, batas waktu).
+# Kebutuhan: PF-04
+# Terkait  : main.py, .env.example
 from __future__ import annotations
 
 import os

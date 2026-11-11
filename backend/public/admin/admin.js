@@ -1,4 +1,7 @@
-// Dashboard Admin NaraVisi — memanggil REST API /api/v1 (RF-21, RF-22, RF-27..RF-30).
+// NaraVisi · backend/public/admin/admin.js
+// Fungsi   : Dashboard Admin: masuk, kelola pengguna, tinjau laporan (memanggil /api/v1/admin/*).
+// Kebutuhan: RF-21, RF-22, RF-27, RF-28, RF-29, RF-30, RNF-10
+// Terkait  : index.html, backend/src/services/adminService.js, reportService.js
 
 const API = '/api/v1';
 const TOKEN_KEY = 'naravisi-admin-token';
@@ -96,6 +99,7 @@ function logout(message) {
   $('login-email').focus();
 }
 
+// [RNF-10] Hak akses per peran — hanya akun ber-peran admin yang bisa masuk dashboard
 async function enter(token) {
   state.token = token;
   const me = await api('GET', '/me');
@@ -156,6 +160,7 @@ tabs.forEach((t, i) => {
 // ---------------------------------------------------------------------------
 // Pengguna (UC-ADM-01..04)
 // ---------------------------------------------------------------------------
+// [RF-28] Admin: daftar pengguna — GET /admin/users (cari & berhalaman)
 async function loadUsers() {
   const { page, limit, q } = state.users;
   try {
@@ -167,6 +172,7 @@ async function loadUsers() {
   }
 }
 
+// [RF-28] Admin: daftar pengguna — tabel pengguna
 function renderUsers(items) {
   const body = $('users-body');
   body.replaceChildren();
@@ -231,6 +237,8 @@ $('users-next').addEventListener('click', () => {
   loadUsers();
 });
 
+// [RF-27] Admin: tambah pengguna — dialog tambah pengguna
+// [RF-29] Admin: ubah pengguna — dialog ubah pengguna
 function openUserDialog(user) {
   state.editingUserId = user?.user_id ?? null;
   const editing = Boolean(user);
@@ -248,6 +256,8 @@ function openUserDialog(user) {
 }
 $('add-user').addEventListener('click', () => openUserDialog(null));
 
+// [RF-27] Admin: tambah pengguna — POST /admin/users
+// [RF-29] Admin: ubah pengguna — PATCH /admin/users/:id
 $('user-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const editing = state.editingUserId !== null;
@@ -271,6 +281,7 @@ $('user-form').addEventListener('submit', async (e) => {
 
 // RF-30: hapus pengguna wajib dikonfirmasi dengan mengetik email pengguna tersebut (diperiksa ulang di server).
 let pendingDelete = null;
+// [RF-30] Admin: hapus pengguna — dialog hapus: wajib mengetik email pengguna
 function confirmDelete(user) {
   pendingDelete = user;
   $('confirm-text').textContent = `Akun ${user.nama} (${user.email}) beserta riwayat, pengaturan, dan laporannya akan dihapus permanen. Data transaksi disimpan tanpa identitas.`;
@@ -286,6 +297,7 @@ function confirmFailed(message) {
   $('confirm-email').setAttribute('aria-invalid', 'true');
   $('confirm-email').focus();
 }
+// [RF-30] Admin: hapus pengguna — DELETE /admin/users/:id
 $('confirm-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const user = pendingDelete;
@@ -313,6 +325,7 @@ $('confirm-dialog').addEventListener('close', () => {
 // ---------------------------------------------------------------------------
 // Laporan (UC-LAP-02..03)
 // ---------------------------------------------------------------------------
+// [RF-21] Admin: daftar laporan — GET /admin/reports
 async function loadReports() {
   const { page, limit, status } = state.reports;
   try {
@@ -324,6 +337,7 @@ async function loadReports() {
   }
 }
 
+// [RF-21] Admin: daftar laporan — tabel laporan
 function renderReports(items) {
   const list = $('reports-list');
   list.replaceChildren();
@@ -377,6 +391,7 @@ $('reports-next').addEventListener('click', () => {
   loadReports();
 });
 
+// [RF-22] Admin: ubah status laporan — dialog tinjau laporan
 function openReview(r) {
   state.reviewingId = r.laporan_id;
   $('review-title').textContent = `Tinjau laporan #${r.laporan_id}`;
@@ -387,6 +402,7 @@ function openReview(r) {
   $('r-tindak').focus();
 }
 
+// [RF-22] Admin: ubah status laporan — PATCH /admin/reports/:id
 $('review-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {

@@ -1,3 +1,7 @@
+# NaraVisi · ai-service/app/image_utils.py
+# Fungsi   : Dekode & normalisasi gambar sebelum dikirim ke model.
+# Kebutuhan: RF-09
+# Terkait  : main.py
 """Dekode dan normalisasi gambar sebelum dikirim ke model."""
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ class ImageError(ValueError):
         self.message = message
 
 
+# [RF-09] Mengirim gambar ke AI — validasi gambar di layanan AI (base64 → gambar)
 def decode_base64_image(data: str, max_side: int = 768) -> Image.Image:
     if not data or not isinstance(data, str):
         raise ImageError("IMAGE_MISSING", "Data gambar tidak dikirim.")
@@ -47,6 +52,7 @@ def decode_base64_image(data: str, max_side: int = 768) -> Image.Image:
     return normalize_image(img, max_side=max_side)
 
 
+# [RF-09] Mengirim gambar ke AI — RGB & perkecil sebelum ke model
 def normalize_image(img: Image.Image, max_side: int = 768) -> Image.Image:
     # GIF/WebP animasi: ambil frame pertama.
     if getattr(img, "is_animated", False):

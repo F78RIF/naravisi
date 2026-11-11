@@ -1,10 +1,13 @@
-// Dokumen offscreen NaraVisi: mengubah SVG menjadi JPEG.
-// Service worker tidak punya DOM, sedangkan createImageBitmap tidak menerima SVG.
-// SVG dimuat sebagai <img>, jadi skrip di dalamnya tidak berjalan dan sumber eksternal tidak diunduh.
+// NaraVisi · extension/offscreen/offscreen.js
+// Fungsi   : Dokumen offscreen: mengubah SVG menjadi JPEG (service worker tidak punya DOM).
+// SVG dimuat sebagai <img>: skrip di dalamnya tidak berjalan, sumber eksternal tidak diunduh.
+// Kebutuhan: RF-09
+// Terkait  : background.js (rasterizeSvg), offscreen.html
 
 const MAX_SIDE = 1280;
 const FALLBACK_SIDE = 512; // SVG tanpa width/height/viewBox
 
+// [RF-09] Mengirim gambar ke AI — SVG → JPEG di dokumen offscreen (skrip di SVG tidak dijalankan)
 async function rasterize(svgText) {
   const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }));
   try {

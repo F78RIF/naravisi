@@ -1,3 +1,7 @@
+// NaraVisi · backend/src/lib/rateLimit.js
+// Fungsi   : Pembatas percobaan login gagal di memori.
+// Kebutuhan: RNF-09
+// Terkait  : services/accountService.js
 /**
  * Pembatas percobaan sederhana di memori (cukup untuk satu proses server).
  * Dipakai untuk menahan tebakan kata sandi beruntun pada login (hasil evaluasi Fase 7, E-01).

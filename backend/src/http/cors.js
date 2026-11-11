@@ -1,4 +1,8 @@
-// CORS: hanya origin yang diizinkan (ALLOWED_ORIGINS) yang mendapat header Allow-Origin.
+// NaraVisi · backend/src/http/cors.js
+// Fungsi   : CORS: hanya origin di ALLOWED_ORIGINS yang diizinkan.
+// Kebutuhan: RNF-10
+// Terkait  : app.js, nodeServer.js, config.js
+
 // Extension memanggil API dari service worker dengan host_permissions, jadi tidak bergantung pada CORS;
 // pembatasan ini mencegah situs web lain memakai API dari browser pengguna.
 

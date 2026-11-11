@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/lib/time.js
+// Fungsi   : Utilitas tanggal: zona WITA, format DATETIME SQL, jam yang bisa dipalsukan saat tes.
+// Kebutuhan: RF-14, RF-26 (batas waktu)
+// Terkait  : services/*.js
+
 /** Tanggal "YYYY-MM-DD" pada zona waktu tertentu (default WITA). */
 export function dateInTz(timeZone, date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {

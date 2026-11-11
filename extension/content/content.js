@@ -1,8 +1,9 @@
-// Content script NaraVisi — memindai gambar, menampilkan panel aksesibel,
-// dan membacakan deskripsi dengan Web Speech API.
-// Disuntik sesuai permintaan (Alt+Shift+K / popup) atau oleh mode baca berurutan; aman bila disuntik berulang.
-// Pada gambar halaman hanya atribut nama (alt / aria-label) dan data-naravisi yang disentuh; pengumuman
-// untuk pembaca layar memakai satu live region tersembunyi (#naravisi-live).
+// NaraVisi · extension/content/content.js
+// Fungsi   : Content script: memindai gambar, panel aksesibel (Shadow DOM), membacakan deskripsi (Web Speech API).
+// Disuntik sesuai permintaan (Alt+Shift+K / popup) atau mode Baca berurutan; aman bila disuntik berulang.
+// Di halaman hanya alt / aria-label, data-naravisi, dan live region #naravisi-live yang disentuh.
+// Kebutuhan: RF-06, RF-07, RF-08, RF-09, RF-11, RF-12, RF-19, RF-20, PF-02, PF-03, RNF-02, RNF-03, RNF-06
+// Terkait  : background.js (pesan NV_*), shared/tokens.css (warna panel)
 
 (() => {
   if (window.__naraVisiLoaded) return;
@@ -40,6 +41,7 @@
   // -------------------------------------------------------------------------
   // Pesan dari background
   // -------------------------------------------------------------------------
+  // [RF-06] Memindai gambar — perintah dari service worker: buka panel, hitung gambar, mode otomatis
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id) return; // hanya dari service worker NaraVisi sendiri
     if (message?.type === 'NV_TOGGLE') {
@@ -68,6 +70,7 @@
   // -------------------------------------------------------------------------
   // UC-GBR-01 Memindai gambar
   // -------------------------------------------------------------------------
+  // [RF-06] Memindai gambar — gambar tersembunyi/terlalu kecil diabaikan
   function isVisible(el, rect) {
     if (rect.width < 1 || rect.height < 1) return false;
     if (typeof el.checkVisibility === 'function') {
@@ -120,6 +123,7 @@
     return name;
   }
 
+  // [RF-07] Menampilkan gambar terdeteksi — menilai apakah alt asli bermakna ("image", "IMG_1234.jpg" = tidak)
   function isMeaningfulAlt(alt, src) {
     const t = (alt || '').trim();
     if (t.length < 3 || GENERIC_ALT_RE.test(t) || FILE_ALT_RE.test(t)) return false;
@@ -133,6 +137,7 @@
     return item.el.hasAttribute('data-naravisi') ? '' : clip(item.alt, 300);
   }
 
+  // [RF-06] Memindai gambar — ikon, logo, avatar & iklan diabaikan
   function isNoise(el, src) {
     if (NOISE_RE.test(fileName(src))) return true;
     for (let n = el, depth = 0; n && depth < 3; n = n.parentElement, depth += 1) {
@@ -172,6 +177,7 @@
     return svgKeys.get(el);
   }
 
+  // [RF-06] Memindai gambar — mengenali <img>, SVG inline, dan gambar latar CSS
   /**
    * Satu elemen → item gambar, atau null bila bukan konten: terlalu kecil, dekoratif (alt="",
    * aria-hidden, role presentation/none), tidak terlihat, atau ikon/logo/avatar/iklan.
@@ -238,6 +244,7 @@
     return false;
   }
 
+  // [RF-07] Menampilkan gambar terdeteksi — mengurutkan gambar sesuai urutan baca pembaca layar
   /**
    * Urutan baca = urutan DOM (urutan NVDA/JAWS membaca halaman). Bila CSS menyusun ulang tampilan,
    * pakai posisi visual (atas → bawah, kiri → kanan). Gambar di <main>/<article> didahulukan, tetap berurutan.
@@ -249,6 +256,7 @@
     return [...ordered.filter((it) => it.inMain), ...ordered.filter((it) => !it.inMain)];
   }
 
+  // [RF-06] Memindai gambar — memindai seluruh halaman, tanpa duplikat
   /** Gambar konten tanpa duplikat src, dalam urutan baca. querySelectorAll sudah mengikuti urutan DOM. */
   function scanImages() {
     const seen = new Set();
@@ -270,6 +278,7 @@
     'font-family', 'font-size', 'font-weight', 'display', 'visibility'];
   const MAX_SVG_NODES = 3000;
 
+  // [RF-09] Mengirim gambar ke AI — SVG inline diubah menjadi data URL sebelum dikirim
   function inlineSvgToDataUrl(svg) {
     const clone = svg.cloneNode(true);
     const originals = [svg, ...svg.querySelectorAll('*')];
@@ -299,6 +308,7 @@
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
   }
 
+  // [RF-07] Menampilkan gambar terdeteksi — menandai gambar terdeteksi dengan garis di halaman
   function markImages() {
     state.markStyle = document.createElement('style');
     state.markStyle.textContent = `
@@ -457,6 +467,8 @@
     }
   }
 
+  // [RF-07] Menampilkan gambar terdeteksi — membangun panel Shadow DOM berisi daftar gambar
+  // [RNF-02] Pembaca layar — panel memakai role listbox, label & live region
   function buildPanel() {
     const host = document.createElement('div');
     host.id = HOST_ID;
@@ -552,6 +564,7 @@
     return { title: `Gambar ${i + 1} dari ${state.images.length}`, meta: parts.join(' · ') };
   }
 
+  // [RF-07] Menampilkan gambar terdeteksi — isi daftar "Gambar 2 dari 6 · keterangan"
   function renderList() {
     const list = $('#nv-list');
     list.textContent = '';
@@ -584,6 +597,7 @@
     list.hidden = state.images.length === 0;
   }
 
+  // [RF-08] Memilih gambar — memindah pilihan & aria-activedescendant
   function select(index, { scroll = true } = {}) {
     if (!state.images.length) return;
     state.index = (index + state.images.length) % state.images.length;
@@ -602,6 +616,7 @@
     }
   }
 
+  // [RF-07] Menampilkan gambar terdeteksi — membuka panel dan mengumumkan jumlah gambar
   function openPanel() {
     state.images = scanImages();
     const { host, root } = buildPanel();
@@ -646,6 +661,7 @@
     }
   }
 
+  // [RNF-03] Navigasi keyboard — Esc menutup panel; fokus kembali ke elemen semula
   function closePanel() {
     stopSpeech();
     unmarkImages();
@@ -674,6 +690,7 @@
     });
   }
 
+  // [RNF-06] Pesan error jelas — kode galat → kalimat yang aman dibacakan
   function friendlyError(err) {
     const msg = String(err?.message || '');
     if (msg.includes('Extension context invalidated')) {
@@ -688,6 +705,7 @@
     diagram: 'Diagram', logo: 'Logo', meme: 'Meme', dokumen: 'Dokumen', lainnya: 'Lainnya',
   };
 
+  // [RF-11] Menampilkan deskripsi teks — menampilkan teks deskripsi di panel
   function showResult(text, jenis) {
     $('#nv-result').hidden = false;
     $('#nv-text').textContent = text;
@@ -695,6 +713,7 @@
     state.host.dataset.jenis = jenis || '';
   }
 
+  // [RF-09] Mengirim gambar ke AI — meminta deskripsi ke service worker (pesan NV_DESCRIBE)
   /** Mengirim satu gambar ke service worker. `auto` = 'page' | 'focus' (mode otomatis) atau kosong (manual). */
   async function fetchDescription(item, auto) {
     let dataUrl = null;
@@ -721,6 +740,8 @@
     return res.data;
   }
 
+  // [RF-09] Mengirim gambar ke AI — Enter pada gambar terpilih → minta deskripsi
+  // [RF-11] Menampilkan deskripsi teks — hasil ditampilkan lalu dibacakan
   async function describeCurrent() {
     const item = state.images[state.index];
     if (!item || state.busy) return;
@@ -782,6 +803,7 @@
   // <img>, <input type=image>, dan <svg> inline bisa membawa nama untuk pembaca layar; gambar latar CSS tidak.
   const canHoldAlt = (item) => item.kind === 'img' || item.kind === 'svg' || item.kind === 'inline-svg';
 
+  // [PF-03] Deskripsi ke alt gambar — deskripsi disuntikkan ke alt gambar asli; alt bermakna tidak ditimpa
   /**
    * Suntikkan deskripsi ke gambar asli supaya NVDA/JAWS membacanya saat menelusuri halaman (panah, H, G):
    * - tanpa alt              → alt="<deskripsi>"
@@ -827,6 +849,7 @@
     return region;
   }
 
+  // [RNF-02] Pembaca layar — pengumuman sopan lewat live region tersembunyi
   function announce(text) {
     const region = ensureLive();
     region.textContent = '';
@@ -860,6 +883,7 @@
     done?.({ described: seq.described, stopped: seq.stopped, kuota: seq.kuota, candidates: seq.total });
   }
 
+  // [PF-02] Baca berurutan — memproses antrean gambar satu per satu dari atas ke bawah
   /** Ambil gambar berikutnya (urutan baca) yang sedang/hampir terlihat; tidak ada → menunggu guliran. */
   async function pump() {
     if (seq.running) return;
@@ -903,6 +927,7 @@
     pump();
   }
 
+  // [PF-02] Baca berurutan — memulai Baca berurutan dengan batas per halaman
   async function autoDescribe(max) {
     await settle();
     if (hasPasswordField()) return { described: 0, skipped: 'password' };
@@ -932,6 +957,7 @@
     });
   }
 
+  // [PF-02] Baca berurutan — gambar tanpa alt yang difokus → dideskripsikan
   /** Fokus Tab jatuh ke <img> atau tautan/tombol yang isinya hanya gambar tanpa alt bermakna. */
   function onFocusIn(event) {
     const target = event.target;
@@ -970,6 +996,7 @@
     if (state.host) state.host.dataset.tts = value;
   }
 
+  // [RF-19] Ubah kecepatan, nada & suara — memilih suara sesuai pengaturan (Premium) dan bahasa
   function pickVoice(langTag) {
     const voices = window.speechSynthesis.getVoices();
     const base = langTag.split('-')[0];
@@ -980,6 +1007,7 @@
     );
   }
 
+  // [RF-12] Membacakan deskripsi — membacakan dengan Web Speech API memakai kecepatan & nada pengaturan
   function speak(text) {
     state.lastText = text;
     state.paused = false;
@@ -1008,12 +1036,14 @@
     synth.speak(utter);
   }
 
+  // [RF-12] Membacakan deskripsi — tombol/tombol S: berhenti
   function stopSpeech() {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     state.paused = false;
     setTts('idle');
   }
 
+  // [RF-12] Membacakan deskripsi — tombol/tombol P: jeda atau lanjutkan
   function togglePause() {
     if (!('speechSynthesis' in window)) return;
     const synth = window.speechSynthesis;
@@ -1030,6 +1060,7 @@
     }
   }
 
+  // [RF-12] Membacakan deskripsi — putar deskripsi terakhir
   function play() {
     if (state.paused) togglePause();
     else if (state.lastText) speak(state.lastText);
@@ -1038,6 +1069,7 @@
   // -------------------------------------------------------------------------
   // Interaksi keyboard & mouse (RNF-03)
   // -------------------------------------------------------------------------
+  // [RF-20] Melaporkan deskripsi — membuka formulir laporan dari panel (tombol L)
   // UC-LAP-01 Menambahkan laporan deskripsi tidak akurat
   function openReport() {
     if (!state.current?.riwayatId) {
@@ -1056,6 +1088,7 @@
     $('#nv-list').focus();
   }
 
+  // [RF-20] Melaporkan deskripsi — mengirim alasan & catatan laporan
   async function onReportSubmit(event) {
     if (event.target.id !== 'nv-report') return;
     event.preventDefault();
@@ -1113,6 +1146,8 @@
     }
   }
 
+  // [RF-08] Memilih gambar — panah atas/bawah, Home, End memilih gambar
+  // [RNF-03] Navigasi keyboard — panel penuh keyboard: Enter, P, R, S, L, Esc
   function onKeyDown(event) {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     const tag = event.target?.tagName;

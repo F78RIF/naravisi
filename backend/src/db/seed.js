@@ -1,6 +1,12 @@
+// NaraVisi · backend/src/db/seed.js
+// Fungsi   : Data awal: paket Premium & akun Admin.
+// Kebutuhan: RF-23, RF-27
+// Terkait  : scripts/setup-db.js, server.js
+
 import { hashPassword } from '../lib/password.js';
 import { toSqlDateTime } from '../lib/time.js';
 
+// [RF-23] Daftar paket Premium — paket Bulanan Rp15.000 / 30 hari
 // ADR-11: satu paket Bulanan, Rp15.000 / 30 hari.
 export const DEFAULT_PLANS = [
   {

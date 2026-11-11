@@ -1,4 +1,7 @@
-// Kerangka bersama halaman extension: navigasi, pesan status, sesi, dan TTS.
+// NaraVisi · extension/pages/common.js
+// Fungsi   : Kerangka bersama halaman extension: navigasi, pesan status, sesi, TTS.
+// Kebutuhan: RF-05, RF-12, RNF-06
+// Terkait  : pages/*.js, shared/config.js
 import { apiFetch, getSession, getTts, startSession } from '../shared/config.js';
 import { logo } from '../shared/icons.js';
 
@@ -79,11 +82,13 @@ export function say(message, tone = 'info', { retry } = {}) {
   });
 }
 
+// [RNF-06] Pesan error jelas — pesan galat dibacakan & bisa dicoba lagi
 /** Galat dari apiFetch: server mati / galat server → tawarkan "Coba lagi" (bawaan: muat ulang halaman). */
 export function sayError(err, retry = () => location.reload()) {
   say(err.message, 'error', err.retryable ? { retry } : undefined);
 }
 
+// [RF-05] Login — halaman extension wajib masuk; tampilkan formulir bila belum
 /** Mengembalikan sesi aktif; bila belum masuk, menampilkan formulir masuk di halaman. */
 export async function requireSession() {
   const session = await getSession();
@@ -153,6 +158,7 @@ export const REPORT_CATEGORIES = [
 const PROVIDER_LABEL = { gemini: 'Google Gemini', blip: 'BLIP (model lokal)', mock: 'Mode uji (mock)' };
 export const providerLabel = (provider) => PROVIDER_LABEL[provider] ?? (provider || '-');
 
+// [RF-12] Membacakan deskripsi — membacakan di halaman extension (Riwayat, Coba suara)
 /** Membacakan teks dengan pengaturan TTS pengguna (UC-GBR-07 / UC-RWY-03). */
 export async function speak(text, override) {
   if (!('speechSynthesis' in window)) return false;

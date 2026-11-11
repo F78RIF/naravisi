@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/lib/validate.js
+// Fungsi   : Validasi masukan (teks, email, kata sandi, angka, paginasi).
+// Kebutuhan: RNF-06
+// Terkait  : services/*.js
+
 import { Errors } from './errors.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

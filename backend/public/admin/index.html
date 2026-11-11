@@ -1,4 +1,10 @@
 <!doctype html>
+<!--
+  NaraVisi · backend/public/admin/index.html
+  Fungsi   : Kerangka Dashboard Admin (tab Pengguna & Laporan, dialog).
+  Kebutuhan: RF-21, RF-22, RF-27..RF-30
+  Terkait  : admin.js, admin.css
+-->
 <html lang="id">
 <head>
   <meta charset="utf-8">
@@ -21,6 +27,7 @@
 
   <main id="main" tabindex="-1">
     <!-- UC-AKUN-05: Login Admin -->
+    <!-- [RF-05] Login — Masuk sebagai Admin -->
     <section id="login-view" aria-labelledby="login-title">
       <form id="login-form" class="card narrow" novalidate>
         <h2 id="login-title">Masuk sebagai Admin</h2>
@@ -40,6 +47,7 @@
       </div>
 
       <!-- UC-ADM-01..04 -->
+      <!-- [RF-28] Admin: daftar pengguna — tab Pengguna -->
       <section role="tabpanel" id="panel-users" aria-labelledby="tab-users" class="card">
         <div class="toolbar">
           <form id="search-form" role="search">
@@ -64,6 +72,7 @@
       </section>
 
       <!-- UC-LAP-02..03 -->
+      <!-- [RF-21] Admin: daftar laporan — tab Laporan -->
       <section role="tabpanel" id="panel-reports" aria-labelledby="tab-reports" class="card" hidden>
         <div class="toolbar">
           <label for="report-filter">Status</label>
@@ -85,6 +94,8 @@
   </main>
 
   <!-- Formulir tambah / ubah pengguna -->
+  <!-- [RF-27] Admin: tambah pengguna — dialog tambah pengguna -->
+  <!-- [RF-29] Admin: ubah pengguna — dialog ubah pengguna -->
   <dialog id="user-dialog" aria-labelledby="user-dialog-title">
     <form id="user-form" method="dialog" novalidate>
       <h2 id="user-dialog-title">Tambah pengguna</h2>
@@ -115,6 +126,7 @@
   </dialog>
 
   <!-- Konfirmasi hapus -->
+  <!-- [RF-30] Admin: hapus pengguna — dialog hapus pengguna -->
   <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text">
     <form id="confirm-form" method="dialog" novalidate>
       <h2 id="confirm-title">Hapus pengguna?</h2>
@@ -132,6 +144,7 @@
   </dialog>
 
   <!-- Tinjau laporan -->
+  <!-- [RF-22] Admin: ubah status laporan — dialog tinjau laporan -->
   <dialog id="review-dialog" aria-labelledby="review-title">
     <form id="review-form" method="dialog" novalidate>
       <h2 id="review-title">Tinjau laporan</h2>

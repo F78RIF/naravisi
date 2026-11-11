@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/db/index.js
+// Fungsi   : Antarmuka basis data (MySQL produksi / SQLite tes): all, get, run, transaction.
+// Kebutuhan: semua RF (penyimpanan)
+// Terkait  : schema.mysql.sql, schema.sqlite.sql, migrate.js
+
 import { readFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';

@@ -1,3 +1,7 @@
+# NaraVisi · ai-service/app/gemini.py
+# Fungsi   : Provider Google Gemini dengan keluaran JSON terstruktur.
+# Kebutuhan: RF-10, PF-04
+# Terkait  : service.py (CaptionRouter), prompts.py
 """Provider Google Gemini (SDK resmi google-genai) dengan keluaran JSON terstruktur.
 
 Alur satu permintaan: gambar JPEG + petunjuk halaman → Gemini (skema JSON) → validasi.
@@ -26,6 +30,7 @@ JenisGambar = Literal[
 ]
 
 
+# [RF-10] Menerima & menyimpan deskripsi — skema JSON jawaban Gemini
 class GeminiCaption(BaseModel):
     """Skema jawaban yang diminta dari Gemini (response_schema) sekaligus validatornya."""
 
@@ -89,6 +94,7 @@ def _is_auth_error(exc: Exception) -> bool:
     return status == 400 and ("api_key_invalid" in msg or "api key not valid" in msg)
 
 
+# [RF-10] Menerima & menyimpan deskripsi — filter keamanan Gemini → AI_BLOCKED (tidak dialihkan ke cadangan)
 def _blocked(response: Any) -> bool:
     feedback = getattr(response, "prompt_feedback", None)
     if feedback is not None and getattr(feedback, "block_reason", None):
@@ -157,6 +163,7 @@ class GeminiCaptioner:
             **extra,
         )
 
+    # [PF-04] Cadangan AI Gemini → BLIP — 429 kuota habis/kunci salah/offline → ProviderError agar dialihkan ke BLIP
     def _call(self, contents, config):
         """Satu panggilan + maks. `retries` ulangan untuk gangguan jaringan / server Google (5xx)."""
         from google.genai import errors
@@ -189,6 +196,7 @@ class GeminiCaptioner:
                     raise ProviderError("MODEL_TIMEOUT", MSG_TIMEOUT) from exc
                 raise ProviderError("MODEL_UNAVAILABLE", MSG_UNAVAILABLE) from exc
 
+    # [RF-10] Menerima & menyimpan deskripsi — memanggil Gemini dan memvalidasi JSON terstruktur
     def describe_structured(self, image: Image.Image, context: dict | None = None, lang: str = "id") -> dict:
         from google.genai import types
 

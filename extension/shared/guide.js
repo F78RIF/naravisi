@@ -1,7 +1,11 @@
-// Kalimat pemandu suara bersama (dibacakan service worker lewat chrome.tts).
+// NaraVisi · extension/shared/guide.js
+// Fungsi   : Kalimat pemandu suara bersama & pintasan aktif.
+// Kebutuhan: RF-18, PF-01
+// Terkait  : background.js, popup/popup.js, pages/pengaturan.js, pages/selamat-datang.js
 
 export const SHORTCUTS_URL = 'chrome://extensions/shortcuts';
 
+// [RF-18] Ubah bahasa & pintasan — membaca pintasan yang benar-benar aktif (chrome.commands.getAll)
 /** Pintasan yang sedang berlaku untuk sebuah perintah (bawaan: pemindai), mis. "Alt+Shift+K"; '' bila belum diatur. */
 export async function currentShortcut(name = 'scan-page') {
   const [cmd] = (await chrome.commands.getAll()).filter((c) => c.name === name);
@@ -14,6 +18,7 @@ export async function spokenShortcut() {
   return shortcut ? shortcut.split('+').join(' ') : null;
 }
 
+// [RF-18] Ubah bahasa & pintasan — membuka chrome://extensions/shortcuts untuk mengubah pintasan
 /** Chrome hanya mengizinkan pintasan diubah dari halaman pintasannya sendiri. */
 export function openShortcutsPage() {
   return chrome.tabs.create({ url: SHORTCUTS_URL });
@@ -26,6 +31,7 @@ export function pressHint(shortcut, action, where = '') {
     : `Pintasan belum diatur. Klik ikon NaraVisi di toolbar untuk ${action}.`;
 }
 
+// [PF-01] Pemandu suara — kalimat sambutan saat pertama dipasang
 export function welcomeText(shortcut) {
   return (
     'Selamat datang di NaraVisi. Tekan Tab untuk masuk atau mendaftar. Setelah masuk: ' +
@@ -41,6 +47,7 @@ export function greetingText(user, shortcut) {
   return `Berhasil masuk sebagai ${user.nama}. ${quota} ${pressHint(shortcut, 'memindai gambar')}`;
 }
 
+// [PF-01] Pemandu suara — kalimat jumlah gambar di halaman
 export function imageCountText(count, shortcut) {
   return `Ada ${count} gambar. ${pressHint(shortcut, 'mendengar deskripsinya')}`;
 }

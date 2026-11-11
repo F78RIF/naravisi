@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/descriptionService.js
+// Fungsi   : Alur deskripsi gambar: validasi → kuota → AI → riwayat.
+// Kebutuhan: RF-09, RF-10, RF-11, RF-13, RNF-13
+// Terkait  : lib/image.js, quotaService.js, aiClient.js, historyService.js
+
 import { Errors } from '../lib/errors.js';
 import { decodeImagePayload } from '../lib/image.js';
 
@@ -8,6 +13,7 @@ export const JENIS_GAMBAR = [
 const PROVIDER_RE = /^[a-z0-9_-]{1,30}$/;
 const MAX_HINT = 300;
 
+// [RF-09] Mengirim gambar ke AI — petunjuk dari halaman (alt, caption, judul) dibersihkan & dipotong
 /** Petunjuk dari halaman (alt asli, figcaption, judul) → hanya teks, dipotong, tanpa kunci lain. */
 function pageContext(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -26,6 +32,9 @@ function pageContext(raw) {
  * File gambar TIDAK disimpan (RNF-13 / ADR-14).
  */
 export function createDescriptionService({ aiClient, maxImageBytes, quota, history, subscriptions }) {
+  // [RF-09] Mengirim gambar ke AI — validasi → pesan kuota → panggil AI
+  // [RF-10] Menerima & menyimpan deskripsi — simpan riwayat & kembalikan deskripsi
+  // [RNF-13] File gambar tidak disimpan — hanya URL & teks yang disimpan, byte gambar tidak
   async function describe(body, user) {
     if (!body || typeof body !== 'object') {
       throw Errors.invalidRequest('Badan permintaan harus berupa JSON.');
@@ -39,14 +48,17 @@ export function createDescriptionService({ aiClient, maxImageBytes, quota, histo
     const pageUrl = typeof body.page_url === 'string' ? body.page_url.slice(0, 2048) : null;
     const imageUrl = typeof body.image_url === 'string' ? body.image_url.slice(0, 2048) : null;
     const context = pageContext(body.context);
+    // [RF-09] Mengirim gambar ke AI — validasi format & ukuran gambar (lib/image.js)
     const image = decodeImagePayload(body.image_base64, { maxBytes: maxImageBytes });
 
     const unlimited = user ? user.peran === 'admin' || (await subscriptions.isPremium(user.id)) : true;
+    // [RF-09] Mengirim gambar ke AI — kuota dicek & dipesan sebelum AI dipanggil
     const reservation = user ? await quota.reserve(user.id, unlimited) : null;
 
     const started = performance.now();
     let result;
     try {
+      // [RF-09] Mengirim gambar ke AI — memanggil layanan AI; gagal → kuota dikembalikan
       result = await aiClient.caption({ imageBase64: image.base64, lang, context });
     } catch (err) {
       await reservation?.release();
@@ -55,6 +67,7 @@ export function createDescriptionService({ aiClient, maxImageBytes, quota, histo
 
     const jenis = JENIS_GAMBAR.includes(result.jenis) ? result.jenis : null;
     const provider = PROVIDER_RE.test(result.provider ?? '') ? result.provider : null;
+    // [RF-13] Menyimpan riwayat — deskripsi tersimpan ke riwayat_deskripsi
     const riwayatId = user
       ? await history.save(user.id, { urlHalaman: pageUrl, urlGambar: imageUrl, teks: result.text, jenis, provider })
       : null;

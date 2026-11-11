@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/config.js
+// Fungsi   : Membaca variabel lingkungan (.env) menjadi objek konfigurasi.
+// Kebutuhan: RNF-09 (JWT_SECRET), RF-25 (Midtrans)
+// Terkait  : server.js, container.js, .env.example
+
 import { parseAllowedOrigins } from './http/cors.js';
 
 function intFromEnv(name, fallback) {

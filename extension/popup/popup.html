@@ -1,4 +1,10 @@
 <!doctype html>
+<!--
+  NaraVisi · extension/popup/popup.html
+  Fungsi   : Kerangka popup extension.
+  Kebutuhan: RF-05, RF-06, RF-26
+  Terkait  : popup.js, popup.css
+-->
 <html lang="id">
 <head>
   <meta charset="utf-8">
@@ -22,14 +28,18 @@
   <main>
     <!-- Belum masuk: UC-AKUN-05 Login & UC-AKUN-01 Registrasi.
          Form Masuk & Daftar dibangun oleh shared/auth-forms.js (dipakai juga di tab sambutan). -->
+    <!-- [RF-01] Registrasi akun — formulir Daftar (diisi shared/auth-forms.js) -->
+    <!-- [RF-05] Login — formulir Masuk (diisi shared/auth-forms.js) -->
     <section id="guest" class="guest" hidden aria-label="Masuk atau daftar">
       <div id="auth"></div>
     </section>
 
     <!-- Sudah masuk -->
+    <!-- [RF-06] Memindai gambar — tombol Pindai halaman untuk pengguna yang sudah masuk -->
     <section id="member" class="member" hidden aria-labelledby="hello">
       <h2 id="hello" class="greeting"></h2>
 
+      <!-- [RF-26] Status & masa aktif langganan — status langganan & sisa kuota -->
       <section class="quota" aria-labelledby="quota-title">
         <p class="eyebrow" id="quota-title">Kuota hari ini</p>
         <p class="quota-figure" id="quota"></p>

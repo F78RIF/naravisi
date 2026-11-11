@@ -1,4 +1,7 @@
-// Premium & pembayaran: RF-23..RF-26 (UC-PRM-01..04)
+// NaraVisi · extension/pages/premium.js
+// Fungsi   : Halaman Premium: paket, pembayaran, status langganan.
+// Kebutuhan: RF-23, RF-24, RF-25, RF-26
+// Terkait  : premium.html, common.js, backend paymentService.js
 import { apiFetch, refreshProfile, refreshTts } from '../shared/config.js';
 import { $, el, fmtDate, requireSession, rupiah, say, sayError, shell } from './common.js';
 
@@ -7,6 +10,7 @@ shell('premium', 'NaraVisi Premium');
 const STATUS_LABEL = { menunggu: 'Menunggu pembayaran', berhasil: 'Berhasil', gagal: 'Gagal', kedaluwarsa: 'Kedaluwarsa' };
 let pollTimer = null;
 
+// [RF-26] Status & masa aktif langganan — status Premium & tanggal berakhir
 function statusCard(sub) {
   return el(
     'section',
@@ -31,6 +35,7 @@ function statusCard(sub) {
   );
 }
 
+// [RF-23] Daftar paket Premium — kartu paket (harga dari server)
 function planCard(plan, premium, mode) {
   const hintId = `mode-${plan.paket_id}`;
   // aria-describedby: NVDA membacakan keterangan mode (SIMULASI / Midtrans) tepat setelah nama tombol.
@@ -53,6 +58,7 @@ function planCard(plan, premium, mode) {
   );
 }
 
+// [RF-24] Memilih paket — memilih paket → POST /payments
 async function buy(plan, btn) {
   btn.disabled = true;
   try {
@@ -66,6 +72,7 @@ async function buy(plan, btn) {
   }
 }
 
+// [RF-25] Pembayaran & aktivasi Premium — membuka halaman bayar & menunggu konfirmasi
 function showPending(pay) {
   const sim = pay.mode_pembayaran === 'simulasi';
   const check = el('button', { type: 'button', id: 'check-payment', class: 'primary' }, 'Cek status pembayaran');
@@ -88,6 +95,7 @@ function showPending(pay) {
   }, 5000);
 }
 
+// [RF-25] Pembayaran & aktivasi Premium — cek status lewat GET /payments/:orderId
 async function checkPayment(orderId, announce) {
   try {
     const st = await apiFetch(`/payments/${encodeURIComponent(orderId)}`);
@@ -111,6 +119,7 @@ async function checkPayment(orderId, announce) {
   }
 }
 
+// [RF-23] Daftar paket Premium — memuat GET /plans dan GET /me/subscription
 async function load() {
   const [sub, plans] = await Promise.all([apiFetch('/me/subscription'), apiFetch('/plans', { auth: false })]);
   $('content').replaceChildren(statusCard(sub), ...plans.items.map((p) => planCard(p, sub.premium, plans.mode_pembayaran)));

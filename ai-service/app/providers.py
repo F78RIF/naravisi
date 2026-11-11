@@ -1,3 +1,7 @@
+# NaraVisi · ai-service/app/providers.py
+# Fungsi   : Provider captioning & terjemahan: BLIP, MarianMT, mock (untuk tes).
+# Kebutuhan: PF-04
+# Terkait  : service.py, main.py
 """Provider captioning dan terjemahan.
 
 Semua provider punya antarmuka sederhana sehingga model bisa diganti
@@ -84,6 +88,7 @@ def _nearest_color_en(r: int, g: int, b: int) -> str:
     return min(palette, key=lambda k: sum((a - c) ** 2 for a, c in zip((r, g, b), palette[k])))
 
 
+# [PF-04] Cadangan AI Gemini → BLIP — model cadangan BLIP (luring, bahasa Inggris)
 class BlipCaptioner:
     """BLIP (Salesforce) — model captioning gratis, berjalan lokal di CPU/GPU.
 
@@ -117,6 +122,7 @@ class BlipCaptioner:
         return self._processor.decode(out[0], skip_special_tokens=True)
 
 
+# [PF-04] Cadangan AI Gemini → BLIP — terjemahan Inggris → Indonesia untuk hasil BLIP
 class MarianTranslator:
     """Helsinki-NLP opus-mt (MarianMT) — terjemahan gratis, lokal."""
 

@@ -1,3 +1,8 @@
+// NaraVisi · backend/src/services/historyService.js
+// Fungsi   : Riwayat deskripsi: simpan, daftar (Gratis 7 hari), detail, hapus.
+// Kebutuhan: RF-13, RF-14, RF-15, RF-16
+// Terkait  : descriptionService.js, tabel riwayat_deskripsi
+
 import { Errors } from '../lib/errors.js';
 import { sqlToIso, toSqlDateTime } from '../lib/time.js';
 import * as v from '../lib/validate.js';
@@ -8,6 +13,7 @@ import * as v from '../lib/validate.js';
  * tidak dihapus, dan terlihat lagi setelah upgrade (ADR-12).
  */
 export function createHistoryService({ db, config, clock }) {
+  // [RF-14] Daftar riwayat — Gratis hanya melihat 7 hari terakhir (data lama disembunyikan, tidak dihapus)
   const cutoff = (premium) =>
     premium ? null : toSqlDateTime(new Date(clock.now().getTime() - config.freeHistoryDays * 86400000));
 
@@ -22,6 +28,7 @@ export function createHistoryService({ db, config, clock }) {
   });
   const COLUMNS = 'riwayat_id, url_halaman, url_gambar, teks_deskripsi, jenis_gambar, provider, waktu_dibuat';
 
+  // [RF-13] Menyimpan riwayat — INSERT ke riwayat_deskripsi
   // UC-RWY-01
   async function save(userId, { urlHalaman, urlGambar, teks, jenis = null, provider = null }) {
     const res = await db.run(
@@ -32,6 +39,7 @@ export function createHistoryService({ db, config, clock }) {
     return res.insertId;
   }
 
+  // [RF-14] Daftar riwayat — daftar riwayat berhalaman
   // UC-RWY-02
   async function list(userId, premium, query) {
     const { page, limit, offset } = v.pagination(query);
@@ -60,6 +68,7 @@ export function createHistoryService({ db, config, clock }) {
     };
   }
 
+  // [RF-15] Detail riwayat — hanya milik sendiri & dalam batas waktu
   async function findVisible(userId, premium, riwayatId) {
     const id = v.id(riwayatId, 'Riwayat');
     const c = cutoff(premium);
@@ -72,11 +81,13 @@ export function createHistoryService({ db, config, clock }) {
     return row;
   }
 
+  // [RF-15] Detail riwayat — detail satu riwayat
   // UC-RWY-03
   async function get(userId, premium, riwayatId) {
     return mapRow(await findVisible(userId, premium, riwayatId));
   }
 
+  // [RF-16] Hapus riwayat — hapus satu riwayat
   // UC-RWY-04 — laporan terkait ikut terhapus (ON DELETE CASCADE)
   async function remove(userId, premium, riwayatId) {
     const row = await findVisible(userId, premium, riwayatId);
@@ -84,6 +95,7 @@ export function createHistoryService({ db, config, clock }) {
     return { dihapus: true };
   }
 
+  // [RF-16] Hapus riwayat — hapus semua riwayat (wajib konfirmasi)
   // UC-RWY-04 (semua) — wajib {"semua": true} agar tidak terhapus tanpa sengaja. Riwayat lama yang
   // disembunyikan untuk akun Gratis (ADR-12) ikut terhapus: pengguna meminta SEMUA riwayatnya dihapus.
   async function removeAll(userId, body) {

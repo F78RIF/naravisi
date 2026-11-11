@@ -1,4 +1,8 @@
-// Formulir Masuk & Daftar bersama untuk popup dan tab sambutan (UC-AKUN-01, UC-AKUN-05).
+// NaraVisi · extension/shared/auth-forms.js
+// Fungsi   : Formulir Masuk & Daftar bersama untuk popup dan tab sambutan (dibangun dengan DOM, tanpa innerHTML).
+// Kebutuhan: RF-01, RF-05
+// Terkait  : shared/config.js (startSession), popup/popup.js, pages/selamat-datang.js, backend accountService.js
+
 // Dibangun dengan DOM (tanpa innerHTML). Token hanya disimpan lewat startSession → chrome.storage.local.
 import { apiFetch, startSession } from './config.js';
 import { greetingText, speakGuide, spokenShortcut } from './guide.js';
@@ -65,6 +69,8 @@ function clearErrors(fields) {
   }
 }
 
+// [RF-01] Registrasi akun — formulir Daftar
+// [RF-05] Login — formulir Masuk
 /**
  * Memasang form Masuk/Daftar ke `container`: segmented control (tablist) di atas, satu form tampil.
  * `say(text, tone, { retry })` menulis ke area aria-live halaman (retry → tombol "Coba lagi");
@@ -161,6 +167,7 @@ export function mountAuthForms(container, { say, onSuccess, headingLevel = 2 }) 
     }
   }
 
+  // [RF-05] Login — kirim POST /auth/login
   loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const email = login.email.input.value.trim();
@@ -177,6 +184,7 @@ export function mountAuthForms(container, { say, onSuccess, headingLevel = 2 }) 
     submit(loginForm, { email: login.email, kata_sandi: login.password }, '/auth/login', { email, kata_sandi: pass });
   });
 
+  // [RF-01] Registrasi akun — kirim POST /auth/register
   registerForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const nama = reg.nama.input.value.trim();
