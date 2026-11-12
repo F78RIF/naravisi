@@ -2,7 +2,7 @@
 // Fungsi   : Content script: memindai gambar, panel aksesibel (Shadow DOM), membacakan deskripsi (Web Speech API).
 // Disuntik sesuai permintaan (Alt+Shift+K / popup) atau mode Baca berurutan; aman bila disuntik berulang.
 // Di halaman hanya alt / aria-label, data-naravisi, dan live region #naravisi-live yang disentuh.
-// Kebutuhan: RF-06, RF-07, RF-08, RF-09, RF-11, RF-12, RF-19, RF-20, PF-02, PF-03, RNF-02, RNF-03, RNF-06
+// Kebutuhan: RF-06, RF-07, RF-08, RF-09, RF-11, RF-12, RF-19, RF-20, PF-02, PF-03, PF-05, RNF-02, RNF-03, RNF-06
 // Terkait  : background.js (pesan NV_*), shared/tokens.css (warna panel)
 
 (() => {
@@ -16,6 +16,8 @@
   const HOST_ID = 'naravisi-host';
   const LIVE_ID = 'naravisi-live';
   const MARK_ATTR = 'data-naravisi-mark';
+  const QUICK_MIN_WAIT_MS = 1000; // PF-05: AI menjawab sebelum 1 detik → deskripsi kilat dilewati
+  const QUICK_MAX_WAIT_MS = 10000; // deskripsi lengkap tidak menunggu kilat lebih lama dari ini
 
   const state = {
     open: false,
@@ -36,6 +38,9 @@
     autoDone: new Set(), // src yang sudah diproses → rute SPA baru tidak memproses ulang
     focusOn: false,
     focusBusy: false,
+    pending: null, // PF-05: permintaan manual yang sedang menunggu AI { reqId, startedAt }
+    quickSpeech: null, // PF-05: Promise selesai dibacakannya deskripsi kilat
+    reqSeq: 0,
   };
 
   // -------------------------------------------------------------------------
@@ -56,6 +61,9 @@
       return true; // respons asinkron
     } else if (message?.type === 'NV_LIVE' && typeof message.text === 'string') {
       announce(message.text.slice(0, 300));
+      sendResponse({ ok: true });
+    } else if (message?.type === 'NV_QUICK') {
+      onQuick(message);
       sendResponse({ ok: true });
     } else if (message?.type === 'NV_FOCUS_ENABLE') {
       if (!state.focusOn) {
@@ -715,7 +723,7 @@
 
   // [RF-09] Mengirim gambar ke AI — meminta deskripsi ke service worker (pesan NV_DESCRIBE)
   /** Mengirim satu gambar ke service worker. `auto` = 'page' | 'focus' (mode otomatis) atau kosong (manual). */
-  async function fetchDescription(item, auto) {
+  async function fetchDescription(item, auto, reqId) {
     let dataUrl = null;
     if (item.kind === 'inline-svg') dataUrl = inlineSvgToDataUrl(item.el);
     else if (item.src.startsWith('blob:')) dataUrl = await blobUrlToDataUrl(item.src);
@@ -727,12 +735,14 @@
       // Petunjuk untuk AI (bukan untuk disalin): alt asli, keterangan terdekat, judul halaman.
       context: { alt: originalAlt(item), caption: captionOf(item.el), page_title: clip(document.title, 300) },
       auto,
+      reqId,
     });
     if (!res?.ok) {
       const e = new Error(res?.message || 'Server gagal memproses gambar.');
       e.code = res?.code;
       e.spoken = res?.spoken;
       e.sisa = res?.sisa;
+      e.sederhana = res?.sederhana; // PF-05: deskripsi sederhana tanpa AI (bila server/AI gagal)
       throw e;
     }
     state.lang = res.data.lang || state.lang;
@@ -764,9 +774,15 @@
     state.host.dataset.state = 'loading';
     stopSpeech();
     setStatus(`Mendeskripsikan gambar ${number}… mohon tunggu.`);
+    state.reqSeq += 1;
+    const reqId = `${Date.now().toString(36)}-${state.reqSeq}-${Math.random().toString(36).slice(2, 8)}`;
+    state.pending = { reqId, startedAt: performance.now() };
+    state.quickSpeech = null;
 
     try {
-      const { text, riwayat_id: riwayatId, kuota, jenis, fallback } = await fetchDescription(item);
+      const { text, riwayat_id: riwayatId, kuota, jenis, fallback } = await fetchDescription(item, undefined, reqId);
+      state.pending = null;
+      await waitQuick(); // deskripsi kilat yang sedang dibacakan diselesaikan dulu (tanpa tumpang tindih)
       if (!state.open) return; // panel ditutup saat menunggu
 
       state.current = { text, riwayatId, jenis };
@@ -779,16 +795,47 @@
       setStatus(`Deskripsi gambar ${number} siap.${fallback ? FALLBACK_NOTE : ''}${sisa}`);
       speak(text);
     } catch (err) {
+      state.pending = null;
+      await waitQuick();
       if (!state.open) return;
       const message = friendlyError(err);
       state.host.dataset.state = 'error';
       setStatus(message, 'error');
       if (err.code === 'QUOTA_EXCEEDED') setAction('Lihat paket Premium', 'premium');
       else if (['NOT_LOGGED_IN', 'UNAUTHORIZED', 'SESSION_EXPIRED'].includes(err.code)) setAction('Masuk atau daftar NaraVisi', 'masuk');
-      if (!err.spoken) speak(message); // sudah dibacakan service worker → jangan dobel
+      if (typeof err.sederhana === 'string' && err.sederhana) {
+        // [PF-05] Deteksi objek lokal — cadangan: tidak di-cache, tidak masuk alt/riwayat; Enter lagi mencoba AI lagi
+        state.current = { text: err.sederhana, riwayatId: null, jenis: null, lokal: true };
+        showResult(err.sederhana, null);
+        speak(`${err.sederhana} ${message}`);
+      } else if (!err.spoken) speak(message); // sudah dibacakan service worker → jangan dobel
     } finally {
+      state.pending = null;
       state.busy = false;
     }
+  }
+
+  // [PF-05] Deteksi objek lokal — deskripsi kilat: dibacakan hanya bila AI belum menjawab setelah 1 detik
+  function onQuick({ reqId, text: quickText }) {
+    const pending = state.pending;
+    if (!pending || pending.reqId !== reqId || typeof quickText !== 'string' || !quickText.trim()) return;
+    const wait = Math.max(0, QUICK_MIN_WAIT_MS - (performance.now() - pending.startedAt));
+    setTimeout(() => {
+      if (state.pending?.reqId !== reqId || !state.open) return; // AI sudah menjawab / panel ditutup
+      const text = clip(quickText, 240); // "Kemungkinan berisi: …" disusun service worker (shared/deteksi.js)
+      setStatus(`${text} Deskripsi lengkap sedang dibuat…`);
+      state.quickSpeech = speak(text);
+    }, wait);
+  }
+
+  // [PF-05] Deteksi objek lokal — menunggu deskripsi kilat selesai dibacakan (dibatasi 10 detik)
+  async function waitQuick() {
+    const quick = state.quickSpeech;
+    state.quickSpeech = null;
+    if (!quick) return;
+    let timer;
+    await Promise.race([quick, new Promise((resolve) => { timer = setTimeout(resolve, QUICK_MAX_WAIT_MS); })]);
+    clearTimeout(timer);
   }
 
   // -------------------------------------------------------------------------
@@ -866,7 +913,7 @@
   // Mode "Baca berurutan": gambar tanpa alt bermakna diproses SATU PER SATU dari atas ke bawah,
   // yang terlihat/hampir terlihat lebih dulu, lalu lanjut saat pengguna menggulir/membaca. Maks. N per halaman.
   // -------------------------------------------------------------------------
-  const seq = { near: new Set(), observer: null, candidates: [], total: 0, described: 0, running: false, stopped: null, kuota: null, onIdle: null };
+  const seq = { near: new Set(), observer: null, candidates: [], total: 0, described: 0, skippedPlain: 0, running: false, stopped: null, kuota: null, onIdle: null };
 
   const STOP_TEXT = {
     quota: (sisa) => `Baca berurutan berhenti: sisa kuota hari ini ${sisa}, disisakan untuk pilihan Anda.`,
@@ -883,7 +930,7 @@
   function settleIdle() {
     const done = seq.onIdle;
     seq.onIdle = null;
-    done?.({ described: seq.described, stopped: seq.stopped, kuota: seq.kuota, candidates: seq.total });
+    done?.({ described: seq.described, stopped: seq.stopped, kuota: seq.kuota, candidates: seq.total, polos: seq.skippedPlain });
   }
 
   // [PF-02] Baca berurutan — memproses antrean gambar satu per satu dari atas ke bawah
@@ -920,10 +967,17 @@
         setTimeout(() => announce(STOP_TEXT.quota(k.sisa)), 1500); // setelah pengumuman progres
       }
     } catch (err) {
-      const reason = { AUTO_RESERVE: 'quota', AUTO_DAILY_LIMIT: 'daily' }[err.code] || 'error';
-      finishSequence(reason);
-      if (reason === 'quota') announce(STOP_TEXT.quota(err.sisa ?? AUTO_RESERVE));
-      else if (reason === 'daily') announce(STOP_TEXT.daily());
+      if (err.code === 'AUTO_SKIPPED_PLAIN') {
+        // [PF-05] Deteksi objek lokal — gambar hampir polos tanpa objek dilewati; urutan lanjut ke gambar berikutnya
+        seq.skippedPlain += 1;
+        const left = seq.candidates.filter((it) => !state.autoDone.has(it.src)).length;
+        seq.total = Math.min(seq.total, seq.described + left);
+      } else {
+        const reason = { AUTO_RESERVE: 'quota', AUTO_DAILY_LIMIT: 'daily' }[err.code] || 'error';
+        finishSequence(reason);
+        if (reason === 'quota') announce(STOP_TEXT.quota(err.sisa ?? AUTO_RESERVE));
+        else if (reason === 'daily') announce(STOP_TEXT.daily());
+      }
     } finally {
       seq.running = false;
     }
@@ -941,6 +995,7 @@
     );
     seq.total = Math.min(budget, seq.candidates.length);
     seq.described = 0;
+    seq.skippedPlain = 0;
     seq.stopped = null;
     seq.kuota = null;
     if (!seq.total) return { described: 0, stopped: null, candidates: 0 };
@@ -1011,13 +1066,18 @@
   }
 
   // [RF-12] Membacakan deskripsi — membacakan dengan Web Speech API memakai kecepatan & nada pengaturan
+  /** Mengembalikan Promise yang selesai saat kalimat selesai/dihentikan (dipakai antrean kilat PF-05). */
   function speak(text) {
     state.lastText = text;
     state.paused = false;
-    if (state.host) state.host.dataset.lastSpoken = text; // dipakai uji otomatis
+    if (state.host) {
+      state.host.dataset.lastSpoken = text; // dipakai uji otomatis
+      const log = [...JSON.parse(state.host.dataset.spokenLog || '[]'), text].slice(-6);
+      state.host.dataset.spokenLog = JSON.stringify(log); // urutan bacaan, dipakai uji otomatis
+    }
     if (!('speechSynthesis' in window)) {
       setTts('unsupported');
-      return;
+      return Promise.resolve();
     }
     const synth = window.speechSynthesis;
     synth.cancel();
@@ -1030,13 +1090,20 @@
     if (voice) utter.voice = voice;
     utter.rate = Number(state.tts?.kecepatan_suara) || 1;
     utter.pitch = Number(state.tts?.nada_suara) || 1;
+    let finish;
+    const done = new Promise((resolve) => { finish = resolve; });
     utter.onstart = () => setTts('speaking');
-    utter.onend = () => setTts('idle');
+    utter.onend = () => {
+      setTts('idle');
+      finish();
+    };
     utter.onerror = (e) => {
       if (e.error !== 'interrupted' && e.error !== 'canceled') setTts('error');
+      finish();
     };
     setTts('queued');
     synth.speak(utter);
+    return done;
   }
 
   // [RF-12] Membacakan deskripsi — tombol/tombol S: berhenti
@@ -1075,6 +1142,10 @@
   // [RF-20] Melaporkan deskripsi — membuka formulir laporan dari panel (tombol L)
   // UC-LAP-01 Menambahkan laporan deskripsi tidak akurat
   function openReport() {
+    if (state.current?.lokal) {
+      setStatus('Deskripsi sederhana tanpa AI tidak tersimpan di riwayat, jadi tidak dapat dilaporkan.', 'error');
+      return;
+    }
     if (!state.current?.riwayatId) {
       setStatus('Deskripsikan sebuah gambar terlebih dahulu sebelum melaporkan.', 'error');
       return;

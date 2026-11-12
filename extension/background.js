@@ -6,6 +6,7 @@
 import {
   ApiError, apiFetch, AUTO_DAILY_MAX, AUTO_MAX_PER_PAGE, AUTO_RESERVE, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession,
 } from './shared/config.js';
+import { kalimatKilat, kalimatSederhana, layakDilewati } from './shared/deteksi.js';
 import { imageCountText, spokenShortcut, welcomeText } from './shared/guide.js';
 
 const CONTENT_FILE = 'content/content.js';
@@ -14,11 +15,12 @@ const MAX_SIDE = 1280; // gambar lebih besar diperkecil sebelum dikirim
 const REENCODE_ABOVE_BYTES = 1.5 * 1024 * 1024;
 
 class NvError extends Error {
-  constructor(code, message, { spoken = false, sisa } = {}) {
+  constructor(code, message, { spoken = false, sisa, sederhana } = {}) {
     super(message);
     this.code = code;
     this.spoken = spoken; // sudah dibacakan oleh chrome.tts → panel tidak perlu membacakan ulang
     if (sisa !== undefined) this.sisa = sisa; // sisa kuota saat mode baca berurutan berhenti
+    if (sederhana) this.sederhana = sederhana; // PF-05: deskripsi sederhana tanpa AI sebagai cadangan
   }
 }
 
@@ -403,10 +405,6 @@ async function normalizedImage({ src, dataUrl }) {
   return { base64: bytesToBase64(new Uint8Array(await blob.arrayBuffer())), type };
 }
 
-async function imageToBase64(image) {
-  return (await normalizedImage(image)).base64;
-}
-
 // ---------------------------------------------------------------------------
 // Deteksi objek lokal (PF-05): MediaPipe di dokumen offscreen — gratis, offline, tidak memakai kuota
 // ---------------------------------------------------------------------------
@@ -427,6 +425,30 @@ async function detectImage({ src, dataUrl }) {
   return detectObjects(await normalizedImage({ src, dataUrl }));
 }
 
+const LOCAL_TIMEOUT_MS = 8000; // detektor macet (mis. perangkat sangat lambat) → anggap tidak ada hasil
+// Galat yang boleh diganti deskripsi sederhana: server/AI gagal, kuota habis, offline. Bukan: belum masuk, gambar
+// ditolak, atau AI_BLOCKED (filter keamanan; gambar sengaja tidak dideskripsikan).
+const SIMPLE_FALLBACK_CODES = new Set([
+  'BACKEND_UNREACHABLE', 'TIMEOUT', 'SERVER_ERROR', 'INTERNAL', 'AI_UNAVAILABLE', 'AI_TIMEOUT', 'AI_FAILED', 'AI_BUSY', 'QUOTA_EXCEEDED',
+]);
+
+// [PF-05] Deteksi objek lokal — deteksi yang tidak pernah melempar galat: gagal atau terlalu lama → null
+function localDetect(image) {
+  const timeout = new Promise((resolve) => setTimeout(resolve, LOCAL_TIMEOUT_MS, null));
+  return Promise.race([detectObjects(image).catch(() => null), timeout]);
+}
+
+// [PF-05] Deteksi objek lokal — mengirim hasil kilat ke panel; panel yang memutuskan dibacakan atau tidak (AI < 1 dtk)
+function sendQuick(pending, reqId, sender) {
+  if (typeof reqId !== 'string' || !reqId || reqId.length > 64 || sender?.tab?.id == null) return;
+  const target = sender.documentId ? { documentId: sender.documentId } : { frameId: sender.frameId ?? 0 };
+  pending.then((hasil) => {
+    const text = kalimatKilat(hasil);
+    if (!text) return;
+    chrome.tabs.sendMessage(sender.tab.id, { type: 'NV_QUICK', reqId, text }, target).catch(() => {});
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Memanggil REST API (RF-09, RF-10, RF-11, RF-13)
 // ---------------------------------------------------------------------------
@@ -442,7 +464,8 @@ function pageContext(raw) {
 
 // [RF-09] Mengirim gambar ke AI — memanggil POST /api/v1/descriptions dengan token
 // [RF-10] Menerima & menyimpan deskripsi — menerima deskripsi + sisa kuota dari server
-async function requestDescription({ src, dataUrl, pageUrl, auto, context }, sender) {
+// [PF-05] Deteksi objek lokal — kilat paralel dengan AI (manual), penyaring gambar polos (Baca berurutan), cadangan saat gagal
+async function requestDescription({ src, dataUrl, pageUrl, auto, context, reqId }, sender) {
   const session = await getSession();
   if (auto) {
     if (!['page', 'focus'].includes(auto)) throw new NvError('MESSAGE_REJECTED', 'Pesan tidak dikenal.');
@@ -452,7 +475,17 @@ async function requestDescription({ src, dataUrl, pageUrl, auto, context }, send
     throw new NvError('NOT_LOGGED_IN', await sendToLogin('Anda belum masuk. Halaman masuk dibuka.'), { spoken: true });
   }
   const tts = await getTts();
-  const imageBase64 = await imageToBase64({ src, dataUrl });
+  const image = await normalizedImage({ src, dataUrl });
+  const imageBase64 = image.base64;
+
+  let local = null; // Promise hasil deteksi lokal (manual saja)
+  if (auto === 'page') {
+    // Penyaring: tanpa objek DAN hampir polos → tidak dikirim ke AI, kuota & batas harian tidak terpakai.
+    if (layakDilewati(await localDetect(image))) throw new NvError('AUTO_SKIPPED_PLAIN', 'Gambar hampir polos tanpa benda dikenali, dilewati.');
+  } else if (!auto && (await getSettings()).quickLocal) {
+    local = localDetect(image); // berjalan bersamaan dengan permintaan ke AI
+    sendQuick(local, reqId, sender);
+  }
 
   let data;
   try {
@@ -471,7 +504,10 @@ async function requestDescription({ src, dataUrl, pageUrl, auto, context }, send
     if (err instanceof ApiError && err.status === 401 && !auto) {
       throw new NvError(err.code, await sendToLogin('Sesi berakhir. Halaman masuk dibuka.'), { spoken: true });
     }
-    throw new NvError(err.code || 'SERVER_ERROR', err.message);
+    const code = err.code || 'SERVER_ERROR';
+    // Cadangan PF-05: tidak memanggil server, jadi tidak memotong kuota dan tidak masuk riwayat.
+    const sederhana = local && SIMPLE_FALLBACK_CODES.has(code) ? kalimatSederhana(await local) : null;
+    throw new NvError(code, err.message, { sederhana });
   }
   if (auto) await countAutoUse();
 
@@ -610,6 +646,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         message: err.message || 'Terjadi kesalahan.',
         spoken: Boolean(err.spoken),
         sisa: err.sisa,
+        sederhana: err.sederhana,
       }),
     );
   return true; // respons asinkron

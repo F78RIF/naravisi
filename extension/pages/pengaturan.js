@@ -1,6 +1,6 @@
 // NaraVisi · extension/pages/pengaturan.js
 // Fungsi   : Halaman Pengaturan: bahasa, pintasan, suara, mode otomatis, server, privasi.
-// Kebutuhan: RF-17, RF-18, RF-19, PF-02, RNF-13
+// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, RNF-13
 // Terkait  : pengaturan.html, common.js, backend settingsService.js
 import { apiFetch, apiHost, AUTO_MAX_PER_PAGE, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage, SHORTCUTS_URL, speakGuide } from '../shared/guide.js';
@@ -160,6 +160,9 @@ async function autoSection() {
     'Contoh: "Ada 5 gambar." Gambar tidak dideskripsikan, jadi kuota tidak terpakai dan tidak ada yang dikirim ke server.');
   const otomatis = check('otomatis', 'autoDescribe', 'Baca berurutan: deskripsikan otomatis gambar tanpa teks alternatif',
     `Gambar diproses satu per satu dari atas ke bawah, yang terlihat lebih dulu, lalu lanjut saat Anda menggulir atau membaca. Deskripsi dimasukkan ke teks alternatif gambar, jadi NVDA atau JAWS membacanya saat menelusuri halaman (mis. tombol G). Mengirim gambar ke server dan Google Gemini serta memakai kuota; berhenti saat sisa kuota ${AUTO_RESERVE}.`);
+  // [PF-05] Deteksi objek lokal — sakelar "Deskripsi kilat tanpa AI" (bawaan aktif; tidak mengirim apa pun ke server)
+  const kilat = check('kilat', 'quickLocal', 'Deskripsi kilat tanpa AI',
+    'Sambil menunggu AI, NaraVisi membacakan perkiraan isi gambar dari pendeteksi di komputer Anda, mis. "Kemungkinan berisi: 2 orang, 1 sepeda." Bila server atau AI gagal, kuota habis, atau sedang offline, dibacakan "Deskripsi sederhana (tanpa AI)". Gratis, tidak memakai kuota, dan gambar tidak dikirim ke mana pun untuk ini.');
   const fokus = check('fokus', 'describeOnFocus', 'Deskripsikan saat gambar mendapat fokus keyboard',
     'Saat Tab berhenti di gambar, atau tautan yang isinya hanya gambar, tanpa teks alternatif.');
 
@@ -179,6 +182,8 @@ async function autoSection() {
     save({ greetOnStartup: sapa.input.checked }, sapa.input.checked ? 'Sapaan saat Chrome dibuka diaktifkan.' : 'Sapaan saat Chrome dibuka dimatikan.'));
   umumkan.input.addEventListener('change', () =>
     save({ announceImages: umumkan.input.checked }, umumkan.input.checked ? 'Pengumuman jumlah gambar diaktifkan.' : 'Pengumuman jumlah gambar dimatikan.'));
+  kilat.input.addEventListener('change', () =>
+    save({ quickLocal: kilat.input.checked }, kilat.input.checked ? 'Deskripsi kilat tanpa AI diaktifkan.' : 'Deskripsi kilat tanpa AI dimatikan.'));
 
   // Mengirim gambar ke server → hanya aktif setelah persetujuan.
   for (const [{ input }, key, name] of [[otomatis, 'autoDescribe', 'Baca berurutan'], [fokus, 'describeOnFocus', 'Deskripsi saat fokus']]) {
@@ -213,6 +218,7 @@ async function autoSection() {
     el('h2', { id: 'sec-otomatis' }, 'Otomatis'),
     sapa.node,
     umumkan.node,
+    kilat.node,
     otomatis.node,
     field('otomatis-jumlah', 'Jumlah gambar per halaman (baca berurutan)', jumlah, `1 sampai ${AUTO_MAX_PER_PAGE} gambar. Diproses satu per satu setelah halaman tenang.`),
     fokus.node,

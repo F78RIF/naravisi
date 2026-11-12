@@ -51,7 +51,15 @@ backend.ai.caption = async ({ lang, imageBase64, context }) => {
 const API = `${backend.base}/api/v1`;
 backend.services.config.publicUrl = backend.base; // halaman bayar simulasi di server uji
 
-const solid = (w, h, rgb) => sharp({ create: { width: w, height: h, channels: 3, background: rgb } });
+// Gambar uji = warna utama + pita putih di seperempat kiri. Tidak polos, supaya penyaring PF-05 (gambar hampir polos
+// dilewati Baca berurutan) tidak melewatinya; titik tengah tetap berwarna utama untuk uji warna.
+const polos = (w, h, rgb) => sharp({ create: { width: w, height: h, channels: 3, background: rgb } });
+const solid = (w, h, rgb) => {
+  const pita = Math.max(1, Math.floor(w / 4));
+  return sharp({ create: { width: w, height: h, channels: 3, background: rgb } }).composite([
+    { input: { create: { width: pita, height: h, channels: 3, background: '#ffffff' } }, left: 0, top: 0 },
+  ]);
+};
 const fixtures = {
   '/img/wide.png': { type: 'image/png', body: await solid(400, 250, '#2050e0').png().toBuffer() },
   '/img/photo.jpg': { type: 'image/jpeg', body: await solid(300, 300, '#e03030').jpeg().toBuffer() },
@@ -1832,12 +1840,13 @@ try {
 
   // [PF-05] Deteksi objek lokal — detektor MediaPipe asli dimuat dari berkas extension (CSP wasm-unsafe-eval), sekali saja
   await step('PF-05: MediaPipe lokal berjalan di offscreen; model dimuat sekali lalu dipakai ulang', async () => {
-    const polos = `data:image/jpeg;base64,${(await solid(320, 240, '#3060c0').jpeg().toBuffer()).toString('base64')}`;
-    const detect = () => sw.evaluate((d) => globalThis.naraVisi.detectImage({ dataUrl: d }), polos);
+    const gambarPolos = `data:image/jpeg;base64,${(await polos(320, 240, '#3060c0').jpeg().toBuffer()).toString('base64')}`;
+    const detect = () => sw.evaluate((d) => globalThis.naraVisi.detectImage({ dataUrl: d }), gambarPolos);
     const pertama = await detect();
     const kedua = await detect();
     assert.deepEqual(pertama.objek, []); // gambar polos: tidak ada objek
     assert.equal(pertama.kalimat, '');
+    assert.equal(pertama.polos, true, `variansi ${pertama.variansi}`);
     assert.equal(kedua.muatMs, pertama.muatMs, 'model tidak boleh dimuat ulang');
     assert.ok(kedua.ms < 5000, `deteksi terlalu lama: ${kedua.ms} ms`);
   });

@@ -1105,8 +1105,8 @@ oleh **MediaPipe Tasks Vision** langsung di Chrome pengguna. Model ini hanya bis
 dari 80 kelas COCO ("2 orang, 1 sepeda"), tidak bisa bercerita. Kelebihannya: **gratis, offline, tidak memakai kuota**,
 dan gambar tidak keluar dari komputer pengguna.
 
-Langkah 1 (tahap ini) hanya memasang mesinnya. Pemakaiannya (deskripsi kilat, cadangan saat AI gagal, penyaring gambar
-polos) dikerjakan di Langkah 2.
+Langkah 1 memasang mesinnya; Langkah 2 memakainya untuk tiga hal: **deskripsi kilat**, **cadangan saat AI gagal**, dan
+**penyaring gambar polos** di Mode Baca Berurutan (lihat "Perilaku" di bawah).
 
 ### Kenapa semua berkas disimpan di extension?
 
@@ -1175,4 +1175,94 @@ jumlahnya.
 | Uji asap di Chromium (Playwright), foto `grace_hopper.jpg` | `"1 orang"` (skor 0,98); muat model ±300 ms, deteksi pertama ±185 ms, berikutnya ±70 ms |
 | e2e "PF-05: MediaPipe lokal berjalan di offscreen…" | gambar polos → tanpa objek; `muatMs` sama di panggilan kedua (model tidak dimuat ulang) |
 | Tanpa `wasm-unsafe-eval` | gagal: `CompileError … violates the following Content Security policy directive` (karena itu CSP ditambahkan) |
+
+### Perilaku (Langkah 2)
+
+Pengaturan baru **"Deskripsi kilat tanpa AI"** (`quickLocal`, bawaan **aktif**, Pengaturan → Otomatis) menyalakan kilat
+dan cadangan. Penyaring Baca Berurutan selalu aktif, karena hanya menghemat kuota dan tidak membacakan apa pun.
+
+#### 1. Deskripsi kilat — pengguna menekan Enter
+
+```
+panel (content.js)                  service worker (background.js)              offscreen
+──────────────────                  ──────────────────────────────              ─────────
+Enter → reqId baru, pending
+NV_DESCRIBE {reqId} ──────────────▶ normalizedImage()
+                                    local = localDetect(gambar) ───────────────▶ deteksiObjek()
+                                    sendQuick(local) ─┐                          (paralel)
+                                    apiFetch('/descriptions') ──▶ server + AI
+                    ◀─ NV_QUICK {reqId, "Kemungkinan berisi: 1 orang."} ─┘
+onQuick: tunggu sampai 1 dtk sejak Enter;
+  AI belum menjawab? → bacakan kilat (state.quickSpeech)
+  AI sudah menjawab? → kilat dibuang
+                    ◀─ jawaban AI ─────────
+waitQuick(): tunggu kilat selesai dibacakan (maks. 10 dtk)
+→ tampilkan & bacakan deskripsi lengkap
+```
+
+* **Tanpa tumpang tindih**: `speak()` kini mengembalikan *Promise* yang selesai saat kalimat selesai/dihentikan.
+  Deskripsi lengkap menunggu Promise kilat (`waitQuick`). Tombol S (berhenti) mengakhiri kilat seketika.
+* **AI < 1 detik → kilat dilewati**: `onQuick` menjadwalkan pembacaan pada detik ke-1; saat itu `state.pending` sudah
+  kosong bila AI sudah menjawab, jadi kilat dibuang.
+* **Tidak ada objek → tidak ada kilat.** Kalimatnya disusun `kalimatKilat()` (`shared/deteksi.js`).
+* `reqId` mencegah kilat permintaan lama terbaca untuk gambar lain. Kilat dikirim ke dokumen pengirim saja
+  (`documentId`).
+
+#### 2. Cadangan — server/AI gagal, kuota habis, offline
+
+Bila `apiFetch` gagal dengan kode `BACKEND_UNREACHABLE`, `TIMEOUT`, `SERVER_ERROR`, `INTERNAL`, `AI_UNAVAILABLE`,
+`AI_TIMEOUT`, `AI_FAILED`, `AI_BUSY`, atau `QUOTA_EXCEEDED`, service worker menunggu hasil deteksi lokal (sudah berjalan
+sejak awal) lalu menyertakan `sederhana` pada jawaban galat:
+
+| Hasil lokal | Kalimat (`kalimatSederhana`) |
+|---|---|
+| ada objek | "Deskripsi sederhana (tanpa AI): kemungkinan berisi 2 orang, 1 sepeda." |
+| tanpa objek, gambar polos | "Deskripsi sederhana (tanpa AI): gambar hampir polos, tidak ada benda yang dikenali." |
+| tanpa objek | "Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali." |
+| detektor gagal / > 8 dtk | tidak ada cadangan; pesan galat biasa |
+
+Panel menampilkan kalimat itu dan membacakan **kalimat cadangan + alasan galat** (mis. "… Tidak dapat terhubung ke
+server NaraVisi …"). Tombol Premium tetap muncul bila kuota habis.
+
+* **Tidak memotong kuota**: cadangan tidak memanggil server sama sekali; bila server sempat memesan kuota lalu AI gagal,
+  server sudah mengembalikannya (RNF-06).
+* **Tidak disimpan sebagai riwayat AI**: tidak ada `riwayat_id`, tidak masuk cache panel, tidak disuntik ke `alt`.
+  Enter lagi pada gambar yang sama mencoba AI lagi. Tombol Laporkan menjelaskan bahwa deskripsi tanpa AI tidak bisa
+  dilaporkan.
+* **Tidak dipakai** untuk belum masuk / sesi berakhir (tetap dibuka halaman masuk), gambar ditolak, dan `AI_BLOCKED`
+  (filter keamanan sengaja tidak mendeskripsikan gambar itu).
+
+#### 3. Penyaring — Mode Baca Berurutan
+
+Untuk permintaan otomatis `auto: 'page'`, sebelum ke server: `localDetect()` → bila **tidak ada objek DAN gambar
+hampir polos** (`layakDilewati`), service worker melempar `AUTO_SKIPPED_PLAIN`. Tidak ada permintaan ke server, kuota
+dan batas harian tidak terpakai. Di panel, `pump()` menganggapnya "dilewati", mengurangi target bila perlu, dan lanjut
+ke gambar berikutnya (bukan berhenti). Jumlahnya dilaporkan sebagai `polos` di hasil `NV_AUTO_START`.
+
+**Hampir polos** = gambar diperkecil ke 64×64 px, lalu rata-rata simpangan baku kanal R, G, B < **12** (skala 0–255)
+(`variansiWarna`, `AMBANG_POLOS`). Foto biasa bernilai puluhan; latar satu warna ±0–3.
+
+**Pemilihan manual (Enter) selalu dikirim ke AI**, sepolos apa pun gambarnya. Mode "deskripsi saat fokus" juga tidak
+disaring.
+
+#### Privasi: hanya jumlah "orang"
+
+Model hanya punya kelas `person`. NaraVisi menyebut jumlahnya ("2 orang") dan tidak pernah menebak siapa, umur, jenis
+kelamin, atau ekspresi.
+
+#### Gambar uji e2e
+
+Gambar uji di `e2e/run.mjs` dulu satu warna polos dan kini akan dilewati penyaring. `solid()` sekarang memberi pita putih
+di seperempat kiri (titik tengah tetap berwarna utama), dan `polos()` dipakai untuk gambar yang memang polos.
+
+#### Bukti (Langkah 2)
+
+| Pemeriksaan | Hasil |
+|---|---|
+| Uji coba Playwright: detektor asli, AI palsu lambat 2,5 dtk, foto 1 orang | urutan bacaan: "Kemungkinan berisi: 1 orang." → "Deskripsi AI lengkap." |
+| Sama, AI menjawab 150 ms | hanya "Deskripsi AI lengkap." (kilat dilewati) |
+| Server dimatikan | "Deskripsi sederhana (tanpa AI): kemungkinan berisi 1 orang. Tidak dapat terhubung …"; kuota 9 → 9 |
+| Semua tes (backend, ai-service, e2e) | lulus, termasuk ALUR MANUAL Alt+Shift+K |
+
+Tes otomatis khusus perilaku ini (detektor tiruan) ditambahkan di Langkah 3.
 

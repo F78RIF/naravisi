@@ -5,11 +5,12 @@
 // Kebutuhan: PF-05
 // Terkait  : offscreen.js (penerima pesan), shared/deteksi.js, shared/label-id.json, background.js (detectObjects)
 
-import { gabungkanObjek, kalimatObjek, SKOR_MIN } from '../shared/deteksi.js';
+import { AMBANG_POLOS, gabungkanObjek, kalimatObjek, SKOR_MIN, variansiWarna } from '../shared/deteksi.js';
 
 const VENDOR = '../vendor/mediapipe';
 const MODEL_URL = new URL('../vendor/models/efficientdet_lite0_int8.tflite', import.meta.url).href;
 const MAKS_HASIL = 20; // kotak terbanyak yang diminta dari model per gambar
+const SISI_POLOS = 64; // gambar diperkecil ke 64×64 px sebelum keragaman warnanya diukur
 
 let siap = null; // Promise<{ detector, kamus }> — dibuat sekali, dipakai ulang
 
@@ -42,10 +43,18 @@ function muatDetektor() {
   return siap;
 }
 
+// [PF-05] Deteksi objek lokal — keragaman warna gambar kecil 64×64 (untuk penyaring gambar hampir polos)
+function ukurVariansi(bitmap) {
+  const canvas = new OffscreenCanvas(SISI_POLOS, SISI_POLOS);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0, SISI_POLOS, SISI_POLOS);
+  return variansiWarna(ctx.getImageData(0, 0, SISI_POLOS, SISI_POLOS).data);
+}
+
 // [PF-05] Deteksi objek lokal — mendeteksi objek pada gambar yang sudah dinormalisasi service worker
 /**
  * @param {string} dataUrl  gambar (JPEG/PNG/WebP/GIF) dari service worker, sudah ≤ 1280 px
- * @returns {Promise<{objek: Array<{nama, jumlah, skor}>, kalimat: string, ms: number, muatMs: number}>}
+ * @returns {Promise<{objek: Array<{nama, jumlah, skor}>, kalimat: string, polos: boolean, variansi: number, ms: number, muatMs: number}>}
  */
 export async function deteksiObjek(dataUrl) {
   const { detector, kamus, muatMs } = await muatDetektor();
@@ -59,7 +68,8 @@ export async function deteksiObjek(dataUrl) {
       score: d.categories?.[0]?.score ?? 0,
     }));
     const objek = gabungkanObjek(mentah, kamus);
-    return { objek, kalimat: kalimatObjek(objek), ms, muatMs };
+    const variansi = Math.round(ukurVariansi(bitmap) * 10) / 10;
+    return { objek, kalimat: kalimatObjek(objek), polos: variansi < AMBANG_POLOS, variansi, ms, muatMs };
   } finally {
     bitmap.close();
   }

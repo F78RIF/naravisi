@@ -18,6 +18,7 @@ export const DEFAULTS = Object.freeze({
   autoMax: 3, // maks. gambar per halaman (1–AUTO_MAX_PER_PAGE)
   describeOnFocus: false, // deskripsikan gambar yang mendapat fokus Tab → wajib persetujuan
   autoExclude: DEFAULT_AUTO_EXCLUDE,
+  quickLocal: true, // [PF-05] "Deskripsi kilat tanpa AI": perkiraan isi dari detektor lokal + cadangan saat AI gagal
 });
 
 export const AUTO_RESERVE = 2; // mode otomatis berhenti bila sisa kuota ≤ 2 (disisakan untuk pilihan manual)
