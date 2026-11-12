@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Menjalankan semua tes otomatis NaraVisi: backend (node --test), ai-service (pytest), e2e (Playwright).
+  Menjalankan semua tes otomatis NaraVisi: backend (node --test), ai-service (pytest), unit extension (node --test), e2e (Playwright).
 
 .DESCRIPTION
   Tidak butuh MySQL, internet, atau kunci Gemini: backend memakai SQLite di memori, AI dipalsukan.
@@ -35,6 +35,7 @@ function Jalankan([string]$nama, [string]$folder, [scriptblock]$perintah) {
 
 Jalankan 'backend (node --test)' 'backend' { npm test }
 Jalankan 'ai-service (pytest)' 'ai-service' { & $py -m pytest -q }
+Jalankan 'extension unit (node --test)' 'e2e' { npm run test:unit }
 if (-not $TanpaE2E) { Jalankan 'e2e (Playwright)' 'e2e' { npm test } }
 
 Write-Host "`n=== Ringkasan ===" -ForegroundColor Cyan

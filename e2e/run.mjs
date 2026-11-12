@@ -25,6 +25,7 @@ const uiDir = path.join(shotsDir, 'ui-v2'); // salinan terpilih disimpan di docs
 mkdirSync(uiDir, { recursive: true });
 
 const { startTestApp, ADMIN } = await import('../backend/test/support/testApp.js');
+const { Errors } = await import('../backend/src/lib/errors.js');
 
 // ---------------------------------------------------------------------------
 // Backend NaraVisi (rute & service asli) + situs uji berisi gambar
@@ -39,10 +40,12 @@ backend.ai.caption = async ({ lang, imageBase64, context }) => {
   backend.ai.lastLang = lang;
   backend.ai.lastImage = imageBase64;
   backend.ai.lastContext = context;
+  if (backend.ai.fail) throw backend.ai.fail; // PF-05: meniru AI gagal (kuota harus dikembalikan server)
   backend.ai.inFlight += 1; // dipakai uji "baca berurutan tidak pernah paralel"
   backend.ai.maxInFlight = Math.max(backend.ai.maxInFlight, backend.ai.inFlight);
   if (backend.ai.delayMs) await new Promise((r) => setTimeout(r, backend.ai.delayMs));
   backend.ai.inFlight -= 1;
+  backend.ai.doneAt = Date.now(); // PF-05: kapan AI menjawab (uji tanpa tumpang tindih suara)
   const mime = Buffer.from(imageBase64, 'base64')[0] === 0xff ? 'JPEG' : 'PNG';
   const fallback = backend.ai.nextFallback === true; // meniru Gemini 429 → jawaban dari cadangan BLIP
   backend.ai.nextFallback = false;
@@ -159,6 +162,15 @@ const vectorPage = `<!doctype html><html lang="id"><head><meta charset="utf-8"><
   <span style="display:inline-block;width:20px;height:20px;background:url(/img/sprite.png)"></span>
   <div style="width:300px;height:100px;background:linear-gradient(red, blue)"></div>
 </body></html>`;
+// PF-05: halaman deteksi objek lokal (4 gambar berbeda → tidak saling memakai cache) dan halaman 2 gambar polos.
+for (const [name, rgb] of [['pf-1.jpg', '#b04030'], ['pf-2.jpg', '#30b040'], ['pf-3.jpg', '#3040b0'], ['pf-4.jpg', '#b0b030']]) {
+  fixtures[`/img/${name}`] = { type: 'image/jpeg', body: await solid(320, 220, rgb).jpeg().toBuffer() };
+}
+for (const name of ['polos-1.jpg', 'polos-2.jpg']) {
+  fixtures[`/img/${name}`] = { type: 'image/jpeg', body: await polos(320, 220, '#d0d0d0').jpeg().toBuffer() };
+}
+const pf05Page = html('Deteksi Lokal', `<main>${[1, 2, 3, 4].map((i) => `<img id="pf${i}" src="/img/pf-${i}.jpg" width="320" height="220">`).join('')}</main>`);
+const pf05AutoPage = html('Gambar Polos', '<main><img id="polos1" src="/img/polos-1.jpg" width="320" height="220"><img id="polos2" src="/img/polos-2.jpg" width="320" height="220"></main>');
 const site = http.createServer((req, res) => {
   if (req.url.startsWith('/rusak/')) {
     res.writeHead(500, { 'content-type': 'text/html' });
@@ -172,7 +184,7 @@ const site = http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(testPage);
   }
-  const pages = { '/urutan-dom.html': orderDomPage, '/urutan-grid.html': orderGridPage, '/alt.html': altPage, '/panjang.html': longPage, '/artikel.html': articlePage, '/artikel-2.html': articlePage, '/artikel-3.html': articlePage, '/masuk.html': passwordPage, '/tautan.html': linkPage };
+  const pages = { '/urutan-dom.html': orderDomPage, '/urutan-grid.html': orderGridPage, '/alt.html': altPage, '/panjang.html': longPage, '/artikel.html': articlePage, '/artikel-2.html': articlePage, '/artikel-3.html': articlePage, '/masuk.html': passwordPage, '/tautan.html': linkPage, '/pf05.html': pf05Page, '/pf05-polos.html': pf05AutoPage };
   if (pages[req.url]) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(pages[req.url]);
@@ -1739,6 +1751,172 @@ try {
   await adm.locator('.report').first().waitFor();
   await adm.screenshot({ path: path.join(shotsDir, '08-admin-laporan.png'), fullPage: true });
   await adm.close();
+
+  // =========================================================================
+  // [PF-05] Deteksi objek lokal — diuji dengan detektor tiruan (globalThis.naraVisi.fakeDetector) agar hasilnya pasti
+  section('Deteksi objek lokal (PF-05)');
+  const pfUser = await backend.register({ email: 'pf05@uji.id' });
+  const pfUserId = (await backend.db.get('SELECT user_id FROM users WHERE email = ?', ['pf05@uji.id'])).user_id;
+  await sw.evaluate(async (session) => {
+    await chrome.storage.local.set({ nvSession: session });
+    await chrome.storage.local.remove('nvTts');
+    await chrome.storage.sync.set({ quickLocal: true, autoDescribe: false, describeOnFocus: false });
+  }, { token: pfUser.token, user: pfUser.user });
+  const DUA = { objek: [{ nama: 'orang', jumlah: 2, skor: 0.9 }, { nama: 'sepeda', jumlah: 1, skor: 0.8 }], kalimat: '2 orang, 1 sepeda', polos: false };
+  const KILAT = 'Kemungkinan berisi: 2 orang, 1 sepeda.';
+  const SEDERHANA = 'Deskripsi sederhana (tanpa AI): kemungkinan berisi 2 orang, 1 sepeda.';
+  const LENGKAP = 'Deskripsi uji untuk gambar JPEG.';
+  const setFake = (fake) => sw.evaluate((f) => { globalThis.naraVisi.fakeDetector = f; }, fake);
+  const fakeCalls = () => sw.evaluate(() => globalThis.naraVisi.fakeDetector?.calls ?? 0);
+  const sisaKuota = async () => {
+    const b = (await backend.api('GET', '/api/v1/me', { token: pfUser.token })).body;
+    return (b.kuota ?? b.data?.kuota ?? b.user?.kuota).sisa;
+  };
+  const jumlahRiwayat = async () => (await backend.db.get('SELECT COUNT(*) AS n FROM riwayat_deskripsi WHERE user_id = ?', [pfUserId])).n;
+  const pf = await context.newPage();
+  watch(pf);
+  await pf.goto(`${SITE}/pf05.html`);
+  await toggleOn(`${SITE}/pf05.html`);
+  const pfHost = pf.locator('#naravisi-host');
+  const pfStatus = pf.locator('#nv-status');
+  const pfText = pf.locator('#nv-text');
+  const pfLog = async () => JSON.parse((await pfHost.getAttribute('data-spoken-log')) || '[]');
+  // Catatan bacaan panel hanya menyimpan 6 kalimat terakhir → dikosongkan sebelum skenario yang menghitungnya.
+  const resetLog = () => pf.evaluate(() => { document.getElementById('naravisi-host').dataset.spokenLog = '[]'; });
+  /** Pilih gambar ke-n (1..4) di daftar panel lalu tekan Enter. */
+  async function pilih(n) {
+    await pf.locator('#nv-list').focus();
+    await pf.keyboard.press('Home');
+    for (let i = 1; i < n; i++) await pf.keyboard.press('ArrowDown');
+    await pf.keyboard.press('Enter');
+  }
+
+  await step('PF-05: AI lambat → "Kemungkinan berisi: …" dulu, lalu deskripsi lengkap tanpa tumpang tindih', async () => {
+    await setFake({ hasil: DUA, delayMs: 0 });
+    backend.ai.delayMs = 1300; // kilat mulai di detik ke-1, AI menjawab saat kilat masih dibacakan
+    backend.ai.doneAt = 0;
+    const samples = [];
+    await pilih(1);
+    for (let i = 0; i < 300; i++) {
+      const at = Date.now();
+      const [last, tts] = await Promise.all([pfHost.getAttribute('data-last-spoken'), pfHost.getAttribute('data-tts')]);
+      samples.push({ at, last, tts });
+      if (last === LENGKAP) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    const log = await pfLog();
+    assert.deepEqual(log.slice(-2), [KILAT, LENGKAP]);
+    assert.equal(await pfText.innerText(), LENGKAP);
+    // Setelah AI menjawab, kilat masih terdengar dan belum dipotong deskripsi lengkap.
+    const ai = backend.ai.doneAt;
+    assert.ok(ai > 0);
+    const tetap = samples.filter((x) => x.at > ai + 150 && x.last === KILAT && ['speaking', 'queued'].includes(x.tts));
+    assert.ok(tetap.length > 0, `kilat harus masih dibacakan setelah AI menjawab: ${JSON.stringify(samples.slice(-8))}`);
+  });
+
+  await step('PF-05: AI menjawab < 1 detik → deskripsi kilat dilewati', async () => {
+    backend.ai.delayMs = 0;
+    await resetLog();
+    const calls = await fakeCalls();
+    await pilih(2);
+    await pfStatus.filter({ hasText: 'Deskripsi gambar 2 siap.' }).waitFor({ timeout: 10000 });
+    await new Promise((r) => setTimeout(r, 1300)); // lewat batas 1 detik: kilat tidak boleh menyusul
+    assert.deepEqual(await pfLog(), [LENGKAP]);
+    assert.equal(await fakeCalls(), calls + 1); // detektor tetap berjalan, hanya kilatnya yang dilewati
+  });
+
+  await step('PF-05: AI gagal → "Deskripsi sederhana (tanpa AI)"; kuota & riwayat tidak berubah; Enter lagi mencoba AI', async () => {
+    const sisa = await sisaKuota();
+    const riwayat = await jumlahRiwayat();
+    const calls = backend.ai.calls;
+    backend.ai.fail = Errors.aiUnavailable();
+    await pilih(3);
+    await pfText.filter({ hasText: SEDERHANA }).waitFor({ timeout: 10000 });
+    backend.ai.fail = null;
+    assert.equal(backend.ai.calls, calls + 1);
+    assert.match(await pfHost.getAttribute('data-last-spoken'), new RegExp(`^${SEDERHANA.replace(/[().]/g, '\\$&')} \\S`));
+    assert.equal(await sisaKuota(), sisa, 'kuota tidak boleh berkurang');
+    assert.equal(await jumlahRiwayat(), riwayat, 'cadangan tidak boleh tersimpan sebagai riwayat AI');
+    assert.equal(await pf.locator('#pf3').getAttribute('alt'), null, 'cadangan tidak disuntik ke alt');
+    await pf.keyboard.press('Enter'); // tidak di-cache → AI dicoba lagi
+    await pfText.filter({ hasText: LENGKAP }).waitFor({ timeout: 10000 });
+    assert.equal(backend.ai.calls, calls + 2);
+    assert.equal(await sisaKuota(), sisa - 1);
+  });
+
+  await step('PF-05: server mati → cadangan dibacakan bersama alasannya, kuota tidak berkurang', async () => {
+    const sisa = await sisaKuota();
+    await sw.evaluate(() => chrome.storage.sync.set({ apiBase: 'http://127.0.0.1:9/api/v1' }));
+    try {
+      await pilih(4);
+      await pfText.filter({ hasText: SEDERHANA }).waitFor({ timeout: 15000 });
+      const spokenText = await pfHost.getAttribute('data-last-spoken');
+      assert.ok(spokenText.startsWith(`${SEDERHANA} Tidak dapat terhubung ke server NaraVisi`), spokenText);
+      await pfStatus.filter({ hasText: 'Tidak dapat terhubung ke server' }).waitFor();
+    } finally {
+      await sw.evaluate((api) => chrome.storage.sync.set({ apiBase: api }), API);
+    }
+    assert.equal(await sisaKuota(), sisa);
+  });
+
+  await step('PF-05: Pengaturan "Deskripsi kilat tanpa AI" (bawaan aktif) dimatikan → tanpa kilat, tanpa cadangan, detektor tidak dipanggil', async () => {
+    const set = await context.newPage();
+    await set.goto(extPage('pages/pengaturan.html'));
+    const box = set.getByLabel('Deskripsi kilat tanpa AI');
+    await box.waitFor();
+    assert.equal(await box.isChecked(), true);
+    await box.uncheck();
+    await set.locator('text=Deskripsi kilat tanpa AI dimatikan.').first().waitFor();
+    assert.equal(await sw.evaluate(async () => (await chrome.storage.sync.get('quickLocal')).quickLocal), false);
+    await set.close();
+    try {
+      const calls = await fakeCalls();
+      await resetLog();
+      backend.ai.delayMs = 1300;
+      await pilih(4); // gambar 4 belum punya deskripsi AI (sebelumnya hanya cadangan)
+      await pfText.filter({ hasText: LENGKAP }).waitFor({ timeout: 10000 });
+      backend.ai.delayMs = 0;
+      assert.deepEqual(await pfLog(), [LENGKAP]);
+      await sw.evaluate(() => chrome.storage.sync.set({ apiBase: 'http://127.0.0.1:9/api/v1' }));
+      await pf.reload(); // cache panel kosong
+      await toggleOn(`${SITE}/pf05.html`);
+      await pilih(1);
+      await pfStatus.filter({ hasText: 'Tidak dapat terhubung ke server' }).waitFor({ timeout: 15000 });
+      assert.doesNotMatch(await pfHost.getAttribute('data-last-spoken'), /Deskripsi sederhana/);
+      assert.equal(await fakeCalls(), calls, 'detektor lokal tidak boleh dipanggil saat pengaturan mati');
+    } finally {
+      backend.ai.delayMs = 0;
+      await sw.evaluate((api) => chrome.storage.sync.set({ apiBase: api, quickLocal: true }), API);
+    }
+  });
+
+  await step('PF-05: Baca berurutan melewati gambar hampir polos tanpa objek (tanpa AI, tanpa kuota); pilihan manual tetap ke AI', async () => {
+    await setFake({ hasil: { objek: [], kalimat: '', polos: true }, delayMs: 0 });
+    await sw.evaluate(() => chrome.storage.sync.set({ autoDescribe: true, autoMax: 3 }));
+    const sisa = await sisaKuota();
+    const calls = backend.ai.calls;
+    try {
+      const hit = await visitAndWaitAuto(pf, `${SITE}/pf05-polos.html`);
+      assert.equal(hit.result, 'done');
+      assert.equal(hit.described, 0);
+      assert.equal(hit.polos, 2);
+      assert.equal(backend.ai.calls, calls, 'gambar polos tidak boleh dikirim ke AI');
+      assert.equal(await sisaKuota(), sisa);
+      assert.equal(await pf.locator('#polos1').getAttribute('alt'), null);
+    } finally {
+      await sw.evaluate(() => chrome.storage.sync.set({ autoDescribe: false }));
+    }
+    await toggleOn(`${SITE}/pf05-polos.html`);
+    await pilih(1);
+    await pfText.filter({ hasText: LENGKAP }).waitFor({ timeout: 10000 });
+    assert.equal(backend.ai.calls, calls + 1);
+    assert.equal(await sisaKuota(), sisa - 1);
+  });
+
+  await setFake(null);
+  backend.ai.delayMs = 0;
+  backend.ai.fail = null;
+  await pf.close();
 
   // =========================================================================
   section('Kondisi gagal (RNF-06, RNF-12)');

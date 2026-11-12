@@ -27,6 +27,7 @@ pengujian.
 | 12 | Dataset evaluasi sendiri + few-shot Gemini | SRS 2.7 (keterlibatan pengguna), SDD lampiran evaluasi | – | 27 Okt |
 | 13 | Upgrade FastAPI 0.115 → 0.162, pillow 13; batas waktu AI 25 dtk; token Gemini 4096 | SDD 2.4 teknologi | ADR-27 | 16 Okt, 1–2 Nov |
 | 14 | Kode galat API baru | SDD antarmuka API | ADR-25, ADR-26 | 1–2 Nov |
+| 15 | **PF-05 Deteksi objek lokal** (MediaPipe di extension): deskripsi kilat, cadangan tanpa AI, penyaring gambar polos; pengaturan "Deskripsi kilat tanpa AI"; CSP `wasm-unsafe-eval` | SRS 2.5, 3.1, RF-09/RF-11/RF-12, RNF-04/RNF-12/RNF-13, fitur tambahan; SDD 2.4, 3.x arsitektur & sequence UC-GBR-04 | – | 12 Nov |
 
 ## 2. Rincian per bagian SRS
 
@@ -49,6 +50,10 @@ pengujian.
 | RF-30 / UC-ADM-04 | konfirmasi lalu hapus; Admin tidak bisa menghapus diri | Konfirmasi dengan **mengetik email pengguna** (diperiksa ulang di server); Admin aktif terakhir tidak bisa dihapus; riwayat dihapus, transaksi dianonimkan, laporan yang ditinjau dikosongkan peninjaunya, akun dihapus — **semua dalam satu transaksi** | Penghapusan tidak bisa dibatalkan, jadi harus disengaja dan utuh | `premiumAdmin.test.js` "RF-30: hapus dalam SATU transaksi"; e2e "RF-30" |
 | RNF-02 | WCAG 2.1, kontrol berlabel, live region | Diuji otomatis dengan **axe-core** (WCAG 2.0/2.1/2.2 A & AA) di 9 tampilan; satu pelanggaran WCAG 2.5.3 ditemukan & diperbaiki (C-13) | Bukti yang bisa diulang | `docs/PENGUJIAN.md` 3c |
 | RNF-04 | ≤ 5 detik | **Tidak berubah.** Hasil ukur: BLIP memenuhi (p50 2,8 dtk), Gemini belum (p50 10,2 dtk) karena model "berpikir" | Dicatat apa adanya | `docs/PENGUJIAN.md` M-01 |
+| RF-09, RF-11, RF-12 (PF-05) | gambar dikirim ke AI; deskripsi tampil & dibacakan | Saat Enter, extension juga menjalankan **deteksi objek lokal** (EfficientDet-Lite0, 80 kelas COCO, skor ≥ 0,5, maks. 5 jenis, label bahasa Indonesia). Bila AI belum menjawab setelah 1 dtk dibacakan "Kemungkinan berisi: 2 orang, 1 sepeda.", lalu deskripsi lengkap menyusul tanpa memotong. **Gambar tetap dikirim ke AI**; RF tidak berubah makna | Pengguna tunanetra mendapat gambaran awal tanpa menunggu 5–10 dtk | e2e "PF-05: AI lambat …", "AI menjawab < 1 detik …"; `e2e/unit/deteksi.test.mjs` |
+| RNF-12 / RNF-06 (PF-05) | pesan jelas saat AI/server mati | Pesan galat tetap dibacakan, **didahului** "Deskripsi sederhana (tanpa AI): …" dari detektor lokal (server/AI gagal, kuota habis, offline). Tidak memotong kuota, tidak masuk riwayat, tidak disuntik ke `alt`. Tidak dipakai untuk belum masuk & `AI_BLOCKED` | Pengguna tetap mendapat informasi saat layanan mati | e2e "PF-05: AI gagal …", "server mati …" |
+| Fitur tambahan PF-02 + PF-05 | – | Baca berurutan **melewati** gambar tanpa objek dan hampir polos (simpangan baku warna < 12 pada 64×64 px) sebelum mengirim ke server; pemilihan manual tetap ke AI | Hemat kuota untuk gambar latar/pemisah | e2e "PF-05: Baca berurutan melewati …" |
+| RNF-13 (PF-05) | gambar tidak disimpan di server | Deteksi lokal berjalan di dokumen offscreen extension; gambar **tidak dikirim ke mana pun** untuk deteksi, model & wasm disimpan di extension (tidak diunduh saat berjalan). Hanya jumlah "orang" yang disebut, tanpa menebak identitas | Privasi | `docs/ALUR.md` Tahap 13 |
 | RNF-10 | hak akses per peran | Ditambah tes yang memanggil **setiap** rute Admin sebagai pengguna (403) dan tanpa login (401); peran dibaca dari database pada setiap permintaan | Mencegah rute Admin baru lupa dilindungi | `premiumAdmin.test.js` "RNF-10: SETIAP rute …" |
 
 ## 3. Rincian per bagian SDD
@@ -66,6 +71,8 @@ pengujian.
 | 4.1 ERD `pengaturan_aksesibilitas` | `pintasan_keyboard` default `'Alt+Shift+N'` | Default **`'Alt+Shift+K'`** | ADR-23 |
 | Migrasi | – | Basis data lama ditingkatkan otomatis saat backend start: hanya **menambah** kolom yang boleh NULL (`backend/src/db/migrate.js`), data lama tetap | – |
 | Antarmuka API | daftar endpoint v1.1 | Endpoint sama. Kontrak baru: `DELETE /admin/users/:id` wajib body `{konfirmasi_email}` dan mengembalikan `{dihapus, riwayat_dihapus, transaksi_dianonimkan}`; kode galat baru `LAST_ADMIN` (409), `PAYMENT_MISMATCH` (400), `PAYMENT_UNCONFIRMED` (409), `AI_BLOCKED` (422). Lihat `docs/API.md` | ADR-25, ADR-26 |
+| 2.4 Teknologi — extension (PF-05) | JavaScript MV3 | Ditambah **MediaPipe Tasks Vision 0.10.21** (WebAssembly SIMD) + model **EfficientDet-Lite0 int8** (Apache-2.0) disimpan di `extension/vendor/` (+13,9 MB terurai, +6,1 MB ZIP); CSP extension `script-src 'self' 'wasm-unsafe-eval'` | – |
+| 3.x Arsitektur & sequence UC-GBR-04 (PF-05) | content script → service worker → backend | Service worker menormalisasi gambar sekali, lalu **paralel**: (a) dokumen offscreen menjalankan `ObjectDetector` (model dimuat sekali), hasil dikirim ke panel sebagai `NV_QUICK`; (b) `POST /descriptions`. Panel membacakan kilat bila AI > 1 dtk dan mengantrekan deskripsi lengkap. Galat API tertentu → jawaban galat membawa `sederhana`. Mode `auto: 'page'` → galat `AUTO_SKIPPED_PLAIN` bila gambar polos tanpa objek. Backend & API **tidak berubah** | – |
 | Keamanan | HTTPS/TLS, JWT HS256, scrypt | Ditambah: batas body 32 KB (kecuali `/descriptions`), CSP & `X-Frame-Options` di halaman HTML, CORS dibatasi ke origin extension, service worker menolak pengirim asing, kunci Gemini disamarkan di log, pemindai rahasia `scripts/pindai_rahasia.py` | – |
 
 ## 4. Yang sengaja tidak berubah
@@ -84,3 +91,4 @@ pengujian.
 4. SDD ERD: tambah kolom `jenis_gambar`, `provider`, `kategori`; ubah default `pintasan_keyboard`.
 5. SDD sequence: perbarui UC-GBR-04 (router Gemini → BLIP), pembayaran (tiga lapis), dan hapus pengguna Admin (satu transaksi).
 6. Lampiran perubahan v1.1 → v1.2: rujuk dokumen ini dan ADR-21..ADR-27.
+7. SRS 3.1 & fitur tambahan: tambahkan **PF-05 Deteksi objek lokal** (kilat, cadangan tanpa AI, penyaring Baca berurutan, pengaturan "Deskripsi kilat tanpa AI" bawaan aktif); SDD 2.4 & 3.x: komponen MediaPipe di dokumen offscreen dan sequence paralel di atas; THIRD_PARTY_NOTICES: MediaPipe & EfficientDet-Lite0 (Apache-2.0).

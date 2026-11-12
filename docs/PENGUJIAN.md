@@ -8,7 +8,8 @@ Versi kode: 1.1.0 · Tanggal: 10 Oktober 2026 (diperbarui di Fase 7, 16 Oktober,
 |---|---|---|---|---|
 | Unit + integrasi API (backend) | `backend/test/` | 121 tes | **121 lulus** · cakupan baris **94,04%**, cabang 88,96%, fungsi 95,22% | `cd backend && npm test` (cakupan: `node --test --experimental-test-coverage "test/**/*.test.js"`) |
 | Layanan AI (logika, Gemini, endpoint, evaluasi) | `ai-service/tests/` | 85 tes + 13 subtes | **85 lulus** | `cd ai-service && .venv\Scripts\python -m pytest` |
-| End-to-end extension + backend + Admin | `e2e/run.mjs` | 113 skenario | **113 lulus** | `cd e2e && npm install && npm test` |
+| End-to-end extension + backend + Admin | `e2e/run.mjs` | 120 skenario | **120 lulus** (12 Nov 2026, termasuk 7 skenario PF-05) | `cd e2e && npm install && npm test` |
+| Unit extension — deteksi objek lokal (PF-05) | `e2e/unit/deteksi.test.mjs` | 10 tes | **10 lulus** | `cd e2e && npm run test:unit` |
 | Audit aksesibilitas axe-core 4.14.0 (di dalam E2E) | `e2e/run.mjs` (`axeAudit`) | 15 audit, 39 aturan WCAG 2.x A/AA | **0 pelanggaran** | ikut `npm test` di `e2e/` |
 | Kinerja non-AI (p50/p95) | `backend/scripts/bench.js` | 10 endpoint × 200 (login × 50) | p95 maks. **67,9 ms** (≤ 2 dtk) | `cd backend && node --no-warnings scripts/bench.js` |
 | `npm audit` | `backend/`, `e2e/` | – | **0 kerentanan** | `npm audit` |
@@ -179,6 +180,48 @@ menyulitkan pengguna perintah suara. Perbaikan (C-13): satu spasi di antara judu
 dibacakan NVDA (`aria-label`) tidak berubah.
 
 Audit otomatis **tidak** menggantikan uji dengan pembaca layar sungguhan (M-03) dan pengguna tunanetra (M-05).
+
+### 3d. Deteksi objek lokal (PF-05) — 12 November 2026
+
+**Tes otomatis**
+
+| Jenis | Skenario | Yang dibuktikan |
+|---|---|---|
+| Unit (`e2e/unit/deteksi.test.mjs`) | terjemahan (2), ambang skor, penggabungan (3), identitas, penyaring (2), kalimat | 80 label model ⇔ 80 entri `label-id.json`; label tak dikenal (`???`, `__proto__`) tidak disebut; skor 0,49 dibuang, 0,5 diambil; "2 orang, 1 mobil, 1 sepeda"; maks. 5 jenis; gambar polos/derau kecil < 12, pita putih ≥ 12; dilewati hanya bila tanpa objek **dan** polos |
+| e2e, detektor **asli** | "MediaPipe lokal berjalan di offscreen" | wasm + model dimuat dari extension (CSP), model tidak dimuat ulang |
+| e2e, detektor **tiruan** (`globalThis.naraVisi.fakeDetector`) | AI lambat 1,3 dtk | urutan bacaan `Kemungkinan berisi: 2 orang, 1 sepeda.` → deskripsi lengkap; setelah AI menjawab, kilat **masih** dibacakan (tidak dipotong) |
+| | AI < 1 dtk | hanya deskripsi lengkap (detektor tetap jalan, kilat dilewati) |
+| | AI gagal (`AI_UNAVAILABLE`) | "Deskripsi sederhana (tanpa AI): …" + alasan; **sisa kuota & jumlah riwayat sama**; `alt` tidak diubah; Enter lagi → AI dicoba lagi |
+| | server mati | cadangan + "Tidak dapat terhubung …"; kuota sama |
+| | pengaturan dimatikan (lewat halaman Pengaturan) | tanpa kilat, tanpa cadangan, detektor **tidak dipanggil** |
+| | Baca berurutan, 2 gambar polos | `described 0`, `polos 2`, AI tidak dipanggil, kuota sama; Enter manual pada gambar polos → tetap ke AI |
+
+**Waktu deteksi** (detektor asli, `node scripts/ukur-deteksi-lokal.mjs . ai-service/eval/data/images`, Chromium 141 headless, CPU, i5-11400H; 9 foto dataset evaluasi
+`ai-service/eval/data/images` × 3 putaran):
+
+| Ukuran | Hasil |
+|---|---|
+| Muat model pertama kali (impor bundle + kompilasi wasm + model) | 216 ms |
+| Deteksi pertama (termasuk pemanasan) | 159 ms; total dari service worker 520 ms |
+| Deteksi berikutnya `detector.detect()` (n = 26) | p50 **67 ms**, p95 **75 ms** |
+| Total per gambar (normalisasi → pesan offscreen → deteksi → ringkasan) | p50 **77 ms**, p95 **91 ms** |
+
+Contoh hasil: "1 orang", "1 laptop", "1 gajah", "5 orang"; 4 dari 9 foto tanpa objek COCO (pemandangan, teks). Variansi
+warna 9 foto: 33,5–73,0, jauh di atas ambang 12, jadi **tidak ada foto asli yang dianggap polos**.
+
+Dengan kilat aktif, gambaran awal terdengar sekitar 1 dtk setelah Enter (sengaja menunggu 1 dtk agar tidak
+bertumpuk dengan jawaban AI yang cepat), dibandingkan p50 Gemini 10,2 dtk di M-01.
+
+**Tambahan ukuran extension** (dihitung dari folder `extension/`, ZIP deflate level 9 seperti `paket_extension.py`):
+
+| | Berkas | Terurai | ZIP |
+|---|---|---|---|
+| Sebelum PF-05 (`6a0df59`) | 37 | 0,23 MB | 0,11 MB |
+| Sesudah PF-05 | 44 | 14,09 MB | 6,20 MB |
+| **Tambahan** | +7 | **+13,86 MB** | **+6,09 MB** |
+
+Hampir seluruhnya `vision_wasm_internal.wasm` (9,1 MB) dan model `.tflite` (4,4 MB). Varian `nosimd` (9 MB) sengaja tidak
+disertakan. Masih jauh di bawah batas paket Chrome Web Store.
 
 ## 4. Uji manual (wajib dijalankan di laptop)
 

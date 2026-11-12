@@ -259,7 +259,7 @@ export async function autoDescribePage(tabId) {
   const max = Math.min(Math.max(1, Math.min(AUTO_MAX_PER_PAGE, Number(settings.autoMax) || 3)), dailyLeft);
   const res = await chrome.tabs.sendMessage(tabId, { type: 'NV_AUTO_START', max }, { documentId: injected.documentId });
   const summary = autoSummary(res ?? {});
-  return logAuto({ ...base, result: res?.skipped || 'done', described: res?.described ?? 0, stopped: res?.stopped ?? null, summary });
+  return logAuto({ ...base, result: res?.skipped || 'done', described: res?.described ?? 0, stopped: res?.stopped ?? null, polos: res?.polos ?? 0, summary });
 }
 
 // [PF-02] Baca berurutan — deskripsi otomatis saat gambar mendapat fokus
@@ -435,6 +435,13 @@ const SIMPLE_FALLBACK_CODES = new Set([
 // [PF-05] Deteksi objek lokal — deteksi yang tidak pernah melempar galat: gagal atau terlalu lama → null
 function localDetect(image) {
   const timeout = new Promise((resolve) => setTimeout(resolve, LOCAL_TIMEOUT_MS, null));
+  // Uji otomatis dapat memasang detektor tiruan lewat globalThis.naraVisi.fakeDetector = { hasil, delayMs }.
+  // Hanya service worker ini yang bisa mengisinya; halaman web tidak punya akses ke objek global service worker.
+  const fake = globalThis.naraVisi?.fakeDetector;
+  if (fake) {
+    fake.calls = (fake.calls ?? 0) + 1;
+    return new Promise((resolve) => setTimeout(resolve, fake.delayMs ?? 0, fake.hasil ?? null));
+  }
   return Promise.race([detectObjects(image).catch(() => null), timeout]);
 }
 

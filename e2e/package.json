@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node run.mjs",
+    "test:unit": "node --test unit/",
     "demo": "node demo.mjs",
     "icons": "node build-icons.mjs"
   },

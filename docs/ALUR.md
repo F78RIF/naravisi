@@ -1264,5 +1264,17 @@ di seperempat kiri (titik tengah tetap berwarna utama), dan `polos()` dipakai un
 | Server dimatikan | "Deskripsi sederhana (tanpa AI): kemungkinan berisi 1 orang. Tidak dapat terhubung …"; kuota 9 → 9 |
 | Semua tes (backend, ai-service, e2e) | lulus, termasuk ALUR MANUAL Alt+Shift+K |
 
-Tes otomatis khusus perilaku ini (detektor tiruan) ditambahkan di Langkah 3.
+### Tes & pengukuran (Langkah 3)
+
+* **Tes unit** `e2e/unit/deteksi.test.mjs` (10 tes, `npm run test:unit` di `e2e/`, juga dijalankan
+  `scripts/run-all-tests.ps1`): penggabungan label, ambang skor, terjemahan, penyaring, kalimat kilat/cadangan.
+* **Detektor tiruan** untuk e2e: `globalThis.naraVisi.fakeDetector = { hasil, delayMs }` di service worker membuat
+  `localDetect()` mengembalikan hasil tetap (dan menghitung `calls`). Hanya uji otomatis yang bisa mengisinya: halaman web
+  tidak punya akses ke objek global service worker. Tanpa itu, detektor asli yang dipakai.
+* **7 skenario e2e PF-05**: detektor asli dimuat sekali; urutan kilat → lengkap (kilat tidak dipotong walau AI sudah
+  menjawab); AI < 1 dtk → tanpa kilat; AI gagal & server mati → cadangan, kuota/riwayat tetap; pengaturan dimatikan;
+  Baca berurutan melewati gambar polos, manual tetap ke AI.
+* Panel kini mencatat 6 kalimat terakhir yang dibacakan di `data-spoken-log` (untuk uji urutan).
+* Pengukuran waktu & ukuran: `docs/PENGUJIAN.md` bagian 3d (`scripts/ukur-deteksi-lokal.mjs`). Ringkasnya deteksi p50
+  67 ms, extension +13,9 MB terurai / +6,1 MB ZIP.
 
