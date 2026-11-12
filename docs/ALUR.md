@@ -21,6 +21,7 @@ bisa langsung tampil di GitHub atau disalin ke slide.
 | [Tahap 10](#tahap-10--online-langkah-1-mode-production) | Online Langkah 1: mode production | RNF-07, RF-25, PF-04 |
 | [Tahap 11](#tahap-11--online-langkah-2-dari-laptop-lewat-cloudflare-tunnel) | Online Langkah 2: Cloudflare Tunnel | RNF-07 |
 | [Tahap 12](#tahap-12--online-langkah-3-server-oracle-cloud-always-free) | Online Langkah 3: Oracle Always Free | RNF-07, RNF-09 |
+| [Tahap 13](#tahap-13--pf-05-deteksi-objek-lokal-mediapipe) | PF-05: deteksi objek lokal (MediaPipe) | PF-05 |
 
 ---
 
@@ -1090,4 +1091,88 @@ yang mendengarkan di antarmuka publik VM.
 
 Docker tidak tersedia di laptop pengembangan, jadi build image dan jalannya compose **belum diuji di sini**. Uji di VM
 mengikuti `deploy/ORACLE_FREE.md` langkah 7–9.
+
+---
+
+## Tahap 13 — PF-05: deteksi objek lokal (MediaPipe)
+
+Penanda di kode: cari `[PF-05]`. Lokasi lengkap ada di `docs/PETA_KODE.md` (tabel PF).
+
+### Ide besarnya
+
+Selain AI di server, extension kini punya "mata kecil" sendiri: model **EfficientDet-Lite0 (int8)** yang dijalankan
+oleh **MediaPipe Tasks Vision** langsung di Chrome pengguna. Model ini hanya bisa menyebut **jenis dan jumlah** benda
+dari 80 kelas COCO ("2 orang, 1 sepeda"), tidak bisa bercerita. Kelebihannya: **gratis, offline, tidak memakai kuota**,
+dan gambar tidak keluar dari komputer pengguna.
+
+Langkah 1 (tahap ini) hanya memasang mesinnya. Pemakaiannya (deskripsi kilat, cadangan saat AI gagal, penyaring gambar
+polos) dikerjakan di Langkah 2.
+
+### Kenapa semua berkas disimpan di extension?
+
+Manifest V3 melarang extension memuat skrip atau kode dari internet. Karena itu tiga berkas MediaPipe dan modelnya
+disalin ke `extension/vendor/` (±14,5 MB):
+
+| Berkas | Ukuran | Isi |
+|---|---|---|
+| `vendor/mediapipe/vision_bundle.mjs` | 135 KB | API JavaScript MediaPipe (`ObjectDetector`) |
+| `vendor/mediapipe/wasm/vision_wasm_internal.js` + `.wasm` | 9,3 MB | mesin inferensi (WebAssembly, varian SIMD) |
+| `vendor/models/efficientdet_lite0_int8.tflite` | 4,4 MB | model + daftar label COCO |
+
+Hanya varian **SIMD** yang disertakan (varian `nosimd` dibuang, hemat 9 MB) karena semua Chrome ≥ 91 mendukung SIMD
+dan manifest mensyaratkan Chrome ≥ 116. `scripts/salin-mediapipe.mjs` menyalin ulang berkas dari `e2e/node_modules`
+dan memeriksa SHA-256 model.
+
+**CSP**: bawaan MV3 (`script-src 'self'`) menolak kompilasi WebAssembly. `manifest.json` kini menulis
+`script-src 'self' 'wasm-unsafe-eval'; object-src 'self';`. `'wasm-unsafe-eval'` hanya mengizinkan *kompilasi wasm*;
+`eval()` JavaScript dan skrip dari luar tetap dilarang.
+
+### Alur satu deteksi
+
+```
+service worker (background.js)                    dokumen offscreen
+──────────────────────────────                    ─────────────────
+normalizedImage({src|dataUrl})
+  unduh → AVIF/SVG/besar → JPEG ≤1280 px
+  (gambar yang sama yang dikirim ke AI)
+detectObjects({base64, type})
+  ensureOffscreen()  ─────────────────────────▶  offscreen.html (module)
+  pesan NV_DETECT_OBJECTS {dataUrl}  ──────────▶  offscreen.js → deteksiObjek(dataUrl)
+                                                    muatDetektor()  ← sekali saja (lazy)
+                                                      import vision_bundle.mjs
+                                                      ObjectDetector.createFromOptions(wasm lokal, model lokal,
+                                                        CPU, IMAGE, scoreThreshold 0,5, maxResults 20)
+                                                      fetch label-id.json
+                                                    createImageBitmap → detector.detect()
+                                                    gabungkanObjek() + kalimatObjek()   (shared/deteksi.js)
+  { objek, kalimat, ms, muatMs }  ◀──────────────
+```
+
+* **Kenapa offscreen, bukan halaman web?** Halaman web tidak tepercaya dan CSP-nya milik situs; service worker tidak
+  punya DOM/`createImageBitmap` penuh untuk MediaPipe. Dokumen offscreen adalah halaman extension yang tersembunyi dan
+  sudah dipakai untuk SVG → JPEG.
+* **Muat sekali**: `muatDetektor()` menyimpan *Promise* di variabel `siap`. Permintaan kedua dan seterusnya memakai
+  detektor yang sama. Bila pemuatan gagal, `siap` dikosongkan supaya permintaan berikutnya mencoba lagi.
+* **Model tidak dimuat sebelum dibutuhkan**: `vision_bundle.mjs` diimpor dinamis, jadi membuka dokumen offscreen untuk
+  SVG tidak ikut membaca 10 MB wasm.
+
+### Dari hasil model ke kalimat (`shared/deteksi.js`)
+
+1. Buang objek dengan skor **< 0,5** (`SKOR_MIN`).
+2. Terjemahkan label Inggris lewat `shared/label-id.json` (80 kelas COCO). Label yang tidak ada di kamus (mis. `???`
+   di label map model) **tidak disebut**, supaya tidak pernah terbaca bahasa Inggris.
+3. Gabungkan per jenis: hitung jumlah, simpan skor tertinggi.
+4. Urutkan: jumlah terbanyak dulu, lalu skor tertinggi; ambil **maks. 5 jenis** (`MAKS_JENIS`).
+5. Susun kalimat: `"2 orang, 1 sepeda"`. Daftar kosong → kalimat kosong.
+
+Model hanya mengenal kelas `person` → **"orang"**. Tidak ada pengenalan wajah atau identitas; NaraVisi hanya menyebut
+jumlahnya.
+
+### Bukti (Langkah 1)
+
+| Pemeriksaan | Hasil |
+|---|---|
+| Uji asap di Chromium (Playwright), foto `grace_hopper.jpg` | `"1 orang"` (skor 0,98); muat model ±300 ms, deteksi pertama ±185 ms, berikutnya ±70 ms |
+| e2e "PF-05: MediaPipe lokal berjalan di offscreen…" | gambar polos → tanpa objek; `muatMs` sama di panggilan kedua (model tidak dimuat ulang) |
+| Tanpa `wasm-unsafe-eval` | gagal: `CompileError … violates the following Content Security policy directive` (karena itu CSP ditambahkan) |
 

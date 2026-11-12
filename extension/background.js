@@ -1,7 +1,7 @@
 // NaraVisi · extension/background.js
 // Fungsi   : Service worker (Manifest V3): menyuntik panel, mengambil & mengecilkan gambar, memanggil REST API, pemandu suara chrome.tts.
-// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, RNF-09, RNF-12
-// Terkait  : content/content.js, offscreen/offscreen.js, shared/config.js, shared/guide.js, backend/src/http/routes.js
+// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, RNF-09, RNF-12
+// Terkait  : content/content.js, offscreen/offscreen.js, offscreen/deteksi-objek.js, shared/config.js, shared/guide.js, backend/src/http/routes.js
 
 import {
   ApiError, apiFetch, AUTO_DAILY_MAX, AUTO_MAX_PER_PAGE, AUTO_RESERVE, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession,
@@ -330,7 +330,7 @@ async function fetchImageBlob(src) {
 }
 
 // ---------------------------------------------------------------------------
-// SVG → JPEG lewat dokumen offscreen (service worker tidak bisa menggambar SVG)
+// Dokumen offscreen: SVG → JPEG (service worker tidak bisa menggambar SVG) dan deteksi objek lokal (PF-05)
 // ---------------------------------------------------------------------------
 const OFFSCREEN_URL = 'offscreen/offscreen.html';
 const MAX_SVG_BYTES = 2 * 1024 * 1024;
@@ -343,7 +343,7 @@ async function ensureOffscreen() {
   });
   if (contexts.length) return;
   offscreenReady ??= chrome.offscreen
-    .createDocument({ url: OFFSCREEN_URL, reasons: ['BLOBS'], justification: 'Mengubah gambar SVG menjadi JPEG sebelum dideskripsikan.' })
+    .createDocument({ url: OFFSCREEN_URL, reasons: ['BLOBS'], justification: 'Mengubah gambar SVG menjadi JPEG dan mendeteksi objek secara lokal sebelum dideskripsikan.' })
     .finally(() => { offscreenReady = null; });
   await offscreenReady;
 }
@@ -391,14 +391,40 @@ async function normalizeBlob(blob) {
 }
 
 // [RF-09] Mengirim gambar ke AI — gambar → base64 siap dikirim ke backend
-async function imageToBase64({ src, dataUrl }) {
+/** Hasil: { base64, type } — gambar yang sama dipakai untuk AI dan deteksi objek lokal (PF-05). */
+async function normalizedImage({ src, dataUrl }) {
   const source = dataUrl || src;
   if (!source) throw new NvError('IMAGE_MISSING', 'Alamat gambar kosong.');
   const blob = await normalizeBlob(await fetchImageBlob(source));
   if (blob.size > MAX_IMAGE_BYTES) {
     throw new NvError('IMAGE_TOO_LARGE', 'Ukuran gambar terlalu besar untuk diproses.');
   }
-  return bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
+  const type = DIRECT_TYPES.has(blob.type) ? blob.type : 'image/jpeg';
+  return { base64: bytesToBase64(new Uint8Array(await blob.arrayBuffer())), type };
+}
+
+async function imageToBase64(image) {
+  return (await normalizedImage(image)).base64;
+}
+
+// ---------------------------------------------------------------------------
+// Deteksi objek lokal (PF-05): MediaPipe di dokumen offscreen — gratis, offline, tidak memakai kuota
+// ---------------------------------------------------------------------------
+// [PF-05] Deteksi objek lokal — mengirim gambar yang sudah dinormalisasi ke detektor di dokumen offscreen
+/**
+ * @param {{base64: string, type: string}} image  keluaran normalizedImage()
+ * @returns {Promise<{objek: Array<{nama, jumlah, skor}>, kalimat: string, ms: number, muatMs: number}>}
+ */
+export async function detectObjects({ base64, type }) {
+  await ensureOffscreen();
+  const res = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'NV_DETECT_OBJECTS', dataUrl: `data:${type};base64,${base64}` });
+  if (!res?.ok) throw new NvError('DETECT_FAILED', res?.message || 'Deteksi objek lokal gagal.');
+  return res.data;
+}
+
+// [PF-05] Deteksi objek lokal — ambil + normalisasi gambar lalu deteksi (dipakai uji otomatis & pengukuran)
+async function detectImage({ src, dataUrl }) {
+  return detectObjects(await normalizedImage({ src, dataUrl }));
 }
 
 // ---------------------------------------------------------------------------
@@ -592,5 +618,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Dipakai pengujian otomatis (Playwright) untuk memicu panel tanpa shortcut.
 globalThis.naraVisi = {
   togglePanel, toggleActiveTab, openPage, handleScanCommand, onCommand, announceImageCount, spokenLog, rejectReason,
-  autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog, autoBlockedReason,
+  autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog, autoBlockedReason, detectObjects, detectImage,
 };

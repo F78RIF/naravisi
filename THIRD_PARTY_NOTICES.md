@@ -9,6 +9,12 @@ lisensinya sendiri. Lisensi model dan pustaka diambil dari kartu model / metadat
 | Komponen | Lokasi | Pemilik | Lisensi |
 |---|---|---|---|
 | Huruf Atkinson Hyperlegible (400, 700) | `extension/fonts/*.woff2` | Braille Institute of America | SIL Open Font License 1.1, teks lengkap di `extension/fonts/OFL.txt` |
+| MediaPipe Tasks Vision 0.10.21 (`vision_bundle.mjs`, `vision_wasm_internal.js/.wasm`) | `extension/vendor/mediapipe/` | Google LLC | Apache License 2.0 — https://github.com/google-ai-edge/mediapipe/blob/master/LICENSE |
+| Model EfficientDet-Lite0 int8 (deteksi objek, label COCO) | `extension/vendor/models/efficientdet_lite0_int8.tflite` | Google LLC | Apache License 2.0 — kartu model: https://ai.google.dev/edge/mediapipe/solutions/vision/object_detector#models ; sumber unduhan: https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite |
+
+MediaPipe dan modelnya disertakan tanpa diubah (PF-05). Terjemahan label COCO ke bahasa Indonesia
+(`extension/shared/label-id.json`) adalah karya NaraVisi (MIT). Teks lengkap Apache License 2.0:
+https://www.apache.org/licenses/LICENSE-2.0 . Salin ulang / periksa dengan `node scripts/salin-mediapipe.mjs`.
 
 ## Diunduh saat dijalankan (tidak ada di repo)
 

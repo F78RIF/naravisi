@@ -1,8 +1,11 @@
 // NaraVisi · extension/offscreen/offscreen.js
 // Fungsi   : Dokumen offscreen: mengubah SVG menjadi JPEG (service worker tidak punya DOM).
 // SVG dimuat sebagai <img>: skrip di dalamnya tidak berjalan, sumber eksternal tidak diunduh.
-// Kebutuhan: RF-09
-// Terkait  : background.js (rasterizeSvg), offscreen.html
+//            Juga menjalankan deteksi objek lokal MediaPipe (PF-05) atas permintaan service worker.
+// Kebutuhan: RF-09, PF-05
+// Terkait  : background.js (rasterizeSvg, detectObjects), offscreen.html, deteksi-objek.js
+
+import { deteksiObjek } from './deteksi-objek.js';
 
 const MAX_SIDE = 1280;
 const FALLBACK_SIDE = 512; // SVG tanpa width/height/viewBox
@@ -37,6 +40,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Hanya pesan khusus dari service worker NaraVisi; pesan lain dibiarkan untuk service worker.
   const fromExtension = sender.id === chrome.runtime.id && String(sender.url || '').startsWith(chrome.runtime.getURL(''));
   if (!fromExtension || message?.target !== 'offscreen') return false;
+  // [PF-05] Deteksi objek lokal — permintaan deteksi dari service worker (data URL gambar yang sudah dinormalisasi)
+  if (message.type === 'NV_DETECT_OBJECTS' && typeof message.dataUrl === 'string' && message.dataUrl.startsWith('data:image/')) {
+    deteksiObjek(message.dataUrl)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
+    return true;
+  }
   if (message.type !== 'NV_RASTERIZE_SVG' || typeof message.svg !== 'string') return false;
   rasterize(message.svg)
     .then((dataUrl) => sendResponse({ ok: true, dataUrl }))

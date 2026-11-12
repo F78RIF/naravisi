@@ -1830,6 +1830,18 @@ try {
     await opt.close();
   });
 
+  // [PF-05] Deteksi objek lokal — detektor MediaPipe asli dimuat dari berkas extension (CSP wasm-unsafe-eval), sekali saja
+  await step('PF-05: MediaPipe lokal berjalan di offscreen; model dimuat sekali lalu dipakai ulang', async () => {
+    const polos = `data:image/jpeg;base64,${(await solid(320, 240, '#3060c0').jpeg().toBuffer()).toString('base64')}`;
+    const detect = () => sw.evaluate((d) => globalThis.naraVisi.detectImage({ dataUrl: d }), polos);
+    const pertama = await detect();
+    const kedua = await detect();
+    assert.deepEqual(pertama.objek, []); // gambar polos: tidak ada objek
+    assert.equal(pertama.kalimat, '');
+    assert.equal(kedua.muatMs, pertama.muatMs, 'model tidak boleh dimuat ulang');
+    assert.ok(kedua.ms < 5000, `deteksi terlalu lama: ${kedua.ms} ms`);
+  });
+
   await step('tidak ada error JavaScript di semua halaman', async () => assert.deepEqual(pageErrors, []));
 } finally {
   await context.close();

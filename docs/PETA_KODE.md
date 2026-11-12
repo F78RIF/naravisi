@@ -32,11 +32,13 @@ naravisi/
 ├── extension/            Extension Chrome (Manifest V3) yang dipakai pengguna tunanetra
 │   ├── background.js       service worker: pintasan, ambil gambar, panggil API, pemandu suara
 │   ├── content/            panel di halaman web: pindai gambar, daftar, bacakan deskripsi
-│   ├── offscreen/          dokumen tersembunyi untuk mengubah SVG → JPEG
+│   ├── offscreen/          dokumen tersembunyi: SVG → JPEG dan deteksi objek lokal MediaPipe (PF-05)
 │   ├── popup/              popup di toolbar: masuk/daftar, kuota, tombol Pindai
 │   ├── pages/              halaman extension: Selamat datang, Profil, Riwayat, Pengaturan, Premium
-│   ├── shared/             kode bersama: konfigurasi & sesi, formulir masuk, kalimat pemandu, ikon, warna
+│   ├── shared/             kode bersama: konfigurasi & sesi, formulir masuk, kalimat pemandu, ikon, warna,
+│   │                       deteksi.js + label-id.json (ringkasan objek berbahasa Indonesia, PF-05)
 │   ├── fonts/, icons/      font Atkinson Hyperlegible & ikon
+│   ├── vendor/             MediaPipe Tasks Vision (.mjs + .wasm) & model EfficientDet-Lite0 int8 (.tflite), disimpan lokal
 │   └── manifest.json       izin, pintasan Alt+Shift+K / Alt+Shift+V
 ├── backend/              REST API (Node.js + Express) dan Dashboard Admin
 │   ├── src/http/           tabel rute, autentikasi per rute, CORS, halaman bayar
@@ -53,7 +55,8 @@ naravisi/
 ├── e2e/                  uji ujung ke ujung dengan Chromium sungguhan (Playwright): run.mjs
 ├── docs/                 dokumentasi: ALUR, API, PENGUJIAN, KEPUTUSAN, SRS/SDD, peta kode ini
 ├── deploy/               online: CLOUDFLARE_TUNNEL.md (laptop), ORACLE_FREE.md + docker-compose.prod.yml (server), nginx/, docker/, oracle/
-├── scripts/              run-all-tests.ps1, start-demo.ps1, start-online.ps1, cek-penanda.js, paket_extension.py, pindai_rahasia.py
+├── scripts/              run-all-tests.ps1, start-demo.ps1, start-online.ps1, cek-penanda.js, paket_extension.py, pindai_rahasia.py,
+│                         salin-mediapipe.mjs (salin MediaPipe + unduh & periksa model, PF-05)
 ├── examples/, notebooks/, plotting/   contoh pemakaian, eksplorasi & grafik hasil evaluasi
 └── dist/                 ZIP extension hasil paket (tidak masuk git)
 ```
@@ -127,7 +130,7 @@ Singkatan: **bg** = `extension/background.js`, **ct** = `extension/content/conte
 | RF-29 | Ubah pengguna | `admin.js:242` `openUserDialog`, `:261` submit | rt `:115` → `adminService.js:66` `updateUser`, `:109` `assertNotLastAdmin` | – | `users` | P "RF-29" (admin terakhir 409), E |
 | RF-30 | Hapus pengguna | `admin.js:285` `confirmDelete`, `:301` submit | rt `:120` → `adminService.js:121` `deleteUser` (satu transaksi DB) | – | `users`, `riwayat_deskripsi`, `laporan_deskripsi`, `transaksi` | P "RF-30" (8 tes), E email salah ditolak |
 
-### Fitur tambahan (PF-01..PF-04)
+### Fitur tambahan (PF-01..PF-05)
 
 Tidak tercantum di SRS v1.1; dicatat di `docs/PERUBAHAN_SRS_SDD.md` bagian 1.
 
@@ -137,6 +140,7 @@ Tidak tercantum di SRS v1.1; dicatat di `docs/PERUBAHAN_SRS_SDD.md` bagian 1.
 | PF-02 | Baca berurutan (mode otomatis) | bg `:234` `autoDescribePage`, `:203` `autoGate`, `:153` `isExcluded`, `:265` `enableFocusDescribe`; ct `:931` `autoDescribe`, `:888` `pump`, `:962` `onFocusIn`; `pages/pengaturan.js:105` `askConsent`, `:144` `autoSection` | sama dengan RF-09 | – | `kuota_harian` | E "Pengaturan Baca berurutan", "baca berurutan: maks. N gambar…", "kuota tersisa 2 → tidak jalan" |
 | PF-03 | Deskripsi ke `alt` gambar asli | ct `:814` `applyAlt` | – | – | – | E "setelah dideskripsikan: alt asli bermakna tidak ditimpa…" |
 | PF-04 | Cadangan AI Gemini → BLIP | – | – | `main.py:69` `build_service`; `service.py:195` `CaptionRouter`, `:211` `describe`; `gemini.py:167` `_call`; `providers.py:92` `BlipCaptioner`, `:126` `MarianTranslator` | – | G "429 model busy otomatis ke cadangan…", "json rusak memakai cadangan" |
+| PF-05 | Deteksi objek lokal (MediaPipe, offline) — [PF-05] | bg `:418` `detectObjects`, `:426` `detectImage`, `:394` `normalizedImage`, `:339` `ensureOffscreen`; `offscreen/offscreen.js:44` pesan `NV_DETECT_OBJECTS`; `offscreen/deteksi-objek.js:17` `muatDetektor` (lazy, sekali), `:50` `deteksiObjek`; `shared/deteksi.js:14` `terjemahkanLabel`, `:25` `gabungkanObjek`, `:44` `kalimatObjek`; `shared/label-id.json`; `manifest.json` CSP `wasm-unsafe-eval`; `scripts/salin-mediapipe.mjs` | – | – | – | Langkah 1: uji asap manual (lihat ALUR Tahap 13); tes unit & e2e menyusul di Langkah 3 |
 
 ### Kebutuhan non-fungsional yang diberi penanda
 
