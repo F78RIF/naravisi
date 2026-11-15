@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import { Errors } from '../src/lib/errors.js';
+import { createAiClient } from '../src/services/aiClient.js';
 import { startTestApp } from './support/testApp.js';
 
 describe('Deskripsi + kuota + riwayat (UC-GBR-04/05, UC-RWY-01..04)', () => {
@@ -75,6 +76,41 @@ describe('Deskripsi + kuota + riwayat (UC-GBR-04/05, UC-RWY-01..04)', () => {
     const q = await app.api('GET', '/api/v1/me/quota', { token: u.token });
     assert.equal(q.body.terpakai, 0);
     assert.equal((await app.api('GET', '/api/v1/history', { token: u.token })).body.total, 0);
+  });
+
+  // [PF-04] Cadangan AI Gemini → BLIP — diuji: Gemini gagal + BLIP tidak siap → pesan jelas, kuota dikembalikan
+  it('Gemini gagal + BLIP tidak siap (jawaban asli ai-service) → galat jelas bukan 500, kuota dikembalikan', async () => {
+    // Jawaban ai-service saat Gemini gagal dan /health menunjukkan fallback_ready: false (lihat test_gemini.py).
+    const cases = [
+      [429, 'MODEL_BUSY', 503, 'AI_BUSY'],
+      [503, 'MODEL_UNAVAILABLE', 503, 'AI_UNAVAILABLE'],
+      [502, 'MODEL_AUTH', 502, 'AI_FAILED'],
+      [502, 'MODEL_BAD_OUTPUT', 502, 'AI_FAILED'],
+    ];
+    const original = app.ai.caption;
+    try {
+      for (const [aiStatus, aiCode, status, code] of cases) {
+        const u = await app.register();
+        const real = createAiClient({
+          baseUrl: 'http://ai.test',
+          timeoutMs: 1000,
+          fetchImpl: async () => ({
+            status: aiStatus,
+            ok: false,
+            json: async () => ({ detail: { code: aiCode, message: 'Gemini menolak permintaan: rincian internal' } }),
+          }),
+        });
+        app.ai.caption = real.caption;
+        const res = await app.describe(u.token);
+        assert.equal(res.status, status, aiCode);
+        assert.equal(res.body.error.code, code, aiCode);
+        assert.doesNotMatch(res.body.error.message, /rincian internal|Gemini/, 'rincian galat AI tidak bocor ke pengguna');
+        assert.equal((await app.api('GET', '/api/v1/me/quota', { token: u.token })).body.terpakai, 0, aiCode);
+        assert.equal((await app.api('GET', '/api/v1/history', { token: u.token })).body.total, 0, aiCode);
+      }
+    } finally {
+      app.ai.caption = original;
+    }
   });
 
   it('gambar tidak valid → 400, kuota tidak terpakai', async () => {

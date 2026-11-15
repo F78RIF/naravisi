@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -245,6 +246,15 @@ class TestSecretsNeverLeak(unittest.TestCase):
         RedactSecrets([KEY]).filter(record)
         self.assertNotIn(KEY, record.getMessage())
 
+    def test_filter_log_tidak_merusak_args_log_akses_uvicorn(self):
+        from uvicorn.logging import AccessFormatter
+
+        args = ("127.0.0.1:5000", "GET", "/health", "1.1", 200)
+        record = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d', args, None)
+        RedactSecrets([KEY]).filter(record)
+        self.assertEqual(record.args, args)
+        self.assertIn("GET /health", AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s').format(record))
+
     def test_repr_settings_tidak_memuat_kunci(self):
         s = Settings(provider="gemini", blip_model="", translation_model="", max_image_side=768, gemini_api_key=KEY, gemini_model=MODEL)
         self.assertNotIn(KEY, repr(s))
@@ -405,6 +415,76 @@ class TestCaptionApi(unittest.TestCase):
         body = self.client(FakeClient(response(answer()))).get("/health").json()
         self.assertEqual(body["fallback"], "mock")
         self.assertTrue(body["fallback_ready"])
+
+
+class TestCadanganTidakSiap(unittest.TestCase):
+    """[PF-04] Cadangan AI Gemini → BLIP — Gemini gagal dan BLIP tidak siap: respons jelas, bukan 500."""
+
+    def blip_gagal(self, calls):
+        def factory():
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("DefaultCPUAllocator: not enough memory: you tried to allocate 2359296 bytes.")
+            return CaptionService(MockCaptioner(), MockTranslator())
+        slot = FallbackSlot("blip", factory)
+        slot.load()  # pemuatan awal gagal (seperti RAM/page file Windows tidak cukup)
+        return slot
+
+    def app(self, fake, slot):
+        settings = Settings(provider="gemini", blip_model="", translation_model="", max_image_side=768)
+        return TestClient(create_app(settings, CaptionRouter(CaptionService(gemini(fake), None), slot)))
+
+    def test_gemini_gagal_blip_gagal_dimuat_respons_jelas_dan_health_menyebut_alasan(self):
+        calls = []
+        slot = self.blip_gagal(calls)
+        slot.RETRY_SECONDS = 3600  # jangan coba ulang di tes ini
+        client = self.app(FakeClient(api_error(errors.ClientError, 429, "quota")), slot)
+        res = client.post("/caption", json={"image_base64": b64()})
+        self.assertEqual(res.status_code, 429)
+        self.assertEqual(res.json()["detail"]["code"], "MODEL_BUSY")
+        self.assertNotIn("memory", res.text.lower())
+        health = client.get("/health").json()
+        self.assertFalse(health["fallback_ready"])
+        self.assertEqual(health["fallback_state"], "failed")
+        self.assertEqual(health["fallback_error"], "NOT_ENOUGH_MEMORY")
+        self.assertEqual(len(calls), 1)
+
+    def test_galat_gemini_lain_tanpa_cadangan_siap_bukan_500(self):
+        cases = [
+            (api_error(errors.ClientError, 401, "unauthenticated"), 502, "MODEL_AUTH"),
+            (api_error(errors.ServerError, 503, "overloaded", "UNAVAILABLE"), 503, "MODEL_UNAVAILABLE"),
+            (response("{rusak"), 502, "MODEL_BAD_OUTPUT"),
+        ]
+        for item, status, code in cases:
+            with self.subTest(code=code):
+                slot = self.blip_gagal([])
+                slot.RETRY_SECONDS = 3600
+                res = self.app(FakeClient(item), slot).post("/caption", json={"image_base64": b64()})
+                self.assertEqual(res.status_code, status)
+                self.assertEqual(res.json()["detail"]["code"], code)
+
+    def test_gemini_gagal_memicu_muat_ulang_blip_lalu_cadangan_dipakai(self):
+        calls = []
+        slot = self.blip_gagal(calls)
+        slot.RETRY_SECONDS = 0
+        client = self.app(FakeClient(api_error(errors.ClientError, 429, "quota")), slot)
+        first = client.post("/caption", json={"image_base64": b64()})
+        self.assertEqual(first.status_code, 429)  # permintaan ini tidak menunggu BLIP
+        for _ in range(100):
+            if slot.service is not None:
+                break
+            time.sleep(0.02)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(client.get("/health").json()["fallback_state"], "ready")
+        second = client.post("/caption", json={"image_base64": b64()})
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue(second.json()["fallback"])
+
+    def test_muat_ulang_dibatasi_jeda(self):
+        calls = []
+        slot = self.blip_gagal(calls)  # RETRY_SECONDS bawaan 60 dtk
+        self.assertFalse(slot.retry_if_failed())
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":

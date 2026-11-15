@@ -212,7 +212,11 @@ Gemini menjawab dalam JSON terstruktur (jenis gambar, ringkasan, detail, teks di
 Tanpa internet/kunci: `CAPTION_PROVIDER=blip` (model lokal). Untuk mencoba alur tanpa model sama sekali: `CAPTION_PROVIDER=mock`.
 
 **Memeriksa Gemini berjalan:** buka `http://127.0.0.1:8000/health`; harus muncul `"provider": "gemini"` dan `"model"` sesuai
-`GEMINI_MODEL`. Di panel extension, pembuat deskripsi tertulis "Google Gemini" (atau BLIP bila cadangan yang dipakai).
+`GEMINI_MODEL`. Cadangan BLIP siap bila `"fallback_ready": true`. Bila `false`, lihat `"fallback_state"`: `loading` = masih
+dimuat (tunggu); `failed` dengan `"fallback_error": "NOT_ENOUGH_MEMORY"` = RAM/page file Windows tidak cukup (BLIP + terjemahan
+butuh ±1,5 GB bebas): tutup aplikasi lain atau perbesar page file, lalu jalankan ulang ai-service. Selama BLIP tidak siap,
+Gemini yang gagal menghasilkan pesan jelas (bukan galat 500), kuota dikembalikan, extension membacakan deskripsi sederhana
+lokal (PF-05), dan BLIP dicoba dimuat ulang otomatis (paling cepat tiap 60 dtk). Di panel extension, pembuat deskripsi tertulis "Google Gemini" (atau BLIP bila cadangan yang dipakai).
 Mutu dan latensinya bisa diukur pada dataset sendiri dengan `python -m eval.run_eval predict --provider gemini --run gemini-1 --limit 10`
 lalu `python -m eval.run_eval score --runs gemini-1` (lihat `docs/DATASET.md`). Bila `eval/data/fewshot.json` ada, log start
 menyebut *"(n contoh few-shot)"*.

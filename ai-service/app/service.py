@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
+import gc
 import threading
 import time
 from dataclasses import dataclass
@@ -157,7 +158,13 @@ class CaptionService:
 
 
 class FallbackSlot:
-    """Provider cadangan yang dimuat di latar (BLIP bisa butuh beberapa menit saat start pertama)."""
+    """Provider cadangan yang dimuat di latar (BLIP bisa butuh beberapa menit saat start pertama).
+
+    Gagal dimuat (mis. RAM/page file Windows tidak cukup) → `state="failed"` dan `error` terisi; layanan tetap jalan.
+    Saat provider utama gagal lagi, pemuatan dicoba ulang otomatis di latar, paling cepat tiap RETRY_SECONDS.
+    """
+
+    RETRY_SECONDS = 60.0
 
     def __init__(self, name: str, factory: Callable[[], CaptionService] | None):
         self.name = name
@@ -165,6 +172,8 @@ class FallbackSlot:
         self._service: CaptionService | None = None
         self._lock = threading.Lock()
         self.error: str | None = None
+        self.loading = False
+        self._failed_at: float | None = None
 
     @classmethod
     def ready(cls, service: CaptionService) -> "FallbackSlot":
@@ -176,19 +185,51 @@ class FallbackSlot:
     def service(self) -> CaptionService | None:
         return self._service
 
+    @property
+    def state(self) -> str:
+        """'ready' | 'loading' | 'failed' | 'idle' (belum pernah dimuat) — dilaporkan di /health."""
+        if self._service is not None:
+            return "ready"
+        if self.loading:
+            return "loading"
+        return "failed" if self.error else "idle"
+
+    # [PF-04] Cadangan AI Gemini → BLIP — muat cadangan; gagal tidak mematikan layanan
     def load(self) -> None:
         with self._lock:
             if self._service is not None or self._factory is None:
                 return
+            self.loading = True
             try:
                 self._service = self._factory()
+                self.error = None
                 log.info("Provider cadangan siap: %s", self._service.model_name)
             except Exception as exc:  # noqa: BLE001 — cadangan gagal dimuat tidak boleh mematikan layanan
                 self.error = exc.__class__.__name__
-                log.error("Provider cadangan %s gagal dimuat: %s", self.name, exc.__class__.__name__)
+                self._failed_at = time.monotonic()
+                hint = ""
+                if isinstance(exc, MemoryError) or "memory" in str(exc).lower() or "paging file" in str(exc).lower():
+                    self.error = "NOT_ENOUGH_MEMORY"
+                    hint = " RAM/page file tidak cukup: tutup aplikasi lain atau perbesar page file, lalu coba lagi."
+                log.error("Provider cadangan %s gagal dimuat: %s.%s", self.name, exc.__class__.__name__, hint)
+                del exc
+                gc.collect()  # lepaskan bobot model yang sempat termuat sebagian
+            finally:
+                self.loading = False
 
     def load_in_background(self) -> None:
+        self.loading = True  # langsung terlihat di /health, sebelum thread sempat berjalan
         threading.Thread(target=self.load, name=f"fallback-{self.name}", daemon=True).start()
+
+    # [PF-04] Cadangan AI Gemini → BLIP — cadangan belum siap saat dibutuhkan → coba muat ulang di latar
+    def retry_if_failed(self) -> bool:
+        if self._service is not None or self._factory is None or self.loading or self.error is None:
+            return False
+        if self._failed_at is not None and time.monotonic() - self._failed_at < self.RETRY_SECONDS:
+            return False
+        log.info("Mencoba memuat ulang provider cadangan %s di latar ...", self.name)
+        self.load_in_background()
+        return True
 
 
 # [PF-04] Cadangan AI Gemini → BLIP — provider utama gagal → provider cadangan
@@ -215,8 +256,10 @@ class CaptionRouter:
             backup = self.fallback.service if self.fallback else None
             if err.code not in FALLBACK_CODES or backup is None:
                 if err.code in FALLBACK_CODES and self.fallback:
-                    log.warning("Provider %s gagal (%s); cadangan %s belum siap.", self.provider, err.code, self.fallback.name)
-                raise
+                    log.warning("Provider %s gagal (%s); cadangan %s belum siap (%s).", self.provider, err.code,
+                                self.fallback.name, self.fallback.state)
+                    self.fallback.retry_if_failed()
+                raise  # galat asli → main.py memetakannya ke 429/502/503/504 yang jelas (bukan 500)
             log.warning("Provider %s gagal (%s); memakai cadangan %s.", self.provider, err.code, backup.provider)
             result = backup.describe(image, lang, context)
             result.fallback = True

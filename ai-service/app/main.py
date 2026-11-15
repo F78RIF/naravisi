@@ -37,10 +37,14 @@ class RedactSecrets(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if self.secrets:
-            message = record.getMessage()
+            original = record.getMessage()
+            message = original
             for secret in self.secrets:
                 message = message.replace(secret, "[DISAMARKAN]")
-            record.msg, record.args = message, None
+            if message != original:
+                # Hanya ubah catatan yang memuat kunci: formatter akses uvicorn membongkar record.args
+                # (args=None → TypeError "Logging error" di setiap permintaan).
+                record.msg, record.args = message, ()
         return True
 
 
@@ -184,6 +188,8 @@ def create_app(settings: Settings | None = None, service: CaptionService | Capti
             "model": svc.model_name if svc else None,
             "fallback": fb.name if fb else None,
             "fallback_ready": bool(fb and fb.service),
+            "fallback_state": fb.state if fb else None,  # ready | loading | failed | idle
+            "fallback_error": fb.error if fb else None,  # nama jenis galat saja (mis. NOT_ENOUGH_MEMORY), tanpa rincian
         }
 
     # [RF-09] Mengirim gambar ke AI — POST /caption menerima gambar dari backend

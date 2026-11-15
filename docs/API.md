@@ -71,7 +71,8 @@ Kode error:
 
 Galat: `415` gambar tak terbaca · `422 MODEL_SAFETY` ditahan filter · `429 MODEL_BUSY` · `502 MODEL_AUTH | MODEL_BAD_OUTPUT | MODEL_ERROR` · `503 MODEL_UNAVAILABLE | MODEL_LOADING` · `504 MODEL_TIMEOUT`. Selain `MODEL_SAFETY`, galat Gemini otomatis dialihkan ke `FALLBACK_PROVIDER` bila sudah siap.
 
-`GET /health` → `{ "status": "ok" | "loading", "provider", "model", "fallback", "fallback_ready" }`
+`GET /health` → `{ "status": "ok" | "loading", "provider", "model", "fallback", "fallback_ready", "fallback_state", "fallback_error" }`
+— `fallback_state`: `ready` | `loading` | `failed` | `idle`; `fallback_error`: nama jenis galat saja (mis. `NOT_ENOUGH_MEMORY`), tanpa rincian.
 
 ## Endpoint lain (Fase 2–5, sudah diimplementasikan)
 

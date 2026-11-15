@@ -456,3 +456,19 @@ dengan skrip, bukan oleh manusia dengan perangkat sungguhan.
   2026-11-14), Admin meninjau laporan, Admin menghapus 5 akun uji (riwayat ikut terhapus, transaksi dianonimkan
   `user_id = NULL`). Permintaan yang gagal karena batas waktu tidak mengurangi kuota (9 riwayat = 9 kuota). Dijalankan
   sebelum Langkah 2, jadi belum mencakup konfirmasi email dan perlindungan Admin terakhir.
+
+### Lampiran — cadangan BLIP tidak siap (`fallback_ready: false`), 15 November 2026
+
+* **Gejala:** `/health` → `provider=gemini, fallback=blip, fallback_ready=false`.
+* **Penyebab:** memori. Laptop 8 GB, batas commit 16,4 GB, sisa commit ±1 GB (banyak aplikasi lain terbuka). Memuat BLIP
+  (`pytorch_model.bin` 990 MB, berkas utuh: SHA-256 cocok) gagal dengan `DefaultCPUAllocator: not enough memory` /
+  `The paging file is too small for this operation to complete (os error 1455)`; di proses terpisah menjadi
+  `access violation` (kode keluar 139). Paket (torch 2.14.1+cpu, transformers 4.57.6) dan model Hugging Face tidak bermasalah.
+* **Perbaikan kode (minimal):** `FallbackSlot` mencatat `state`/`error` (`NOT_ENOUGH_MEMORY`), melepaskan bobot yang termuat
+  sebagian (`gc.collect`), dan mencoba memuat ulang di latar saat Gemini gagal (jeda ≥ 60 dtk); `/health` menambah
+  `fallback_state` dan `fallback_error`.
+* **Tes:** ai-service `TestCadanganTidakSiap` (4); backend "Gemini gagal + BLIP tidak siap (jawaban asli ai-service) → galat
+  jelas bukan 500, kuota dikembalikan".
+* **Agar `fallback_ready: true`:** sediakan ±1,5 GB memori bebas (tutup aplikasi lain / page file "System managed"), lalu
+  jalankan ulang ai-service.
+
