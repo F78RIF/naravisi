@@ -226,6 +226,12 @@ menyebut *"(n contoh few-shot)"*.
 
 > **Privasi.** Dengan `CAPTION_PROVIDER=gemini`, gambar yang dipilih pengguna diteruskan server ke Google. Pada tingkat gratis Google AI Studio, **data tersebut dapat dipakai Google untuk meningkatkan produknya**; Gemini juga butuh internet dan punya batas kuota. File gambar tidak disimpan di server NaraVisi. Pemberitahuan yang sama tampil di halaman Pengaturan extension. Pilih `CAPTION_PROVIDER=blip` bila gambar sama sekali tidak boleh keluar dari server.
 
+> **Cadangan AI cloud gratis (PF-13, opsional).** Atur urutan provider dengan `CAPTION_CHAIN=gemini,openrouter,hf,blip`
+> di `ai-service/.env`, lalu isi `OPENROUTER_API_KEY` + `OPENROUTER_MODEL` (model vision `:free`) dan/atau `HF_TOKEN` +
+> `HF_MODEL`. Provider tanpa kunci dilewati otomatis. `/health` menampilkan status tiap provider (`chain`, `providers`)
+> tanpa nilai kunci. Gambar yang dipilih pengguna dapat dikirim ke provider itu bila Gemini gagal (lihat
+> `docs/KEBIJAKAN_PRIVASI.md`).
+
 ### 2. Backend (terminal 2)
 
 ```bash

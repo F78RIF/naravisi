@@ -1,6 +1,6 @@
 # NaraVisi · ai-service/app/main.py
 # Fungsi   : Layanan AI (FastAPI): endpoint /health dan /caption.
-# Kebutuhan: RF-09, RF-10, PF-04, RNF-12
+# Kebutuhan: RF-09, RF-10, PF-04, PF-13, RNF-12
 # Terkait  : service.py, gemini.py, providers.py, backend/src/services/aiClient.js
 """Layanan AI Image Captioning NaraVisi (FastAPI).
 
@@ -71,30 +71,51 @@ def build_plain_service(provider: str, settings: Settings) -> CaptionService:
 
 
 # [PF-04] Cadangan AI Gemini → BLIP — merangkai Gemini (utama) + BLIP (cadangan)
-def build_service(settings: Settings) -> CaptionRouter:
-    if settings.provider == "gemini":
-        from .gemini import GeminiCaptioner
+# [PF-13] Cadangan AI cloud gratis — rantai CAPTION_CHAIN; provider tanpa kunci/model dilewati otomatis
+def build_service(settings: Settings, clients: dict | None = None) -> CaptionRouter:
+    """`clients` (tes): {'gemini': klien palsu, 'openrouter': httpx.Client palsu, 'hf': ...}."""
+    clients = clients or {}
+    links: list = []
+    skipped: list[str] = []
+    for index, name in enumerate(settings.effective_chain):
+        if name == "gemini":
+            if not (settings.gemini_api_key and settings.gemini_model) and "gemini" not in clients:
+                skipped.append(name)
+                continue
+            from .gemini import GeminiCaptioner
 
-        fewshot = load_fewshot(settings.fewshot_path)
-        log.info("Provider utama: Gemini %s (%d contoh few-shot).", settings.gemini_model, len(fewshot))
-        primary = CaptionService(
-            GeminiCaptioner(
-                api_key=settings.gemini_api_key,
-                model_name=settings.gemini_model,
-                timeout_seconds=settings.gemini_timeout_seconds,
-                max_output_tokens=settings.gemini_max_output_tokens,
-                thinking_budget=settings.gemini_thinking_budget,
-                fewshot=fewshot,
-            ),
-            None,
-        )
-    else:
-        primary = build_plain_service(settings.provider, settings)
+            fewshot = load_fewshot(settings.fewshot_path)
+            log.info("Provider: Gemini %s (%d contoh few-shot).", settings.gemini_model, len(fewshot))
+            links.append(CaptionService(
+                GeminiCaptioner(
+                    api_key=settings.gemini_api_key,
+                    model_name=settings.gemini_model,
+                    client=clients.get("gemini"),
+                    timeout_seconds=settings.gemini_timeout_seconds,
+                    max_output_tokens=settings.gemini_max_output_tokens,
+                    thinking_budget=settings.gemini_thinking_budget,
+                    fewshot=fewshot,
+                ),
+                None,
+            ))
+        elif name in ("openrouter", "hf"):
+            key, model = ((settings.openrouter_api_key, settings.openrouter_model) if name == "openrouter"
+                          else (settings.hf_token, settings.hf_model))
+            if not (key and model):
+                skipped.append(name)
+                continue
+            from .cloud import OpenAICompatCaptioner
 
-    fallback = None
-    if settings.fallback_provider != "none":
-        fallback = FallbackSlot(settings.fallback_provider, lambda: build_plain_service(settings.fallback_provider, settings))
-    return CaptionRouter(primary, fallback)
+            log.info("Provider: %s %s.", name, model)
+            links.append(CaptionService(OpenAICompatCaptioner(name, key, model, client=clients.get(name),
+                                                              timeout_seconds=settings.cloud_timeout_seconds), None))
+        elif index == 0:
+            links.append(build_plain_service(name, settings))  # BLIP/mock sebagai provider utama: dimuat saat start
+        else:
+            links.append(FallbackSlot(name, lambda n=name: build_plain_service(n, settings)))
+    if skipped:
+        log.info("Provider dilewati (kunci/model kosong): %s", ", ".join(skipped))
+    return CaptionRouter(links=links, skipped=skipped)
 
 
 def warm_up(service: CaptionService | CaptionRouter) -> None:
@@ -155,7 +176,7 @@ PROVIDER_STATUS = {
 
 def create_app(settings: Settings | None = None, service: CaptionService | CaptionRouter | None = None) -> FastAPI:
     settings = settings or load_settings()
-    install_redaction([settings.gemini_api_key])
+    install_redaction(settings.secrets)
     if isinstance(service, CaptionService):
         service = CaptionRouter(service)
     state: dict[str, CaptionRouter | None] = {"service": service}
@@ -169,8 +190,9 @@ def create_app(settings: Settings | None = None, service: CaptionService | Capti
                 started = time.perf_counter()
                 await run_in_threadpool(warm_up, router)
                 log.info("Pemanasan model: %.1f dtk", time.perf_counter() - started)
-            if router.fallback:
-                router.fallback.load_in_background()  # cadangan tidak menunda kesiapan layanan
+            for link in router.links:
+                if isinstance(link, FallbackSlot):
+                    link.load_in_background()  # cadangan tidak menunda kesiapan layanan
             state["service"] = router
             log.info("Layanan AI siap: %s (cadangan: %s)", router.model_name, settings.fallback_provider)
         yield
@@ -190,6 +212,9 @@ def create_app(settings: Settings | None = None, service: CaptionService | Capti
             "fallback_ready": bool(fb and fb.service),
             "fallback_state": fb.state if fb else None,  # ready | loading | failed | idle
             "fallback_error": fb.error if fb else None,  # nama jenis galat saja (mis. NOT_ENOUGH_MEMORY), tanpa rincian
+            # [PF-13] Cadangan AI cloud gratis — urutan rantai & status tiap provider (tanpa nilai kunci)
+            "chain": list(settings.effective_chain),
+            "providers": svc.status() if svc else [],
         }
 
     # [RF-09] Mengirim gambar ke AI — POST /caption menerima gambar dari backend

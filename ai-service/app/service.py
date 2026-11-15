@@ -233,36 +233,77 @@ class FallbackSlot:
 
 
 # [PF-04] Cadangan AI Gemini → BLIP — provider utama gagal → provider cadangan
+# [PF-13] Cadangan AI cloud gratis — rantai berurutan (CAPTION_CHAIN), mis. gemini → openrouter → hf → blip
 class CaptionRouter:
-    """Provider utama → bila gagal (kuota habis, offline, JSON rusak, kunci salah) → provider cadangan."""
+    """Mencoba provider satu per satu. Galat di FALLBACK_CODES (kuota habis, offline, JSON rusak, kunci salah) → lanjut
+    ke berikutnya; MODEL_SAFETY tidak (gambarnya yang ditahan). Provider tanpa kunci tidak masuk rantai (`skipped`)."""
 
-    def __init__(self, primary: CaptionService, fallback: FallbackSlot | None = None):
-        self.primary = primary
-        self.fallback = fallback
+    def __init__(self, primary: CaptionService | None = None, fallback: FallbackSlot | None = None, *,
+                 links: list | None = None, skipped: list[str] | None = None):
+        if links is None:
+            links = [link for link in (primary, fallback) if link is not None]
+        self.links = links
+        self.skipped = list(skipped or [])  # nama provider yang dilewati karena kunci/model kosong
+
+    @staticmethod
+    def _name(link) -> str:
+        return link.name if isinstance(link, FallbackSlot) else link.provider
+
+    @property
+    def primary(self) -> CaptionService | None:
+        return next((link for link in self.links if isinstance(link, CaptionService)), None)
+
+    @property
+    def fallback(self) -> FallbackSlot | None:
+        """Cadangan lokal (BLIP) yang dimuat di latar — untuk /health dan pemuatan saat start."""
+        return next((link for link in self.links if isinstance(link, FallbackSlot)), None)
 
     @property
     def model_name(self) -> str:
-        return self.primary.model_name
+        return self.primary.model_name if self.primary else (self.fallback.name if self.fallback else "-")
 
     @property
     def provider(self) -> str:
-        return self.primary.provider
+        return self._name(self.links[0]) if self.links else "-"
 
-    # [PF-04] Cadangan AI Gemini → BLIP — coba Gemini; kode galat di FALLBACK_CODES → BLIP
+    # [PF-13] Cadangan AI cloud gratis — status tiap provider untuk /health (tanpa nilai kunci)
+    def status(self) -> list[dict]:
+        out = []
+        for link in self.links:
+            if isinstance(link, FallbackSlot):
+                model = link.service.model_name if link.service else None
+                out.append({"name": link.name, "state": link.state, "model": model, "error": link.error})
+            else:
+                out.append({"name": link.provider, "state": "ready", "model": link.model_name, "error": None})
+        out += [{"name": n, "state": "tanpa_kunci", "model": None, "error": None} for n in self.skipped]
+        return out
+
+    # [PF-04] Cadangan AI Gemini → BLIP — coba provider berurutan; kode galat di FALLBACK_CODES → berikutnya
     def describe(self, image: Image.Image, lang: str = "id", context: dict | None = None) -> CaptionResult:
-        try:
-            result = self.primary.describe(image, lang, context)
-        except ProviderError as err:
-            backup = self.fallback.service if self.fallback else None
-            if err.code not in FALLBACK_CODES or backup is None:
-                if err.code in FALLBACK_CODES and self.fallback:
-                    log.warning("Provider %s gagal (%s); cadangan %s belum siap (%s).", self.provider, err.code,
-                                self.fallback.name, self.fallback.state)
-                    self.fallback.retry_if_failed()
-                raise  # galat asli → main.py memetakannya ke 429/502/503/504 yang jelas (bukan 500)
-            log.warning("Provider %s gagal (%s); memakai cadangan %s.", self.provider, err.code, backup.provider)
-            result = backup.describe(image, lang, context)
+        errors: list[ProviderError] = []
+        result = None
+        for link in self.links:
+            svc = link.service if isinstance(link, FallbackSlot) else link
+            if svc is None:
+                if errors:
+                    log.warning("Provider %s gagal (%s); cadangan %s belum siap (%s).", self._name(self.links[0]),
+                                errors[0].code, link.name, link.state)
+                link.retry_if_failed()
+                continue
+            try:
+                result = svc.describe(image, lang, context)
+                break
+            except ProviderError as err:
+                if err.code not in FALLBACK_CODES:
+                    raise
+                log.warning("Provider %s gagal (%s); mencoba cadangan berikutnya.", svc.provider, err.code)
+                errors.append(err)
+        if result is None:
+            if errors:
+                raise errors[0]  # galat provider pertama → main.py memetakannya ke 429/502/503/504 (bukan 500)
+            raise ProviderError("MODEL_UNAVAILABLE", "Belum ada layanan AI yang siap. Coba lagi sebentar lagi.")
+        if errors:
             result.fallback = True
-            result.fallback_reason = err.code
+            result.fallback_reason = errors[0].code
         log.info("Deskripsi: provider=%s cadangan=%s jenis=%s %d ms", result.provider, result.fallback, result.jenis, result.latency_ms)
         return result

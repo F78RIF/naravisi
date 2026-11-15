@@ -1559,3 +1559,30 @@ POST /descriptions gagal (server mati, AI gagal, kuota habis, offline)
   "AI di perangkat (cadangan offline)".
 * Uji otomatis memakai tiruan `globalThis.naraVisi.fakeDeviceAi.aiBawaan`. Chromium uji (Playwright) tidak punya
   Prompt API, jadi statusnya benar-benar "tidak tersedia" lewat jalur deteksi asli.
+
+### Cadangan AI cloud gratis (PF-13) — Langkah 4 (di ai-service, bukan extension)
+
+Urutan provider di server diatur `CAPTION_CHAIN` di `ai-service/.env`, misalnya `gemini,openrouter,hf,blip`:
+
+```
+POST /caption ─▶ CaptionRouter.describe()                                   service.py
+                  untuk tiap provider berurutan:
+                    berhasil → selesai (fallback = ada yang gagal sebelumnya, fallback_reason = galat pertama)
+                    galat di FALLBACK_CODES (429/402 kuota, 401/403 kunci, 5xx, timeout, JSON rusak) → berikutnya
+                    MODEL_SAFETY → berhenti (gambarnya yang ditahan, tidak dikirim ke penyedia lain)
+                    BLIP belum siap → lewati + coba muat ulang di latar
+                  semua gagal → galat provider PERTAMA (mis. 429 MODEL_BUSY), bukan 500
+```
+
+* **Provider tanpa kunci dilewati otomatis** saat start (`build_service`): Gemini tanpa `GEMINI_API_KEY`, OpenRouter tanpa
+  `OPENROUTER_API_KEY`/`OPENROUTER_MODEL`, Hugging Face tanpa `HF_TOKEN`/`HF_MODEL`. Mereka tercatat sebagai
+  `tanpa_kunci` di `/health`. `CAPTION_CHAIN` kosong → perilaku lama (`CAPTION_PROVIDER` lalu `FALLBACK_PROVIDER`).
+* **OpenRouter & Hugging Face** (`app/cloud.py`) sama-sama memakai format **OpenAI Chat Completions**
+  (`https://openrouter.ai/api/v1`, `https://router.huggingface.co/v1`): instruksi sistem = `SYSTEM_INSTRUCTION` Gemini +
+  format JSON, gambar dikirim sebagai data URL JPEG. Jawaban JSON disamakan ke format terstruktur yang sama
+  (jenis, ringkasan, detail, teks_dalam_gambar, keyakinan). Bukan JSON → disusun sebisanya: jenis `lainnya`, ringkasan =
+  teks jawaban, **keyakinan `rendah`** (kalimat akhirnya diberi "Deskripsi ini mungkin kurang tepat…").
+* **`/health`** menambah `chain` dan `providers: [{name, state, model, error}]` (state: `ready`, `loading`, `failed`,
+  `idle`, `tanpa_kunci`). **Nilai kunci tidak pernah ditampilkan**, dan semua kunci disamarkan di log (`RedactSecrets`).
+* **Production** (`APP_ENV=production`) dengan `CAPTION_CHAIN`: wajib diawali `gemini`, memuat `blip`, tanpa `mock`.
+* Privasi: setiap provider cloud di rantai bisa menerima gambar yang dipilih pengguna (lihat `docs/KEBIJAKAN_PRIVASI.md`).

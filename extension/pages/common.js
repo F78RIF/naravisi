@@ -155,7 +155,11 @@ export const REPORT_CATEGORIES = [
   ['lainnya', 'Lainnya'],
 ];
 
-const PROVIDER_LABEL = { gemini: 'Google Gemini', blip: 'BLIP (model lokal)', mock: 'Model contoh (pengembangan)' };
+// [PF-13] Cadangan AI cloud gratis — nama penyedia di riwayat (openrouter / hf dari rantai CAPTION_CHAIN ai-service)
+const PROVIDER_LABEL = {
+  gemini: 'Google Gemini', openrouter: 'OpenRouter (cadangan cloud)', hf: 'Hugging Face (cadangan cloud)',
+  blip: 'BLIP (model lokal)', mock: 'Model contoh (pengembangan)',
+};
 export const providerLabel = (provider) => PROVIDER_LABEL[provider] ?? (provider || '-');
 
 // [RF-12] Membacakan deskripsi — membacakan di halaman extension (Riwayat, Coba suara)

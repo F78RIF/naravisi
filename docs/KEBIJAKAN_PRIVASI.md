@@ -1,6 +1,6 @@
 # Kebijakan Privasi NaraVisi
 
-Berlaku untuk extension Chrome NaraVisi versi 1.1.0 dan server NaraVisi. Pembaruan terakhir: 15 November 2026.
+Berlaku untuk extension Chrome NaraVisi versi 1.1.0 dan server NaraVisi. Pembaruan terakhir: 15 November 2026 (PF-09..PF-13).
 
 NaraVisi membantu pengguna tunanetra memahami gambar di halaman web. Dokumen ini menjelaskan data apa yang diproses,
 di mana, dan untuk apa, dengan bahasa sederhana.
@@ -38,6 +38,14 @@ dimatikan di **Pengaturan → Otomatis** ("Deskripsi kilat tanpa AI", "Sebutkan 
 * **Google Gemini** (bila server memakai `CAPTION_PROVIDER=gemini`): gambar yang Anda pilih diteruskan server ke Google
   untuk dideskripsikan. Pada tingkat gratis Google AI Studio, **data tersebut dapat dipakai Google untuk meningkatkan
   produknya**. Pengelola server bisa memilih model lokal BLIP agar gambar tidak keluar dari server.
+* **OpenRouter** dan **Hugging Face Inference Providers** (bila pengelola server mengisi kuncinya di `CAPTION_CHAIN`):
+  cadangan AI cloud gratis yang dipakai bila Gemini gagal. Gambar yang Anda pilih dikirim ke penyedia itu, dan bisa
+  diteruskan ke penyedia model di belakangnya, untuk dideskripsikan. Ketentuan data masing-masing penyedia berlaku
+  (model gratis bisa mencatat permintaan). Tanpa kunci, penyedia ini tidak pernah dipakai.
+* **Ringkasnya, pihak yang mungkin menerima gambar yang Anda pilih:** server NaraVisi, Google (Gemini), OpenRouter
+  beserta penyedia modelnya, dan Hugging Face beserta penyedia modelnya. Hanya yang diaktifkan pengelola server yang dipakai.
+  Penyedia dicoba berurutan: bila penyedia pertama gagal (mis. kuota habis), gambar yang sama dikirim ke penyedia
+  berikutnya. BLIP berjalan di server NaraVisi sendiri.
 * **Midtrans** (hanya untuk pembayaran Premium, mode Sandbox/simulasi).
 * Fitur lokal pada bagian 1 **tidak** melibatkan pihak ketiga mana pun.
 

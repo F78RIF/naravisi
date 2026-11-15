@@ -1,6 +1,6 @@
 # NaraVisi · ai-service/app/config.py
 # Fungsi   : Membaca pengaturan layanan AI dari .env (provider, model, batas waktu).
-# Kebutuhan: PF-04
+# Kebutuhan: PF-04, PF-13
 # Terkait  : main.py, .env.example
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from pathlib import Path
 PROVIDERS = {"gemini", "blip", "mock"}
 APP_ENVS = {"development", "production"}
 FALLBACKS = PROVIDERS - {"gemini"} | {"none"}
+# [PF-13] Cadangan AI cloud gratis — nama yang boleh dipakai di CAPTION_CHAIN (urutan = urutan dicoba)
+CHAIN_PROVIDERS = {"gemini", "openrouter", "hf", "blip", "mock"}
 
 DEFAULT_FEWSHOT_PATH = Path(__file__).resolve().parent.parent / "eval" / "data" / "fewshot.json"
 DEFAULT_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
@@ -59,10 +61,33 @@ def production_problems() -> list[str]:
         problems.append("GEMINI_API_KEY kosong — buat kunci gratis di https://aistudio.google.com/apikey")
     if not os.getenv("GEMINI_MODEL", "").strip():
         problems.append("GEMINI_MODEL kosong — pilih model Flash/Flash-Lite gratis di Google AI Studio.")
+    chain = parse_chain(os.getenv("CAPTION_CHAIN", ""))
+    if chain:
+        if chain[0] != "gemini":
+            problems.append(f"CAPTION_CHAIN harus diawali 'gemini' di production (didapat '{','.join(chain)}').")
+        if "blip" not in chain:
+            problems.append("CAPTION_CHAIN harus memuat 'blip' agar tetap menjawab saat semua AI cloud gagal.")
+        if "mock" in chain:
+            problems.append("CAPTION_CHAIN tidak boleh memuat 'mock' di production.")
+        return problems
     fallback = os.getenv("FALLBACK_PROVIDER", "").strip().lower() or "blip"
     if fallback != "blip":
         problems.append(f"FALLBACK_PROVIDER harus 'blip' agar tetap menjawab saat kuota Gemini habis (didapat '{fallback}').")
     return problems
+
+
+# [PF-13] Cadangan AI cloud gratis — "gemini,openrouter,hf,blip" → ('gemini', 'openrouter', 'hf', 'blip')
+def parse_chain(raw: str) -> tuple[str, ...]:
+    names = [n.strip().lower() for n in (raw or "").split(",") if n.strip()]
+    unknown = [n for n in names if n not in CHAIN_PROVIDERS]
+    if unknown:
+        raise ValueError(f"CAPTION_CHAIN berisi provider tidak dikenal: {', '.join(unknown)} "
+                         f"(pilihan: {', '.join(sorted(CHAIN_PROVIDERS))})")
+    out: list[str] = []
+    for n in names:
+        if n not in out:
+            out.append(n)
+    return tuple(out)
 
 
 @dataclass(frozen=True)
@@ -82,6 +107,23 @@ class Settings:
     app_env: str = "development"
     # "en" = keluaran BLIP berbahasa Inggris lalu diterjemahkan; "id" = model hasil fine-tune (Tahap 5) sudah berbahasa Indonesia.
     blip_lang: str = "en"
+    # [PF-13] Cadangan AI cloud gratis — rantai provider; kosong = dari CAPTION_PROVIDER + FALLBACK_PROVIDER (perilaku lama)
+    chain: tuple[str, ...] = ()
+    openrouter_api_key: str = field(default="", repr=False)
+    openrouter_model: str = ""
+    hf_token: str = field(default="", repr=False)
+    hf_model: str = ""
+    cloud_timeout_seconds: float = 20.0
+
+    @property
+    def effective_chain(self) -> tuple[str, ...]:
+        if self.chain:
+            return self.chain
+        return (self.provider,) + ((self.fallback_provider,) if self.fallback_provider != "none" else ())
+
+    @property
+    def secrets(self) -> list[str]:
+        return [s for s in (self.gemini_api_key, self.openrouter_api_key, self.hf_token) if s]
 
 
 def _int_or_none(name: str) -> int | None:
@@ -96,7 +138,11 @@ def load_settings() -> Settings:
         if problems:
             raise ConfigError(problems)
 
+    chain = parse_chain(os.getenv("CAPTION_CHAIN", ""))
     provider = os.getenv("CAPTION_PROVIDER", "blip").strip().lower()
+    if chain:
+        # Rantai menggantikan CAPTION_PROVIDER/FALLBACK_PROVIDER; provider tanpa kunci dilewati saat membangun layanan.
+        provider = chain[0] if chain[0] in PROVIDERS else "gemini"
     if provider not in PROVIDERS:
         raise ValueError(f"CAPTION_PROVIDER harus 'gemini', 'blip', atau 'mock', didapat '{provider}'")
 
@@ -105,10 +151,12 @@ def load_settings() -> Settings:
         raise ValueError(f"FALLBACK_PROVIDER harus 'blip', 'mock', atau 'none', didapat '{fallback}'")
     if provider != "gemini":
         fallback = "none"  # cadangan hanya untuk Gemini (butuh internet & kuota); BLIP/mock sudah lokal
+    if chain:
+        fallback = "blip" if "blip" in chain[1:] else "mock" if "mock" in chain[1:] else "none"
 
     gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
     gemini_model = os.getenv("GEMINI_MODEL", "").strip()
-    if provider == "gemini":
+    if provider == "gemini" and not chain:
         if not gemini_api_key:
             raise ValueError("GEMINI_API_KEY wajib diisi di .env bila CAPTION_PROVIDER='gemini'")
         if not gemini_model:
@@ -135,4 +183,10 @@ def load_settings() -> Settings:
         fallback_provider=fallback,
         fewshot_path=os.getenv("FEWSHOT_PATH", "").strip() or str(DEFAULT_FEWSHOT_PATH),
         blip_lang=blip_lang,
+        chain=chain,
+        openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
+        openrouter_model=os.getenv("OPENROUTER_MODEL", "").strip(),
+        hf_token=os.getenv("HF_TOKEN", "").strip(),
+        hf_model=os.getenv("HF_MODEL", "").strip(),
+        cloud_timeout_seconds=float(os.getenv("CLOUD_TIMEOUT_SECONDS", "20")),
     )

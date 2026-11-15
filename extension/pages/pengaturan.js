@@ -93,6 +93,8 @@ function privacyCard() {
     el('p', {}, 'Gambar yang Anda pilih dikirim ke server NaraVisi, lalu ke Google Gemini untuk dideskripsikan. File gambar tidak disimpan; yang disimpan hanya teks deskripsi, alamat gambar, dan alamat halaman di riwayat Anda.'),
     el('p', {}, 'Pada layanan Gemini tingkat gratis, Google dapat memakai data yang dikirim untuk meningkatkan produknya. Jangan mendeskripsikan gambar yang berisi data pribadi atau rahasia.'),
     el('p', {}, 'Bila Gemini tidak dapat dipakai (kuota habis atau tidak ada internet), server memakai model cadangan BLIP yang berjalan di komputer server sendiri.'),
+    // [PF-13] Cadangan AI cloud gratis — pihak ketiga lain yang mungkin menerima gambar bila diatur pengelola server
+    el('p', {}, 'Pengelola server dapat menambahkan cadangan AI cloud gratis sebelum BLIP, yaitu OpenRouter dan Hugging Face. Bila Gemini gagal, gambar yang Anda pilih dapat dikirim ke penyedia tersebut. Deskripsi offline (AI bawaan Chrome, Florence-2, deskripsi sederhana) diproses di komputer Anda dan tidak dikirim ke mana pun.'),
   );
 }
 
