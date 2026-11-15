@@ -1,6 +1,6 @@
 // NaraVisi · extension/shared/config.js
 // Fungsi   : Konfigurasi & sesi bersama: alamat API, token, pengaturan TTS, apiFetch.
-// Kebutuhan: RF-02, RF-05, RF-19, PF-05, PF-06, PF-07, PF-08, RNF-06, RNF-09
+// Kebutuhan: RF-02, RF-05, RF-19, PF-05, PF-06, PF-07, PF-08, PF-09, RNF-06, RNF-09
 // Terkait  : background.js, popup/popup.js, pages/*.js, shared/auth-forms.js
 
 // Situs yang tidak pernah diproses mode otomatis (bisa diedit di Pengaturan). Entri tanpa titik
@@ -22,6 +22,7 @@ export const DEFAULTS = Object.freeze({
   sebutWarna: true, // [PF-08] Warna dominan — "Sebutkan warna" (bagian dari lapis lokal)
   bacaTulisan: true, // [PF-06] Teks di gambar (OCR) — "Baca tulisan di gambar (offline)"
   bacaQr: true, // [PF-07] Kode QR & barcode — "Baca kode QR"
+  sebutOrientasi: false, // [PF-09] Orientasi — "Sebutkan orientasi" (bawaan nonaktif agar ringkas)
 });
 
 export const AUTO_RESERVE = 2; // mode otomatis berhenti bila sisa kuota ≤ 2 (disisakan untuk pilihan manual)

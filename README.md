@@ -285,6 +285,7 @@ antrean suara (tanpa tumpang tindih) sebelum deskripsi AI:
 | Warna dominan (PF-08) | kode sendiri (median-cut 64×64 px) | maks. 2 warna dengan porsi ≥ 15%, 12 nama warna |
 | Tulisan di gambar (PF-06) | Tesseract.js 7 + data ind & eng "fast" | keyakinan ≥ 60, ≥ 3 kata bermakna, maks. 300 karakter; tidak diulang bila Gemini sudah menyalin tulisannya |
 | Kode QR (PF-07) | `BarcodeDetector` bawaan, atau jsQR (Windows) | hanya **nama domain** yang dibacakan; `javascript:`/`data:`/`file:`/`intent:` → "kode QR berisi teks"; tautan **tidak pernah dibuka otomatis** |
+| Orientasi (PF-09) | rasio lebar ÷ tinggi | "Gambar mendatar/tegak/persegi."; bawaan **nonaktif** (Pengaturan → "Sebutkan orientasi") |
 
 Lapis lokal hanya dibacakan bila AI belum menjawab setelah 1 detik. Info QR (dan tulisan, bila AI tidak memuatnya)
 ditambahkan di belakang deskripsi AI. Untuk QR bertautan, panel menampilkan **Salin tautan …** dan **Buka …**. "Buka"

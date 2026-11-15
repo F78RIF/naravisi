@@ -1,6 +1,6 @@
 // NaraVisi · extension/pages/pengaturan.js
 // Fungsi   : Halaman Pengaturan: bahasa, pintasan, suara, mode otomatis, server, privasi.
-// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, PF-06, PF-07, PF-08, RNF-13
+// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, PF-06, PF-07, PF-08, PF-09, RNF-13
 // Terkait  : pengaturan.html, common.js, backend settingsService.js
 import { apiFetch, apiHost, AUTO_MAX_PER_PAGE, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage, SHORTCUTS_URL, speakGuide } from '../shared/guide.js';
@@ -172,6 +172,9 @@ async function autoSection() {
   // [PF-07] Kode QR & barcode — sakelar "Baca kode QR" (bawaan aktif; tautan tidak pernah dibuka otomatis)
   const qr = check('baca-qr', 'bacaQr', 'Baca kode QR',
     'Menyebut ke mana kode QR mengarah, mis. "Ada kode QR menuju rri.co.id." Hanya nama situsnya yang dibacakan; tautan tidak pernah dibuka otomatis. Kode berisi skrip atau berkas dibacakan sebagai "kode QR berisi teks".');
+  // [PF-09] Orientasi — sakelar "Sebutkan orientasi" (bawaan nonaktif agar bacaan ringkas)
+  const orientasi = check('sebut-orientasi', 'sebutOrientasi', 'Sebutkan orientasi',
+    'Menambahkan bentuk gambar, mis. "Gambar mendatar.", "Gambar tegak.", atau "Gambar persegi." Dihitung di komputer Anda.');
   const fokus = check('fokus', 'describeOnFocus', 'Deskripsikan saat gambar mendapat fokus keyboard',
     'Saat Tab berhenti di gambar, atau tautan yang isinya hanya gambar, tanpa teks alternatif.');
 
@@ -193,7 +196,7 @@ async function autoSection() {
     save({ announceImages: umumkan.input.checked }, umumkan.input.checked ? 'Pengumuman jumlah gambar diaktifkan.' : 'Pengumuman jumlah gambar dimatikan.'));
   kilat.input.addEventListener('change', () =>
     save({ quickLocal: kilat.input.checked }, kilat.input.checked ? 'Deskripsi kilat tanpa AI diaktifkan.' : 'Deskripsi kilat tanpa AI dimatikan.'));
-  for (const [{ input }, key, name] of [[warna, 'sebutWarna', 'Sebutkan warna'], [tulisan, 'bacaTulisan', 'Baca tulisan di gambar'], [qr, 'bacaQr', 'Baca kode QR']]) {
+  for (const [{ input }, key, name] of [[warna, 'sebutWarna', 'Sebutkan warna'], [tulisan, 'bacaTulisan', 'Baca tulisan di gambar'], [qr, 'bacaQr', 'Baca kode QR'], [orientasi, 'sebutOrientasi', 'Sebutkan orientasi']]) {
     input.addEventListener('change', () => save({ [key]: input.checked }, `${name} ${input.checked ? 'diaktifkan' : 'dimatikan'}.`));
   }
 
@@ -231,7 +234,7 @@ async function autoSection() {
     sapa.node,
     umumkan.node,
     kilat.node,
-    el('div', { class: 'stack', role: 'group', 'aria-label': 'Lapis lokal (gratis, offline, tanpa kuota)' }, warna.node, tulisan.node, qr.node),
+    el('div', { class: 'stack', role: 'group', 'aria-label': 'Lapis lokal (gratis, offline, tanpa kuota)' }, warna.node, tulisan.node, qr.node, orientasi.node),
     otomatis.node,
     field('otomatis-jumlah', 'Jumlah gambar per halaman (baca berurutan)', jumlah, `1 sampai ${AUTO_MAX_PER_PAGE} gambar. Diproses satu per satu setelah halaman tenang.`),
     fokus.node,

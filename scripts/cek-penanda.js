@@ -1,6 +1,6 @@
 // NaraVisi · scripts/cek-penanda.js
 // Fungsi   : Memeriksa bahwa setiap kebutuhan punya penanda di kode dan tes otomatis.
-// Kebutuhan: RF-01..RF-30, PF-01..PF-08 (lihat docs/PETA_KODE.md)
+// Kebutuhan: RF-01..RF-30, PF-01..PF-13 (lihat docs/PETA_KODE.md)
 // Terkait  : backend/package.json (npm run cek:penanda), docs/PETA_KODE.md
 // Pemakaian: cd backend && npm run cek:penanda      (atau: node scripts/cek-penanda.js dari akar repo)
 // Keluar dengan kode 1 bila ada RF tanpa penanda/tes atau penanda yang formatnya salah.
@@ -51,6 +51,11 @@ const KEBUTUHAN = {
   'PF-06': ['Teks di gambar (OCR)', null],
   'PF-07': ['Kode QR & barcode', null],
   'PF-08': ['Warna dominan', null],
+  'PF-09': ['Orientasi', null],
+  'PF-10': ['Florence-2 offline', null],
+  'PF-11': ['Chrome Built-in AI', null],
+  'PF-12': ['Perintah suara', null],
+  'PF-13': ['Cadangan AI cloud gratis', null],
   'RNF-02': ['Pembaca layar', null],
   'RNF-03': ['Navigasi keyboard', null],
   'RNF-06': ['Pesan error jelas', null],

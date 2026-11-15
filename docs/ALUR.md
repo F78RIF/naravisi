@@ -23,6 +23,7 @@ bisa langsung tampil di GitHub atau disalin ke slide.
 | [Tahap 12](#tahap-12--online-langkah-3-server-oracle-cloud-always-free) | Online Langkah 3: Oracle Always Free | RNF-07, RNF-09 |
 | [Tahap 13](#tahap-13--pf-05-deteksi-objek-lokal-mediapipe) | PF-05: deteksi objek lokal (MediaPipe) | PF-05 |
 | [Tahap 14](#tahap-14--lapis-lokal-warna-pf-08-kode-qr-pf-07-teks-di-gambar-pf-06) | Lapis lokal: warna, kode QR, teks di gambar | PF-06..PF-08 |
+| [Tahap 15](#tahap-15--orientasi-ai-bawaan-chrome-florence-2-rantai-ai-cloud-perintah-suara) | Orientasi, AI bawaan Chrome, Florence-2, rantai AI cloud, perintah suara | PF-09..PF-13 |
 
 ---
 
@@ -1503,3 +1504,26 @@ Tes: `e2e/unit/lapis-lokal.test.mjs` (urutan, sakelar, aturan tambahan, cadangan
 "Gabungan lapis lokal (PF-06..PF-08)" dengan detektor tiruan: urutan bacaan, tanpa duplikasi tulisan, cadangan saat
 server mati & AI gagal (kuota & riwayat tetap), QR berbahaya dan konfirmasi "Buka", pengaturan dimatikan, Baca
 berurutan tidak melewati gambar bertulisan.
+
+---
+
+## Tahap 15 — Orientasi, AI bawaan Chrome, Florence-2, rantai AI cloud, perintah suara
+
+Penanda di kode: cari `[PF-09]` … `[PF-13]`. Lokasi lengkap di `docs/PETA_KODE.md` (tabel PF).
+
+### Orientasi (PF-09) — Langkah 1
+
+Dokumen offscreen sudah membuka gambar untuk benda & warna, jadi lebar dan tingginya langsung dipakai
+(`shared/orientasi.js`, logika murni):
+
+| Rasio lebar ÷ tinggi | Orientasi | Kalimat |
+|---|---|---|
+| ≥ 1,15 | mendatar | "Gambar mendatar." |
+| ≤ 1 ÷ 1,15 (≈ 0,87) | tegak | "Gambar tegak." |
+| di antaranya | persegi | "Gambar persegi." |
+
+Toleransi 15% supaya potongan kecil (mis. 500 × 480) tetap disebut persegi. Normalisasi gambar ke ≤ 1280 px tidak
+mengubah rasio. Kalimatnya ditaruh di **akhir** bagian benda ("Kemungkinan berisi: 2 orang. Warna dominan: biru. Gambar
+mendatar.") dan di cadangan. Pengaturan **"Sebutkan orientasi"** (`sebutOrientasi`) **bawaan nonaktif** agar bacaan tetap
+ringkas. Disebut "Gambar", bukan "Foto", karena lapis lokal tidak tahu apakah gambar itu foto, ilustrasi, atau kode QR.
+

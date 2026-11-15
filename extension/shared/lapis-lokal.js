@@ -3,21 +3,24 @@
 //            (PF-07). Menentukan urutan bacaan, kalimat cadangan "Deskripsi sederhana (tanpa AI)", tambahan setelah
 //            deskripsi AI (tanpa mengulang teks yang sudah dibaca AI), dan penyaring Mode Baca Berurutan.
 //            Tanpa API browser, jadi bisa diuji langsung dengan Node.
-// Kebutuhan: PF-05, PF-06, PF-07, PF-08
+// Kebutuhan: PF-05, PF-06, PF-07, PF-08, PF-09
 // Terkait  : background.js (requestDescription, sendQuick), content/content.js (antrean suara), shared/deteksi.js
 
 import { kalimatObjek } from './deteksi.js';
 import { kalimatWarna } from './warna.js';
+import { kalimatOrientasi } from './orientasi.js';
 
 /** Urutan bagian yang dibacakan. */
 export const URUTAN_BAGIAN = ['benda', 'tulisan', 'kode'];
 
 const warnaAktif = (benda, opsi) => (opsi?.sebutWarna === false ? [] : benda?.warna ?? []);
+// [PF-09] Orientasi — bawaan nonaktif (agar ringkas); hanya disebut bila opsi.sebutOrientasi === true
+const orientasiAktif = (benda, opsi) => (opsi?.sebutOrientasi === true ? kalimatOrientasi(benda?.orientasi) : null);
 
 // [PF-08] Warna dominan — kalimat bagian "benda": "Kemungkinan berisi: 2 orang. Warna dominan: biru." (sakelar warna)
 export function kalimatBenda(benda, opsi = {}) {
   const isi = benda?.kalimat || kalimatObjek(benda?.objek);
-  const bagian = [isi ? `Kemungkinan berisi: ${isi}.` : null, kalimatWarna(warnaAktif(benda, opsi))];
+  const bagian = [isi ? `Kemungkinan berisi: ${isi}.` : null, kalimatWarna(warnaAktif(benda, opsi)), orientasiAktif(benda, opsi)];
   return bagian.filter(Boolean).join(' ') || null;
 }
 
@@ -57,6 +60,8 @@ export function kalimatSederhanaLengkap(lokal, opsi = {}) {
   else if (benda) isi.push('tidak ada benda yang dikenali.');
   const warna = kalimatWarna(warnaAktif(benda, opsi));
   if (warna) isi.push(warna);
+  const o = orientasiAktif(benda, opsi);
+  if (o) isi.push(o);
   if (opsi.bacaTulisan !== false && tulisan?.kalimat) isi.push(tulisan.kalimat);
   if (opsi.bacaQr !== false && kode?.kalimat) isi.push(kode.kalimat);
   if (!isi.length) return null;

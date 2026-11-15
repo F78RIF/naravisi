@@ -3,12 +3,13 @@
 //            Berjalan di dokumen offscreen (bukan di halaman web). Semua berkas (.mjs, .wasm, .tflite) ada di
 //            extension/vendor/, tidak ada yang diunduh dari internet: gratis, offline, tidak memakai kuota.
 //            Gambar kecil 64×64 yang sama dipakai untuk penyaring gambar polos (PF-05) dan warna dominan (PF-08).
-// Kebutuhan: PF-05, PF-08
+// Kebutuhan: PF-05, PF-08, PF-09
 // Terkait  : offscreen.js (penerima pesan), shared/deteksi.js, shared/label-id.json, shared/warna.js,
 //            shared/warna-id.json, background.js (detectObjects)
 
 import { AMBANG_POLOS, gabungkanObjek, kalimatObjek, SKOR_MIN, variansiWarna } from '../shared/deteksi.js';
 import { warnaDominan } from '../shared/warna.js';
+import { orientasi } from '../shared/orientasi.js';
 
 const VENDOR = '../vendor/mediapipe';
 const MODEL_URL = new URL('../vendor/models/efficientdet_lite0_int8.tflite', import.meta.url).href;
@@ -90,7 +91,9 @@ export async function deteksiObjek(dataUrl) {
     const rgba = pikselKecil(bitmap);
     const variansi = Math.round(variansiWarna(rgba) * 10) / 10;
     const { warna, warnaMs } = await ukurWarna(rgba);
-    return { objek, kalimat: kalimatObjek(objek), polos: variansi < AMBANG_POLOS, variansi, warna, warnaMs, ms, muatMs };
+    // [PF-09] Orientasi — rasio dari gambar yang sama (normalisasi ≤ 1280 px tidak mengubah rasio)
+    const o = orientasi(bitmap.width, bitmap.height);
+    return { objek, kalimat: kalimatObjek(objek), polos: variansi < AMBANG_POLOS, variansi, warna, warnaMs, lebar: bitmap.width, tinggi: bitmap.height, orientasi: o, ms, muatMs };
   } finally {
     bitmap.close();
   }

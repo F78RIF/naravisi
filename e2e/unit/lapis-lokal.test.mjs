@@ -74,3 +74,18 @@ test('Baca berurutan: dilewati hanya bila tanpa benda, hampir polos, tanpa tulis
   assert.equal(layakDilewatiLengkap({ benda }), false);
   assert.equal(layakDilewatiLengkap({ benda: null }), false); // detektor gagal → tetap dikirim ke AI
 });
+
+test('PF-09: orientasi dari rasio lebar-tinggi; bawaan tidak disebut, dinyalakan → di akhir bagian benda', async () => {
+  const { orientasi, kalimatOrientasi } = await import('../../extension/shared/orientasi.js');
+  assert.equal(orientasi(1200, 800), 'mendatar');
+  assert.equal(orientasi(800, 1200), 'tegak');
+  assert.equal(orientasi(500, 480), 'persegi');
+  assert.equal(orientasi(0, 100), null);
+  assert.equal(kalimatOrientasi('tegak'), 'Gambar tegak.');
+  assert.equal(kalimatOrientasi('miring'), null);
+  const b = { ...benda, orientasi: 'mendatar' };
+  assert.equal(kalimatBenda(b), 'Kemungkinan berisi: 2 orang. Warna dominan: biru.');
+  assert.equal(kalimatBenda(b, { sebutOrientasi: true }), 'Kemungkinan berisi: 2 orang. Warna dominan: biru. Gambar mendatar.');
+  assert.equal(kalimatSederhanaLengkap({ benda: b }, { sebutOrientasi: true }),
+    'Deskripsi sederhana (tanpa AI): kemungkinan berisi 2 orang. Warna dominan: biru. Gambar mendatar.');
+});

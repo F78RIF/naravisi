@@ -1,6 +1,6 @@
 // NaraVisi · extension/background.js
 // Fungsi   : Service worker (Manifest V3): menyuntik panel, mengambil & mengecilkan gambar, memanggil REST API, pemandu suara chrome.tts.
-// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-06, PF-07, PF-08, RNF-09, RNF-12
+// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-06, PF-07, PF-08, PF-09, RNF-09, RNF-12
 // Terkait  : content/content.js, offscreen/offscreen.js, offscreen/deteksi-objek.js, shared/config.js, shared/guide.js, backend/src/http/routes.js
 
 import {
@@ -544,7 +544,12 @@ function localQr(image, tabId) {
 
 /** Sakelar lapis lokal di Pengaturan (bawaan semuanya aktif). */
 function opsiLokal(settings) {
-  return { sebutWarna: settings.sebutWarna !== false, bacaTulisan: settings.bacaTulisan !== false, bacaQr: settings.bacaQr !== false };
+  return {
+    sebutWarna: settings.sebutWarna !== false,
+    bacaTulisan: settings.bacaTulisan !== false,
+    bacaQr: settings.bacaQr !== false,
+    sebutOrientasi: settings.sebutOrientasi === true, // [PF-09] Orientasi — bawaan nonaktif
+  };
 }
 
 // [PF-05] Deteksi objek lokal — keempat lapis berjalan PARALEL dengan AI: benda+warna, tulisan, kode QR

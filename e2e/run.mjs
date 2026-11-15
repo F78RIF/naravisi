@@ -2087,6 +2087,34 @@ try {
     }
   });
 
+  // [PF-09] Orientasi — bawaan nonaktif; dinyalakan di Pengaturan → "Gambar mendatar." disebut di cadangan
+  await step('PF-09: "Sebutkan orientasi" (bawaan nonaktif) dinyalakan → "Gambar mendatar." ikut dibacakan', async () => {
+    const set = await context.newPage();
+    await set.goto(extPage('pages/pengaturan.html'));
+    const box = set.getByLabel('Sebutkan orientasi', { exact: true });
+    await box.waitFor();
+    assert.equal(await box.isChecked(), false, 'bawaan harus nonaktif');
+    try {
+      await segar();
+      await setFake({ hasil: { ...WARNA_DUA, orientasi: 'mendatar' }, delayMs: 0 });
+      backend.ai.fail = Errors.aiUnavailable();
+      await pilih(1);
+      await pfText.filter({ hasText: SEDERHANA }).waitFor({ timeout: 15000 });
+      assert.doesNotMatch(await pfText.innerText(), /Gambar mendatar/, 'bawaan: orientasi tidak disebut');
+      await box.check();
+      await set.locator('text=Sebutkan orientasi diaktifkan.').first().waitFor();
+      await resetLog();
+      await pilih(2);
+      await pf.waitForFunction(() => JSON.parse(document.getElementById('naravisi-host').dataset.spokenLog || '[]').length > 0);
+      await pfText.filter({ hasText: 'Gambar mendatar.' }).waitFor({ timeout: 15000 });
+      assert.equal(await pfText.innerText(), `${SEDERHANA} Warna dominan: biru. Gambar mendatar.`);
+    } finally {
+      backend.ai.fail = null;
+      await sw.evaluate(() => chrome.storage.sync.set({ sebutOrientasi: false }));
+      await set.close();
+    }
+  });
+
   await step('Lapis lokal: Baca berurutan tidak melewati gambar hampir polos yang bertulisan', async () => {
     await setFake({ hasil: { objek: [], kalimat: '', polos: true }, delayMs: 0, ocr: { ...OCR, delayMs: 0 } });
     await sw.evaluate(() => chrome.storage.sync.set({ autoDescribe: true, autoMax: 3 }));
@@ -2220,6 +2248,10 @@ try {
       .composite([{ input: await polos(180, 200, '#2050e0').png().toBuffer(), left: 0, top: 0 }]).png().toBuffer()).toString('base64')}`;
     const hasilDua = await sw.evaluate((d) => globalThis.naraVisi.detectImage({ dataUrl: d }), duaWarna);
     assert.deepEqual(hasilDua.warna.map((w) => w.nama), ['biru', 'putih'], JSON.stringify(hasilDua.warna));
+    // [PF-09] Orientasi — dari rasio gambar yang sama: 320×240 → mendatar, 300×200 → mendatar
+    assert.equal(pertama.orientasi, 'mendatar');
+    const tegak = `data:image/png;base64,${(await solid(200, 320, '#2050e0').png().toBuffer()).toString('base64')}`;
+    assert.equal((await sw.evaluate((d) => globalThis.naraVisi.detectImage({ dataUrl: d }), tegak)).orientasi, 'tegak');
     assert.equal(kedua.muatMs, pertama.muatMs, 'model tidak boleh dimuat ulang');
     assert.ok(kedua.ms < 5000, `deteksi terlalu lama: ${kedua.ms} ms`);
   });
