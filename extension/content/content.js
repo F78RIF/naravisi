@@ -18,6 +18,7 @@
   const MARK_ATTR = 'data-naravisi-mark';
   const QUICK_MIN_WAIT_MS = 1000; // PF-05: AI menjawab sebelum 1 detik → deskripsi kilat dilewati
   const QUICK_MAX_WAIT_MS = 10000; // deskripsi lengkap tidak menunggu kilat lebih lama dari ini
+  const SPEECH_START_TIMEOUT_MS = 2500; // mesin suara tak kunjung mulai → kalimat dianggap gagal, antrean lanjut
 
   const state = {
     open: false,
@@ -1092,12 +1093,24 @@
     utter.pitch = Number(state.tts?.nada_suara) || 1;
     let finish;
     const done = new Promise((resolve) => { finish = resolve; });
-    utter.onstart = () => setTts('speaking');
+    // Mesin suara tidak pernah mulai (mis. perangkat audio Windows error) → onstart/onend tak pernah datang.
+    // Tanpa penjaga ini antrean (kilat PF-05 → deskripsi lengkap) tertahan sampai batas 10 detik.
+    const seq = (state.speechSeq = (state.speechSeq || 0) + 1);
+    const stuck = setTimeout(() => {
+      if (state.speechSeq === seq) setTts('error'); // kalimat yang lebih baru tidak ditimpa
+      finish();
+    }, SPEECH_START_TIMEOUT_MS);
+    utter.onstart = () => {
+      clearTimeout(stuck);
+      setTts('speaking');
+    };
     utter.onend = () => {
+      clearTimeout(stuck);
       setTts('idle');
       finish();
     };
     utter.onerror = (e) => {
+      clearTimeout(stuck);
       if (e.error !== 'interrupted' && e.error !== 'canceled') setTts('error');
       finish();
     };
