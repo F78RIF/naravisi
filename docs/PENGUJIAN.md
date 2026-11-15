@@ -212,6 +212,19 @@ warna 9 foto: 33,5–73,0, jauh di atas ambang 12, jadi **tidak ada foto asli ya
 Dengan kilat aktif, gambaran awal terdengar sekitar 1 dtk setelah Enter (sengaja menunggu 1 dtk agar tidak
 bertumpuk dengan jawaban AI yang cepat), dibandingkan p50 Gemini 10,2 dtk di M-01.
 
+**Halaman uji manual** `examples/halaman-uji-pf05.html` (gambar buatan sendiri, detektor asli, 15 Nov 2026):
+
+| Gambar | Hasil detektor | Skor | Variansi |
+|---|---|---|---|
+| Rambu STOP | 1 rambu berhenti | 0,97 | 64,9 |
+| Jam dinding | 1 jam | 0,87 | 58,8 |
+| Lampu lalu lintas | 1 lampu lalu lintas | 0,57 | 67,5 |
+| Sepeda | 1 sepeda | 0,72 | 61,6 |
+| Parkir sepeda | 2 sepeda, 1 rambu berhenti | 0,87 / 0,86 | 55,9 |
+| Bidang krem | – (polos, dilewati Baca Berurutan) | – | 0 |
+
+Deteksi per gambar p50 100 ms, p95 105 ms (n = 11 setelah pemanasan; laptop sedang menjalankan proses lain).
+
 **Tambahan ukuran extension** (dihitung dari folder `extension/`, ZIP deflate level 9 seperti `paket_extension.py`):
 
 | | Berkas | Terurai | ZIP |

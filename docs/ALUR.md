@@ -1278,3 +1278,9 @@ di seperempat kiri (titik tengah tetap berwarna utama), dan `polos()` dipakai un
 * Pengukuran waktu & ukuran: `docs/PENGUJIAN.md` bagian 3d (`scripts/ukur-deteksi-lokal.mjs`). Ringkasnya deteksi p50
   67 ms, extension +13,9 MB terurai / +6,1 MB ZIP.
 
+* **Halaman uji manual [PF-05]** `examples/halaman-uji-pf05.html`: 6 gambar buatan sendiri dari
+  `examples/buat_gambar_pf05.py` (Pillow, tanpa unduhan) di `examples/gambar/pf05/`. Alurnya sama dengan pemakaian
+  biasa: Alt+Shift+K → panah → Enter → kilat "Kemungkinan berisi: …" (bila AI > 1 dtk) → deskripsi AI. Hasil detektor
+  asli (15 Nov 2026): rambu STOP → "1 rambu berhenti" (skor 0,97), jam → "1 jam" (0,87), lampu → "1 lampu lalu lintas"
+  (0,57), sepeda → "1 sepeda" (0,72), parkir → "2 sepeda, 1 rambu berhenti", bidang krem → tanpa objek & polos
+  (variansi 0) sehingga dilewati Baca Berurutan, tetapi Enter manual tetap ke AI.

@@ -6,6 +6,8 @@ Panduan untuk penguji/dosen. Semua gambar di folder ini dibuat sendiri dengan ko
 | Berkas | Isi |
 |---|---|
 | `halaman-uji.html` | Halaman statis berisi foto, grafik, infografis, diagram SVG inline, gambar dengan dan tanpa alt, hiasan `alt=""`, dan simbol kecil |
+| `halaman-uji-pf05.html` | [PF-05] Uji manual deteksi objek lokal: rambu, jam, lampu lalu lintas, sepeda, dua sepeda, dan bidang polos (hasil yang diharapkan tertulis di halaman) |
+| `buat_gambar_pf05.py` | [PF-05] Menggambar gambar `gambar/pf05/` dengan Pillow: `python -I examples/buat_gambar_pf05.py` |
 | `gambar/` | Gambar untuk halaman uji (SVG ditulis tangan, PNG dari `buat_gambar_contoh.py`) |
 | `buat_gambar_contoh.py` | Menggambar ulang PNG contoh dengan Pillow: `python -I examples/buat_gambar_contoh.py` |
 | `contoh-respons-caption.json` | Contoh respons `POST /caption` layanan AI (data tiruan berlabel CONTOH) |

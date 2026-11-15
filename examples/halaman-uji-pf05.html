@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halaman Uji PF-05 NaraVisi</title>
+  <!-- [PF-05] Halaman uji manual deteksi objek lokal. Semua gambar dibuat sendiri oleh examples/buat_gambar_pf05.py. -->
+  <style>
+    :root { color-scheme: light; --ink: #0b0b0b; --muted: #52514e; --paper: #fcfcfb; --line: #e2e1dc; }
+    body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); background: var(--paper); line-height: 1.6; }
+    main { max-width: 760px; margin: 0 auto; padding: 16px; }
+    img { max-width: 100%; height: auto; display: block; }
+    figure { margin: 28px 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    figcaption, .catatan { color: var(--muted); font-size: 0.95rem; }
+    code { background: #f0efec; padding: 0 4px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+    th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Halaman Uji PF-05 — Deteksi Objek Lokal</h1>
+  <p class="catatan">Semua gambar di halaman ini digambar dengan kode (<code>examples/buat_gambar_pf05.py</code>), bukan
+    unduhan. Tidak ada gambar yang memakai <code>alt</code>, supaya semuanya muncul di panel NaraVisi.</p>
+
+  <p>Tekan <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>. Panel seharusnya menampilkan <strong>6 gambar</strong>.
+    Pilih dengan panah, tekan <kbd>Enter</kbd>. Bila AI butuh lebih dari 1 detik, NaraVisi lebih dulu membacakan
+    <em>"Kemungkinan berisi: …"</em>, lalu deskripsi lengkap AI menyusul.</p>
+
+  <table>
+    <thead><tr><th>No.</th><th>Gambar</th><th>Kilat yang diharapkan (diukur dengan detektor asli)</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Rambu STOP</td><td>Kemungkinan berisi: 1 rambu berhenti.</td></tr>
+      <tr><td>2</td><td>Jam dinding</td><td>Kemungkinan berisi: 1 jam.</td></tr>
+      <tr><td>3</td><td>Lampu lalu lintas</td><td>Kemungkinan berisi: 1 lampu lalu lintas.</td></tr>
+      <tr><td>4</td><td>Sepeda</td><td>Kemungkinan berisi: 1 sepeda.</td></tr>
+      <tr><td>5</td><td>Parkir sepeda</td><td>Kemungkinan berisi: 2 sepeda, 1 rambu berhenti.</td></tr>
+      <tr><td>6</td><td>Bidang krem polos</td><td>Tanpa kilat. Dilewati oleh Mode Baca Berurutan; bila dipilih manual dengan Enter, tetap dikirim ke AI.</td></tr>
+    </tbody>
+  </table>
+  <p class="catatan">Gambar buatan tidak selalu dikenali seperti foto asli. Bila hasil berbeda sedikit (mis. skor di
+    bawah 0,5), itu wajar; catat di <code>docs/PENGUJIAN.md</code>.</p>
+
+  <figure>
+    <img src="gambar/pf05/rambu-stop.png" width="480" height="480">
+    <figcaption>[1] Rambu berhenti merah di tiang, latar langit.</figcaption>
+  </figure>
+  <figure>
+    <img src="gambar/pf05/jam-dinding.png" width="480" height="480">
+    <figcaption>[2] Jam dinding menunjukkan pukul 10.10.</figcaption>
+  </figure>
+  <figure>
+    <img src="gambar/pf05/lampu-lalu-lintas.png" width="360" height="520">
+    <figcaption>[3] Lampu lalu lintas, lampu merah menyala.</figcaption>
+  </figure>
+  <figure>
+    <img src="gambar/pf05/sepeda.png" width="640" height="400">
+    <figcaption>[4] Sepeda merah tampak samping.</figcaption>
+  </figure>
+  <figure>
+    <img src="gambar/pf05/parkir-sepeda.png" width="900" height="420">
+    <figcaption>[5] Dua sepeda diparkir di bawah rambu berhenti.</figcaption>
+  </figure>
+  <figure>
+    <img src="gambar/pf05/polos-krem.png" width="480" height="300">
+    <figcaption>[6] Bidang krem polos.</figcaption>
+  </figure>
+
+  <h2>Uji cadangan (tanpa AI)</h2>
+  <p>Matikan ai-service (tutup jendelanya), pilih gambar 1–5, tekan Enter. Yang diharapkan:
+    <em>"Deskripsi sederhana (tanpa AI): …"</em>. Sisa kuota tidak berkurang dan tidak muncul di Riwayat.</p>
+
+  <h2>Uji pengaturan</h2>
+  <p>Buka Pengaturan NaraVisi, matikan <strong>Deskripsi kilat tanpa AI</strong>, lalu ulangi. Yang diharapkan:
+    tidak ada kalimat "Kemungkinan berisi", dan bila AI mati hanya pesan galat biasa.</p>
+</main>
+</body>
+</html>
