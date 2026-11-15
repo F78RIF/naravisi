@@ -1,6 +1,6 @@
 // NaraVisi · extension/background.js
 // Fungsi   : Service worker (Manifest V3): menyuntik panel, mengambil & mengecilkan gambar, memanggil REST API, pemandu suara chrome.tts.
-// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-07, RNF-09, RNF-12
+// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-06, PF-07, RNF-09, RNF-12
 // Terkait  : content/content.js, offscreen/offscreen.js, offscreen/deteksi-objek.js, shared/config.js, shared/guide.js, backend/src/http/routes.js
 
 import {
@@ -440,6 +440,30 @@ async function readCodesImage({ src, dataUrl }) {
   return readCodes(await normalizedImage({ src, dataUrl }));
 }
 
+// [PF-06] Teks di gambar (OCR) — membaca teks di dokumen offscreen (Tesseract.js lokal, ind + eng, batas 4 detik)
+/** @returns {Promise<{teks: string|null, terpotong: boolean, kalimat: string|null, kata: number, ms: number, muatMs: number}>} */
+export async function readText({ base64, type }) {
+  await ensureOffscreen();
+  const res = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'NV_READ_TEXT', dataUrl: `data:${type};base64,${base64}` });
+  if (!res?.ok) throw new NvError('OCR_FAILED', res?.message || 'Pembacaan teks di gambar gagal.');
+  return res.data;
+}
+
+// [PF-06] Teks di gambar (OCR) — ambil + normalisasi gambar lalu baca teks (dipakai uji otomatis & pengukuran)
+async function readTextImage({ src, dataUrl }) {
+  return readText(await normalizedImage({ src, dataUrl }));
+}
+
+// [PF-06] Teks di gambar (OCR) — memanaskan Tesseract di latar saat panel dibuka (bila pengaturannya aktif)
+async function warmOcr() {
+  try {
+    await ensureOffscreen();
+    return (await chrome.runtime.sendMessage({ target: 'offscreen', type: 'NV_WARM_OCR' }))?.ok === true;
+  } catch {
+    return false;
+  }
+}
+
 // [PF-07] Kode QR & barcode — tautan hasil pindaian disimpan di sini; panel hanya memegang token acak.
 // Halaman web tidak bisa menyuruh NaraVisi membuka alamat sembarang: hanya tautan yang benar-benar terbaca dari QR,
 // untuk tab yang sama, ≤ 10 menit, dan hanya http/https. Membuka tab baru hanya setelah konfirmasi di panel.
@@ -715,5 +739,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 globalThis.naraVisi = {
   togglePanel, toggleActiveTab, openPage, handleScanCommand, onCommand, announceImageCount, spokenLog, rejectReason,
   autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog, autoBlockedReason, detectObjects, detectImage,
-  readCodes, readCodesImage, simpanTautanQr, qrLink,
+  readCodes, readCodesImage, simpanTautanQr, qrLink, readText, readTextImage, warmOcr,
 };

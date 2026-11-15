@@ -1301,6 +1301,7 @@ tanpa kuota**, dan gambarnya **tidak pernah dikirim ke server** untuk keperluan 
 |---|---|---|---|
 | Benda | PF-05 | MediaPipe EfficientDet-Lite0 | "Kemungkinan berisi: 2 orang." |
 | Warna dominan | PF-08 | kode sendiri (median-cut) | "Warna dominan: biru dan putih." |
+| Teks di gambar | PF-06 | Tesseract.js 7 (wasm) + data ind & eng "fast" | 'Tulisan: "Diskon akhir tahun".' |
 | Kode QR & barcode | PF-07 | `BarcodeDetector` bawaan, atau jsQR lokal | "Ada kode QR menuju rri.co.id." |
 
 Semua lapis berjalan di **dokumen offscreen** yang sama dengan MediaPipe.
@@ -1372,4 +1373,57 @@ di peta `qrTautan` dan panel hanya menerima **token acak** (`crypto.randomUUID()
 baru dilayani bila tokennya dikenal, belum kedaluwarsa (10 menit), berasal dari **tab yang sama**, dan URL-nya lolos
 `tautanAman()` (hanya http/https). `aksi: 'salin'` mengembalikan URL untuk disalin; `aksi: 'buka'` membuka tab baru di
 samping tab itu. Panel baru mengirim `buka` setelah pengguna mengonfirmasi (Langkah 4).
+
+### Teks di gambar (PF-06) — Langkah 3
+
+Berkas yang disimpan lokal (±5,6 MB, disalin oleh `scripts/salin-lapis-lokal.mjs`):
+
+| Berkas | Ukuran | Isi |
+|---|---|---|
+| `vendor/tesseract/tesseract.esm.min.js` | 62 KB | API Tesseract.js (`createWorker`) |
+| `vendor/tesseract/worker.min.js` | 109 KB | Web Worker yang menjalankan mesin |
+| `vendor/tesseract/tesseract-core-simd-lstm.js` + `.wasm` | 2,9 MB | mesin Tesseract (WebAssembly; hanya varian SIMD + LSTM) |
+| `vendor/tessdata/ind.traineddata.gz`, `eng.traineddata.gz` | 0,6 + 1,9 MB | data bahasa **tessdata_fast 4.1.0** (model LSTM kecil & cepat) |
+
+```
+service worker                                    dokumen offscreen (baca-teks.js)
+readText({base64,type}) ── NV_READ_TEXT ───────▶  muatOcr()  ← sekali saja (atau lebih awal lewat NV_WARM_OCR)
+                                                    import tesseract.esm.min.js
+                                                    createWorker(['ind','eng'], OEM 1 = LSTM, {
+                                                      workerPath, corePath, langPath → berkas extension,
+                                                      workerBlobURL: false, cacheMethod: 'none' })
+                                                  worker.recognize(gambar ≤ 1280 px, {blocks: true})
+                                                    > 4 detik → dibatalkan, worker dihentikan
+                                                  barisDariTesseract() → rapikanTeks() → kalimatTulisan()
+  { teks, terpotong, kalimat, kata, ms, muatMs } ◀
+```
+
+* **Tanpa CDN.** Bila `workerPath`/`corePath`/`langPath` tidak diisi, Tesseract.js mengunduh dari jsDelivr, yang
+  dilarang CSP MV3. Ketiganya menunjuk berkas extension. `corePath` menunjuk langsung satu berkas `.js`, jadi Tesseract
+  tidak memilih varian lain. Berkas `.wasm` diletakkan di folder yang sama dengan worker karena emscripten mencarinya
+  relatif ke lokasi skrip worker.
+* **Kenapa data "fast"?** tessdata_fast berisi model LSTM yang lebih kecil (eng 4,1 MB, ind 1,1 MB sebelum gzip) dan
+  lebih cepat daripada data standar (eng 23 MB). Karena isinya hanya LSTM, mesin dijalankan dengan OEM 1 (LSTM saja).
+* **Muat sekali, lalu dipakai ulang.** Pemuatan pertama ±0,75 detik di laptop uji; satu gambar ±0,1–0,15 detik.
+  Mesin baru dimuat saat Enter pertama (bukan saat panel dibuka) supaya ±100 MB memori tidak terpakai bila fitur tidak
+  dipakai; tulisan biasanya tetap siap sebelum deskripsi AI tiba. `NV_WARM_OCR` (`warmOcr()`) tersedia untuk pengukuran.
+* **Batas 4 detik.** Gambar yang terlalu lama diproses dibatalkan, worker dihentikan (`hentikan()`) supaya permintaan
+  berikutnya tidak mengantre di belakang pekerjaan macet, lalu dimuat lagi saat dibutuhkan.
+* **Data bahasa belum ada / gagal dimuat** → `muatOcr()` gagal, tidak ada teks yang dibacakan, dan dicoba lagi pada
+  permintaan berikutnya. Fitur lain tetap berjalan.
+
+Dari hasil Tesseract ke kalimat (`shared/ocr.js`, logika murni):
+
+1. Ratakan `blocks → paragraphs → lines → words` menjadi daftar baris (teks, keyakinan, kotak).
+2. **Urutkan** baris dari atas ke bawah; baris yang pusat vertikalnya berdekatan (< setengah tinggi baris) dianggap
+   sejajar dan dibaca dari kiri ke kanan (dua kolom pada poster).
+3. **Saring**: baris dengan keyakinan < 60 dibuang; di dalam baris, kata dengan keyakinan < 60 juga dibuang.
+4. Hitung **kata bermakna**: minimal 2 huruf (atau angka ≥ 2 digit), sebagian besar huruf/angka, bukan deretan konsonan
+   acak. Total < 3 kata bermakna → **tidak ada yang dibacakan** (menghindari derau dari tekstur atau ikon).
+5. **Potong** maks. 300 karakter di batas kata; sisanya diganti "dan teks lainnya".
+6. Kalimat: `Tulisan: "Selamat datang di perpustakaan".`
+
+Tes: `e2e/unit/ocr.test.mjs` (logika murni + Tesseract.js sungguhan di Node dengan data lokal yang sama: satu baris,
+beberapa baris, tanpa teks) dan e2e "PF-06: teks di gambar dibaca lokal…" (Tesseract asli di offscreen, gambar teks
+digambar `OffscreenCanvas`, memastikan tidak ada permintaan ke CDN dan mesin tidak dimuat ulang).
 

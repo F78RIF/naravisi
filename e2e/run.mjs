@@ -2065,6 +2065,41 @@ try {
     assert.equal((await tautan({ m: { token: k.token, aksi: 'salin' }, s: { tab: { id: 4242 } } })).data.url, 'https://rri.co.id/berita?id=1');
   });
 
+  // [PF-06] Teks di gambar (OCR) — Tesseract.js asli di offscreen, gambar teks digambar OffscreenCanvas
+  await step('PF-06: teks di gambar dibaca lokal (Tesseract ind+eng, tanpa CDN): satu baris, beberapa baris, tanpa teks', async () => {
+    const luar = [];
+    const catat = (r) => { if (/jsdelivr|unpkg|githubusercontent|tessdata|projectnaptha/i.test(r.url())) luar.push(r.url()); };
+    context.on('request', catat);
+    const kanvas = (baris) => sw.evaluate(async (daftar) => {
+      const c = new OffscreenCanvas(900, 320);
+      const x = c.getContext('2d');
+      x.fillStyle = '#ffffff';
+      x.fillRect(0, 0, 900, 320);
+      x.fillStyle = '#111111';
+      x.font = '44px Arial, sans-serif';
+      daftar.forEach((t, i) => x.fillText(t, 40, 80 + i * 80));
+      const buf = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
+      let bin = '';
+      for (const v of buf) bin += String.fromCharCode(v);
+      return `data:image/png;base64,${btoa(bin)}`;
+    }, baris);
+    const baca = async (baris) => sw.evaluate((d) => globalThis.naraVisi.readTextImage({ dataUrl: d }), await kanvas(baris));
+    try {
+      const satu = await baca(['Selamat datang di perpustakaan']);
+      assert.equal(satu.kalimat, 'Tulisan: "Selamat datang di perpustakaan".', JSON.stringify(satu));
+      const banyak = await baca(['DISKON AKHIR TAHUN', 'Semua buku 30 persen', 'Sampai 31 Desember']);
+      assert.equal(banyak.teks, 'DISKON AKHIR TAHUN Semua buku 30 persen Sampai 31 Desember');
+      const kosong = await baca([]);
+      assert.equal(kosong.teks, null);
+      assert.equal(kosong.kalimat, null);
+      assert.equal(banyak.muatMs, satu.muatMs, 'Tesseract tidak boleh dimuat ulang');
+      assert.ok(banyak.ms < 4000, `OCR terlalu lama: ${banyak.ms} ms`);
+      assert.deepEqual(luar, [], 'tidak boleh ada unduhan dari CDN');
+    } finally {
+      context.off('request', catat);
+    }
+  });
+
   await step('tidak ada error JavaScript di semua halaman', async () => assert.deepEqual(pageErrors, []));
 } finally {
   await context.close();

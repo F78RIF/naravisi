@@ -12,8 +12,12 @@ lisensinya sendiri. Lisensi model dan pustaka diambil dari kartu model / metadat
 | MediaPipe Tasks Vision 0.10.21 (`vision_bundle.mjs`, `vision_wasm_internal.js/.wasm`) | `extension/vendor/mediapipe/` | Google LLC | Apache License 2.0 — https://github.com/google-ai-edge/mediapipe/blob/master/LICENSE |
 | Model EfficientDet-Lite0 int8 (deteksi objek, label COCO) | `extension/vendor/models/efficientdet_lite0_int8.tflite` | Google LLC | Apache License 2.0 — kartu model: https://ai.google.dev/edge/mediapipe/solutions/vision/object_detector#models ; sumber unduhan: https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite |
 | jsQR 1.4.0 (`jsQR.js`, pembaca kode QR, PF-07) | `extension/vendor/jsqr/` | Cosmo Wolfe | Apache License 2.0 — teks lengkap di `extension/vendor/jsqr/LICENSE`; sumber: https://github.com/cozmo/jsQR |
+| Tesseract.js 7.0.0 (`tesseract.esm.min.js`, `worker.min.js`, OCR PF-06) | `extension/vendor/tesseract/` | Jerome Wu dan kontributor Tesseract.js | Apache License 2.0 — teks lengkap di `extension/vendor/tesseract/LICENSE.md`; sumber: https://github.com/naptha/tesseract.js |
+| tesseract.js-core 7.0.0 (`tesseract-core-simd-lstm.js/.wasm`: mesin Tesseract OCR + Leptonica dalam WebAssembly) | `extension/vendor/tesseract/` | kontributor Tesseract.js; Tesseract OCR (Google LLC dkk.); Leptonica (Dan Bloomberg) | Apache License 2.0 (`extension/vendor/tesseract/LICENSE-tesseract.js-core`); Tesseract OCR: Apache-2.0 — https://github.com/tesseract-ocr/tesseract ; Leptonica: lisensi gaya BSD 2 klausul — http://leptonica.org/about-the-license.html |
+| Data bahasa `ind` & `eng` (tessdata_fast 4.1.0, dikompres gzip tanpa diubah isinya) | `extension/vendor/tessdata/` | Google LLC / proyek Tesseract OCR | Apache License 2.0 — https://github.com/tesseract-ocr/tessdata_fast |
 
-MediaPipe dan modelnya disertakan tanpa diubah (PF-05). jsQR (PF-07) juga disertakan tanpa diubah; dipakai hanya bila
+MediaPipe dan modelnya disertakan tanpa diubah (PF-05). jsQR (PF-07), Tesseract.js, intinya, dan data bahasanya (PF-06) juga
+disertakan tanpa diubah (data bahasa hanya dikompres gzip). jsQR dipakai hanya bila
 `BarcodeDetector` bawaan Chrome tidak tersedia. Kamus nama warna (`extension/shared/warna-id.json`, PF-08) dan
 kuantisasi warnanya adalah karya NaraVisi (MIT). Terjemahan label COCO ke bahasa Indonesia
 (`extension/shared/label-id.json`) adalah karya NaraVisi (MIT). Teks lengkap Apache License 2.0:

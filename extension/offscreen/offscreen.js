@@ -2,12 +2,14 @@
 // Fungsi   : Dokumen offscreen: mengubah SVG menjadi JPEG (service worker tidak punya DOM).
 // SVG dimuat sebagai <img>: skrip di dalamnya tidak berjalan, sumber eksternal tidak diunduh.
 //            Juga menjalankan lapis lokal atas permintaan service worker: deteksi objek MediaPipe + warna dominan
-//            (PF-05, PF-08) dan pembaca kode QR (PF-07).
-// Kebutuhan: RF-09, PF-05, PF-07, PF-08
-// Terkait  : background.js (rasterizeSvg, detectObjects, readCodes), offscreen.html, deteksi-objek.js, kode-qr.js
+//            (PF-05, PF-08), pembaca kode QR (PF-07), dan pembaca teks di gambar Tesseract.js (PF-06).
+// Kebutuhan: RF-09, PF-05, PF-06, PF-07, PF-08
+// Terkait  : background.js (rasterizeSvg, detectObjects, readCodes, readText), offscreen.html, deteksi-objek.js,
+//            kode-qr.js, baca-teks.js
 
 import { deteksiObjek } from './deteksi-objek.js';
 import { bacaKode } from './kode-qr.js';
+import { bacaTeks, panaskanOcr } from './baca-teks.js';
 
 const MAX_SIDE = 1280;
 const FALLBACK_SIDE = 512; // SVG tanpa width/height/viewBox
@@ -54,6 +56,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     bacaKode(message.dataUrl)
       .then((data) => sendResponse({ ok: true, data }))
       .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
+    return true;
+  }
+  // [PF-06] Teks di gambar (OCR) — permintaan baca teks (Tesseract lokal, batas 4 detik) dan pemanasan saat panel dibuka
+  if (message.type === 'NV_READ_TEXT' && typeof message.dataUrl === 'string' && message.dataUrl.startsWith('data:image/')) {
+    bacaTeks(message.dataUrl)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
+    return true;
+  }
+  if (message.type === 'NV_WARM_OCR') {
+    panaskanOcr().then((ok) => sendResponse({ ok }));
     return true;
   }
   if (message.type !== 'NV_RASTERIZE_SVG' || typeof message.svg !== 'string') return false;
