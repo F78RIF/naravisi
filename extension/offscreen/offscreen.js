@@ -3,7 +3,7 @@
 // SVG dimuat sebagai <img>: skrip di dalamnya tidak berjalan, sumber eksternal tidak diunduh.
 //            Juga menjalankan lapis lokal atas permintaan service worker: deteksi objek MediaPipe + warna dominan
 //            (PF-05, PF-08), pembaca kode QR (PF-07), dan pembaca teks di gambar Tesseract.js (PF-06).
-// Kebutuhan: RF-09, PF-05, PF-06, PF-07, PF-08, PF-11
+// Kebutuhan: RF-09, PF-05, PF-06, PF-07, PF-08, PF-10, PF-11
 // Terkait  : background.js (rasterizeSvg, detectObjects, readCodes, readText), offscreen.html, deteksi-objek.js,
 //            kode-qr.js, baca-teks.js
 
@@ -11,6 +11,8 @@ import { deteksiObjek } from './deteksi-objek.js';
 import { bacaKode } from './kode-qr.js';
 import { bacaTeks, panaskanOcr } from './baca-teks.js';
 import { deskripsiAiBawaan, statusAiBawaan } from './ai-bawaan.js';
+import { deskripsiFlorence, lepasFlorence, unduhFlorence } from './florence.js';
+import { hapusPaket, isiCache, PAKET } from './model-offline.js';
 
 const MAX_SIDE = 1280;
 const FALLBACK_SIDE = 512; // SVG tanpa width/height/viewBox
@@ -77,6 +79,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'NV_AI_BAWAAN_DESKRIPSI' && typeof message.dataUrl === 'string' && message.dataUrl.startsWith('data:image/')) {
     deskripsiAiBawaan(message.dataUrl, message.konteks)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
+    return true;
+  }
+  // [PF-10] Florence-2 offline — unduh (setelah izin), status cache, hapus, dan deskripsi
+  if (message.type === 'NV_MODEL_UNDUH' && message.paket === 'florence') {
+    const lapor = (persen) => chrome.runtime.sendMessage({ type: 'NV_MODEL_PROGRES', paket: 'florence', persen }).catch(() => {});
+    unduhFlorence(lapor)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
+    return true;
+  }
+  if (message.type === 'NV_MODEL_STATUS' && PAKET[message.paket]) {
+    isiCache(message.paket).then((data) => sendResponse({ ok: true, data }), () => sendResponse({ ok: true, data: { berkas: 0, mb: 0 } }));
+    return true;
+  }
+  if (message.type === 'NV_MODEL_HAPUS' && PAKET[message.paket]) {
+    (message.paket === 'florence' ? lepasFlorence() : Promise.resolve())
+      .then(() => hapusPaket(message.paket))
+      .then((n) => sendResponse({ ok: true, data: { dihapus: n } }), (err) => sendResponse({ ok: false, message: String(err?.message || err) }));
+    return true;
+  }
+  if (message.type === 'NV_FLORENCE_DESKRIPSI' && typeof message.dataUrl === 'string' && message.dataUrl.startsWith('data:image/')) {
+    deskripsiFlorence(message.dataUrl)
       .then((data) => sendResponse({ ok: true, data }))
       .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
     return true;

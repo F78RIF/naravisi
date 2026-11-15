@@ -2,7 +2,7 @@
 // Fungsi   : Menyalin pustaka lapis lokal ke extension/vendor (MV3 melarang memuat skrip/wasm/data dari internet):
 //            jsQR (PF-07), Tesseract.js + inti wasm SIMD-LSTM (PF-06) dari e2e/node_modules, dan data bahasa
 //            "fast" ind + eng dari repo resmi tesseract-ocr/tessdata_fast (tag 4.1.0), lalu memeriksa SHA-256-nya.
-// Kebutuhan: PF-06, PF-07
+// Kebutuhan: PF-06, PF-07, PF-10, PF-12
 // Terkait  : e2e/package.json (jsqr, tesseract.js, tesseract.js-core), offscreen/kode-qr.js, offscreen/baca-teks.js,
 //            THIRD_PARTY_NOTICES.md
 // Pemakaian: cd e2e && npm install && cd .. && node scripts/salin-lapis-lokal.mjs
@@ -38,6 +38,12 @@ const SALIN = [
   ['tesseract.js-core/tesseract-core-simd-lstm.js', 'tesseract/tesseract-core-simd-lstm.js'],
   ['tesseract.js-core/tesseract-core-simd-lstm.wasm', 'tesseract/tesseract-core-simd-lstm.wasm'],
   ['tesseract.js-core/LICENSE', 'tesseract/LICENSE-tesseract.js-core'],
+  // [PF-10] Florence-2 offline — Transformers.js (ORT sudah dibundel di dalamnya) + satu wasm ORT varian JSEP
+  // (melayani WebGPU dan WASM). Bobot model TIDAK dibundel: diunduh atas izin pengguna (lihat offscreen/florence.js).
+  ['@huggingface/transformers/dist/transformers.min.js', 'transformers/transformers.min.js'],
+  ['onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.mjs', 'transformers/ort-wasm-simd-threaded.asyncify.mjs'],
+  ['onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm', 'transformers/ort-wasm-simd-threaded.asyncify.wasm'],
+  ['@huggingface/transformers/LICENSE', 'transformers/LICENSE'],
 ];
 
 const versi = (p) => JSON.parse(readFileSync(path.join(NM, p, 'package.json'), 'utf8')).version;
@@ -53,7 +59,31 @@ for (const [dari, ke] of SALIN) {
   mkdirSync(path.dirname(path.join(VENDOR, ke)), { recursive: true });
   copyFileSync(sumber, path.join(VENDOR, ke));
 }
-console.log(`jsQR ${versi('jsqr')}, Tesseract.js ${versi('tesseract.js')}, inti ${versi('tesseract.js-core')} disalin ke extension/vendor`);
+console.log(`jsQR ${versi('jsqr')}, Tesseract.js ${versi('tesseract.js')}, inti ${versi('tesseract.js-core')}, ` +
+  `Transformers.js ${versi('@huggingface/transformers')} + ORT ${versi('onnxruntime-web')} disalin ke extension/vendor`);
+// onnxruntime-web di npm tidak menyertakan LICENSE; ONNX Runtime berlisensi MIT (Microsoft Corporation).
+writeFileSync(path.join(VENDOR, 'transformers/LICENSE-onnxruntime.txt'), `MIT License
+
+Copyright (c) Microsoft Corporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+`);
 
 const dariFolder = process.argv.includes('--dari') ? process.argv[process.argv.indexOf('--dari') + 1] : null;
 mkdirSync(path.join(VENDOR, 'tessdata'), { recursive: true });

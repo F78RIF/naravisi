@@ -107,3 +107,21 @@ export function susunTeks(d) {
   if (d.keyakinan === 'rendah') bagian.push(CATATAN_RENDAH);
   return bagian.join(' ');
 }
+
+// [PF-10] Florence-2 offline — buang pembuka bahasa Inggris ("The image shows …") sebelum diterjemahkan
+export function bersihkanKeteranganEn(teks) {
+  return String(teks ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/^\s*(the image (shows|depicts|is of|features)|this (image|picture|photo) (shows|depicts|is of)|in (this|the) (image|picture),?|an? (image|picture|photo) of)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// [PF-10] Florence-2 offline — "<keterangan>. Tulisan di gambar: …" (tulisan < 3 kata bermakna tidak disebut)
+export function susunFlorence(keteranganId, tulisan, kataBermakna) {
+  const isi = kalimat(keteranganId);
+  if (!isi) return null;
+  const t = String(tulisan ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const cukup = t && typeof kataBermakna === 'function' && t.split(' ').filter(kataBermakna).length >= 3;
+  return cukup ? `${isi} Tulisan di gambar: ${t.slice(0, 300).replace(/[.\s]+$/, '')}.` : isi;
+}

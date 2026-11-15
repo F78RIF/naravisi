@@ -1,10 +1,11 @@
 // NaraVisi · extension/pages/pengaturan.js
 // Fungsi   : Halaman Pengaturan: bahasa, pintasan, suara, mode otomatis, server, privasi.
-// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, PF-06, PF-07, PF-08, PF-09, PF-11, RNF-13
+// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, PF-06, PF-07, PF-08, PF-09, PF-10, PF-11, RNF-13
 // Terkait  : pengaturan.html, common.js, backend settingsService.js
 import { apiFetch, apiHost, AUTO_MAX_PER_PAGE, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage, SHORTCUTS_URL, speakGuide } from '../shared/guide.js';
 import { $, el, requireSession, say, sayError, shell, speak } from './common.js';
+import { ukuranPaketMb } from '../offscreen/model-offline.js';
 
 shell('pengaturan', 'Pengaturan aksesibilitas');
 
@@ -104,14 +105,14 @@ const CONSENT_TEXT =
 
 // [PF-02] Baca berurutan — persetujuan wajib sebelum Baca berurutan aktif
 /** Dialog persetujuan (modal, dibacakan). Fokus awal di "Batal" agar tidak tersetujui tanpa sengaja. */
-function askConsent() {
-  const yes = el('button', { type: 'button', class: 'primary' }, 'Ya, aktifkan');
+function askConsent(text = CONSENT_TEXT, title = 'Kirim gambar ke server?', yesLabel = 'Ya, aktifkan') {
+  const yes = el('button', { type: 'button', class: 'primary' }, yesLabel);
   const no = el('button', { type: 'button' }, 'Batal');
   const dialog = el(
     'dialog',
     { class: 'consent', 'aria-labelledby': 'consent-title', 'aria-describedby': 'consent-text' },
-    el('h2', { id: 'consent-title' }, 'Kirim gambar ke server?'),
-    el('p', { id: 'consent-text' }, CONSENT_TEXT),
+    el('h2', { id: 'consent-title' }, title),
+    el('p', { id: 'consent-text' }, text),
     el('div', { class: 'row' }, yes, no),
   );
   document.body.append(dialog);
@@ -129,7 +130,7 @@ function askConsent() {
     });
     dialog.showModal();
     no.focus();
-    speakGuide(CONSENT_TEXT);
+    speakGuide(text);
   });
 }
 
@@ -250,6 +251,58 @@ async function autoSection() {
   );
 }
 
+// [PF-10] Florence-2 offline — "Deskripsi offline lengkap": unduh hanya setelah konfirmasi yang dibacakan (berisi ukuran)
+const UKURAN_FLORENCE_MB = ukuranPaketMb('florence');
+const TEKS_UNDUH_FLORENCE = `Model deskripsi offline Florence-2 beserta penerjemahnya, sekitar ${UKURAN_FLORENCE_MB} megabita, akan diunduh dari huggingface.co dan disimpan di komputer ini. Unduhan bisa memakan waktu beberapa menit dan memakai kuota internet. Gambar tetap tidak dikirim ke mana pun. Lanjutkan?`;
+
+function teksStatusModel(st) {
+  if (!st || !st.izin || st.status === 'mati') return 'Model offline: belum diunduh.';
+  if (st.status === 'mengunduh') return `Model offline: mengunduh… ${st.persen ?? 0}%`;
+  if (st.status === 'siap') return `Model offline: siap${st.perangkat ? ` (${st.perangkat === 'webgpu' ? 'WebGPU' : 'WASM'})` : ''}.`;
+  return 'Model offline: unduhan gagal. Coba lagi.';
+}
+
+async function florenceControls() {
+  const res = await chrome.runtime.sendMessage({ type: 'NV_MODEL_OFFLINE', aksi: 'status', paket: 'florence' }).catch(() => null);
+  const st = res?.data;
+  const input = el('input', { id: 'florence', type: 'checkbox', checked: Boolean(st?.izin), 'aria-describedby': 'florence-hint' });
+  const status = el('p', { id: 'status-florence', role: 'status' }, teksStatusModel(st));
+  const hapus = el('button', { type: 'button', id: 'hapus-florence' }, 'Hapus model offline');
+  hapus.hidden = !st?.izin;
+  const node = el('div', { class: 'stack' },
+    el('label', { for: 'florence', class: 'check' }, input, 'Deskripsi offline lengkap (Florence-2)'),
+    el('p', { class: 'hint', id: 'florence-hint' }, `Deskripsi gambar dan tulisannya tanpa internet, dipakai setelah AI bawaan Chrome. Perlu mengunduh model sekitar ${UKURAN_FLORENCE_MB} MB sekali saja; tidak diunduh sebelum Anda setuju.`),
+    status, hapus);
+  input.addEventListener('change', async () => {
+    if (!input.checked) {
+      input.checked = true; // mematikan = menghapus model; pakai tombol agar tidak terhapus tanpa sengaja
+      hapus.focus();
+      return say('Untuk mematikan, tekan "Hapus model offline".');
+    }
+    input.checked = false;
+    const agreed = await askConsent(TEKS_UNDUH_FLORENCE, 'Unduh model deskripsi offline?', 'Ya, unduh');
+    input.focus();
+    if (!agreed) return say('Model offline tidak diunduh.');
+    input.checked = true;
+    hapus.hidden = false;
+    say('Mengunduh model offline…');
+    const r = await chrome.runtime.sendMessage({ type: 'NV_MODEL_OFFLINE', aksi: 'unduh', paket: 'florence' }).catch(() => null);
+    say(r?.ok ? 'Model deskripsi offline siap dipakai.' : 'Unduhan model offline gagal.', r?.ok ? 'ok' : 'error');
+    return undefined;
+  });
+  hapus.addEventListener('click', async () => {
+    await chrome.runtime.sendMessage({ type: 'NV_MODEL_OFFLINE', aksi: 'hapus', paket: 'florence' }).catch(() => null);
+    input.checked = false;
+    hapus.hidden = true;
+    input.focus();
+    say('Model offline dihapus dari komputer ini.', 'ok');
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.modelOffline) status.textContent = teksStatusModel(changes.modelOffline.newValue?.florence);
+  });
+  return [node];
+}
+
 // [PF-11] Chrome Built-in AI — kartu "AI di perangkat": status AI bawaan Chrome (diperiksa, tidak pernah diunduh NaraVisi)
 async function perangkatSection() {
   const status = el('p', { id: 'status-ai-bawaan', role: 'status' }, 'AI bawaan Chrome: memeriksa…');
@@ -260,6 +313,7 @@ async function perangkatSection() {
     el('p', { class: 'hint' }, 'Dipakai hanya bila semua AI server gagal, sebelum deskripsi sederhana. Gambar tidak dikirim ke mana pun.'),
     status,
   );
+  card.append(...(await florenceControls()));
   chrome.runtime.sendMessage({ type: 'NV_STATUS_AI_PERANGKAT' }).then((res) => {
     const a = res?.data?.aiBawaan;
     status.textContent = a?.tersedia ? 'AI bawaan Chrome: tersedia' : `AI bawaan Chrome: tidak tersedia${a?.alasan ? ` (${a.alasan})` : ''}`;
