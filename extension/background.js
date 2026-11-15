@@ -1,12 +1,13 @@
 // NaraVisi · extension/background.js
 // Fungsi   : Service worker (Manifest V3): menyuntik panel, mengambil & mengecilkan gambar, memanggil REST API, pemandu suara chrome.tts.
-// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-06, PF-07, RNF-09, RNF-12
+// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-06, PF-07, PF-08, RNF-09, RNF-12
 // Terkait  : content/content.js, offscreen/offscreen.js, offscreen/deteksi-objek.js, shared/config.js, shared/guide.js, backend/src/http/routes.js
 
 import {
   ApiError, apiFetch, AUTO_DAILY_MAX, AUTO_MAX_PER_PAGE, AUTO_RESERVE, getSession, getSettings, getTts, MAX_IMAGE_BYTES, refreshProfile, setSession,
 } from './shared/config.js';
-import { kalimatKilat, kalimatSederhana, layakDilewati } from './shared/deteksi.js';
+import { layakDilewati } from './shared/deteksi.js';
+import { kalimatBenda, kalimatSederhanaLengkap, layakDilewatiLengkap } from './shared/lapis-lokal.js';
 import { imageCountText, spokenShortcut, welcomeText } from './shared/guide.js';
 import { tautanAman } from './shared/qr.js';
 
@@ -506,28 +507,77 @@ const SIMPLE_FALLBACK_CODES = new Set([
   'BACKEND_UNREACHABLE', 'TIMEOUT', 'SERVER_ERROR', 'INTERNAL', 'AI_UNAVAILABLE', 'AI_TIMEOUT', 'AI_FAILED', 'AI_BUSY', 'QUOTA_EXCEEDED',
 ]);
 
-// [PF-05] Deteksi objek lokal — deteksi yang tidak pernah melempar galat: gagal atau terlalu lama → null
-function localDetect(image) {
-  const timeout = new Promise((resolve) => setTimeout(resolve, LOCAL_TIMEOUT_MS, null));
-  // Uji otomatis dapat memasang detektor tiruan lewat globalThis.naraVisi.fakeDetector = { hasil, delayMs }.
-  // Hanya service worker ini yang bisa mengisinya; halaman web tidak punya akses ke objek global service worker.
+// Uji otomatis dapat memasang detektor tiruan lewat globalThis.naraVisi.fakeDetector =
+//   { hasil, delayMs, ocr: { hasil, delayMs }, qr: { hasil, delayMs } }  (ocr/qr tidak diisi → lapis itu tanpa hasil).
+// Hanya service worker ini yang bisa mengisinya; halaman web tidak punya akses ke objek global service worker.
+function tiruan(lapis) {
   const fake = globalThis.naraVisi?.fakeDetector;
-  if (fake) {
-    fake.calls = (fake.calls ?? 0) + 1;
-    return new Promise((resolve) => setTimeout(resolve, fake.delayMs ?? 0, fake.hasil ?? null));
-  }
-  return Promise.race([detectObjects(image).catch(() => null), timeout]);
+  if (!fake) return undefined;
+  const f = lapis === 'benda' ? fake : fake[lapis];
+  if (!f) return Promise.resolve(null);
+  f.calls = (f.calls ?? 0) + 1;
+  return new Promise((resolve) => setTimeout(resolve, f.delayMs ?? 0, f.hasil ?? null));
 }
 
-// [PF-05] Deteksi objek lokal — mengirim hasil kilat ke panel; panel yang memutuskan dibacakan atau tidak (AI < 1 dtk)
-function sendQuick(pending, reqId, sender) {
-  if (typeof reqId !== 'string' || !reqId || reqId.length > 64 || sender?.tab?.id == null) return;
-  const target = sender.documentId ? { documentId: sender.documentId } : { frameId: sender.frameId ?? 0 };
-  pending.then((hasil) => {
-    const text = kalimatKilat(hasil);
-    if (!text) return;
-    chrome.tabs.sendMessage(sender.tab.id, { type: 'NV_QUICK', reqId, text }, target).catch(() => {});
-  });
+/** Lapis lokal tidak pernah melempar galat: gagal atau terlalu lama → null. */
+function tanpaGalat(promise) {
+  let timer;
+  const timeout = new Promise((resolve) => { timer = setTimeout(resolve, LOCAL_TIMEOUT_MS, null); });
+  return Promise.race([promise.catch(() => null), timeout]).finally(() => clearTimeout(timer));
+}
+
+// [PF-05] Deteksi objek lokal — deteksi yang tidak pernah melempar galat: gagal atau terlalu lama → null
+function localDetect(image) {
+  return tiruan('benda') ?? tanpaGalat(detectObjects(image));
+}
+
+// [PF-06] Teks di gambar (OCR) — lapis tulisan: hanya hasil yang layak dibacakan (ada kalimat), selain itu null
+function localOcr(image) {
+  return (tiruan('ocr') ?? tanpaGalat(readText(image))).then((r) => (r?.kalimat ? r : null));
+}
+
+// [PF-07] Kode QR & barcode — lapis kode: tautan disimpan di service worker, panel hanya menerima token
+function localQr(image, tabId) {
+  return (tiruan('qr') ?? tanpaGalat(readCodes(image))).then((r) =>
+    r?.kode?.length ? { ...r, kode: simpanTautanQr(r.kode, tabId) } : null);
+}
+
+/** Sakelar lapis lokal di Pengaturan (bawaan semuanya aktif). */
+function opsiLokal(settings) {
+  return { sebutWarna: settings.sebutWarna !== false, bacaTulisan: settings.bacaTulisan !== false, bacaQr: settings.bacaQr !== false };
+}
+
+// [PF-05] Deteksi objek lokal — keempat lapis berjalan PARALEL dengan AI: benda+warna, tulisan, kode QR
+// Hasil dikirim ke panel berurutan (benda → tulisan → kode) begitu siap; panel yang memutuskan dibacakan atau tidak.
+function runLocalLayers(image, opsi, reqId, sender) {
+  const tabId = sender?.tab?.id;
+  const benda = localDetect(image);
+  const tulisan = opsi.bacaTulisan ? localOcr(image) : Promise.resolve(null);
+  const kode = opsi.bacaQr ? localQr(image, tabId) : Promise.resolve(null);
+  const kirim = (bagian, text, extra = {}) => {
+    if (!text || typeof reqId !== 'string' || !reqId || reqId.length > 64 || tabId == null) return;
+    const target = sender.documentId ? { documentId: sender.documentId } : { frameId: sender.frameId ?? 0 };
+    chrome.tabs.sendMessage(tabId, { type: 'NV_QUICK', reqId, bagian, text, ...extra }, target).catch(() => {});
+  };
+  (async () => {
+    kirim('benda', kalimatBenda(await benda, opsi));
+    kirim('tulisan', (await tulisan)?.kalimat);
+    const k = await kode;
+    kirim('kode', k?.kalimat, { kode: (k?.kode ?? []).map(({ jenis, domain, token, format }) => ({ jenis, domain, token, format })) });
+  })();
+  return Promise.all([benda, tulisan, kode]).then(([b, t, k]) => ({ benda: b, tulisan: t, kode: k }));
+}
+
+// [PF-02] Baca berurutan — gambar hampir polos tanpa benda: periksa juga tulisan & kode QR sebelum dilewati
+async function skipPlain(image, settings, sender) {
+  const benda = await localDetect(image);
+  if (!layakDilewati(benda)) return false; // ada benda / tidak polos / detektor gagal → tetap ke AI
+  const opsi = opsiLokal(settings);
+  const [tulisan, kode] = await Promise.all([
+    opsi.bacaTulisan ? localOcr(image) : null,
+    opsi.bacaQr ? localQr(image, sender?.tab?.id) : null,
+  ]);
+  return layakDilewatiLengkap({ benda, tulisan, kode });
 }
 
 // ---------------------------------------------------------------------------
@@ -559,13 +609,15 @@ async function requestDescription({ src, dataUrl, pageUrl, auto, context, reqId 
   const image = await normalizedImage({ src, dataUrl });
   const imageBase64 = image.base64;
 
-  let local = null; // Promise hasil deteksi lokal (manual saja)
+  const settings = await getSettings();
+  let local = null; // Promise gabungan lapis lokal (manual saja)
+  let opsi = null;
   if (auto === 'page') {
-    // Penyaring: tanpa objek DAN hampir polos → tidak dikirim ke AI, kuota & batas harian tidak terpakai.
-    if (layakDilewati(await localDetect(image))) throw new NvError('AUTO_SKIPPED_PLAIN', 'Gambar hampir polos tanpa benda dikenali, dilewati.');
-  } else if (!auto && (await getSettings()).quickLocal) {
-    local = localDetect(image); // berjalan bersamaan dengan permintaan ke AI
-    sendQuick(local, reqId, sender);
+    // Penyaring: tanpa benda, hampir polos, tanpa tulisan & QR → tidak dikirim ke AI, kuota & batas harian tidak terpakai.
+    if (await skipPlain(image, settings, sender)) throw new NvError('AUTO_SKIPPED_PLAIN', 'Gambar hampir polos tanpa benda dikenali, dilewati.');
+  } else if (!auto && settings.quickLocal) {
+    opsi = opsiLokal(settings);
+    local = runLocalLayers(image, opsi, reqId, sender); // berjalan bersamaan dengan permintaan ke AI
   }
 
   let data;
@@ -587,7 +639,7 @@ async function requestDescription({ src, dataUrl, pageUrl, auto, context, reqId 
     }
     const code = err.code || 'SERVER_ERROR';
     // Cadangan PF-05: tidak memanggil server, jadi tidak memotong kuota dan tidak masuk riwayat.
-    const sederhana = local && SIMPLE_FALLBACK_CODES.has(code) ? kalimatSederhana(await local) : null;
+    const sederhana = local && SIMPLE_FALLBACK_CODES.has(code) ? kalimatSederhanaLengkap(await local, opsi) : null;
     throw new NvError(code, err.message, { sederhana });
   }
   if (auto) await countAutoUse();

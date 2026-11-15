@@ -1427,3 +1427,79 @@ Tes: `e2e/unit/ocr.test.mjs` (logika murni + Tesseract.js sungguhan di Node deng
 beberapa baris, tanpa teks) dan e2e "PF-06: teks di gambar dibaca lokal…" (Tesseract asli di offscreen, gambar teks
 digambar `OffscreenCanvas`, memastikan tidak ada permintaan ke CDN dan mesin tidak dimuat ulang).
 
+
+### Menggabungkan lapis lokal — Langkah 4
+
+Setelah Enter pada gambar (alur manual), service worker menjalankan **empat lapis bersamaan** dengan permintaan ke AI:
+
+```
+Enter ─▶ panel: NV_DESCRIBE {reqId} ─▶ service worker: normalizedImage()
+                                         ├─ POST /descriptions (AI, memakai kuota)            ┐
+                                         └─ runLocalLayers()  — PARALEL, gratis, offline      │
+                                              ├─ localDetect  → benda + warna  (MediaPipe)    │
+                                              ├─ localOcr     → tulisan        (Tesseract)    │
+                                              └─ localQr      → kode QR        (jsQR/bawaan)  │
+                                            dikirim berurutan begitu siap:                    │
+                                            NV_QUICK {bagian: benda} → {tulisan} → {kode}     │
+panel (content.js)                                                                            │
+  detik ke-1, AI belum menjawab → antrekan bagian yang sudah tiba (benda → tulisan → kode)    │
+  bagian yang tiba kemudian, selama AI belum menjawab → diantrekan di belakangnya            │
+  deskripsi AI tiba ◀─────────────────────────────────────────────────────────────────────────┘
+    tunggu antrean selesai (maks. 10 dtk) → bacakan "deskripsi AI + tambahan"
+```
+
+**Satu antrean suara.** Panel menyimpan satu *Promise* `antrean`; kalimat berikutnya baru diucapkan setelah kalimat
+sebelumnya selesai, jadi tidak ada suara yang tumpang tindih. Tombol S, Esc, atau memilih gambar lain menaikkan
+`suaraGen`, sehingga kalimat yang masih mengantre dibatalkan. Bila mesin suara tidak kunjung mulai (mis. perangkat audio
+error), penjaga 2,5 detik di `speak()` melanjutkan antrean.
+
+Contoh urutan bila AI lambat:
+
+> Kemungkinan berisi: 2 orang. Warna dominan: biru. → Tulisan: "Diskon akhir tahun". → Ada kode QR menuju rri.co.id.
+> → (deskripsi lengkap dari AI)
+
+**Tambahan setelah deskripsi AI** (`tambahanSetelahAi` di panel, aturannya sama dengan `perluSetelahAi` di
+`shared/lapis-lokal.js`): bagian yang belum terdengar, misalnya karena AI menjawab dalam < 1 detik, ditambahkan di
+belakang deskripsi AI:
+
+| Bagian | Ditambahkan? |
+|---|---|
+| benda + warna | tidak (deskripsi AI sudah lebih lengkap) |
+| tulisan (OCR) | hanya bila jawaban AI **tidak** memuat `teks_dalam_gambar` (mis. cadangan BLIP); Gemini yang sudah menyalin tulisannya tidak diulang |
+| kode QR | ya, selalu (AI tidak membaca isi QR) |
+
+Bagian yang sudah dibacakan saat menunggu AI tidak diulang. Tambahan tampil di bawah deskripsi (`#nv-tambahan`) dan
+ikut disimpan di cache panel, tetapi **tidak** dimasukkan ke `alt` gambar (alt hanya berisi deskripsi AI).
+
+**Cadangan tanpa AI.** Bila server mati, AI gagal (termasuk Gemini gagal dan BLIP belum siap), kuota habis, atau
+offline, service worker menunggu semua lapis lalu menyusun `kalimatSederhanaLengkap()`:
+
+> Deskripsi sederhana (tanpa AI): kemungkinan berisi 2 orang, 1 sepeda. Warna dominan: biru. Tulisan: "Diskon akhir
+> tahun". Ada kode QR menuju rri.co.id. *(lalu alasan galatnya)*
+
+Cadangan ini tidak memanggil server, jadi kuota tidak terpotong (bila server sempat memesan kuota, server
+mengembalikannya). Riwayat AI tidak disimpan, dan cadangan tidak dimasukkan ke cache maupun `alt`, sehingga Enter lagi
+mencoba AI lagi.
+
+**Tombol tautan QR.** Bila ada QR berisi tautan http/https, panel menampilkan "Salin tautan rri.co.id" dan
+"Buka rri.co.id…". Panel hanya memegang token (lihat PF-07). "Buka" pertama hanya membacakan pertanyaan
+"Buka rri.co.id di tab baru? Tekan tombol … sekali lagi dalam 10 detik untuk membuka."; tab baru dibuka pada tekan
+kedua. QR berbahaya tidak pernah mendapat tombol.
+
+**Baca berurutan.** Gambar dilewati (tanpa AI, tanpa kuota) hanya bila **tanpa benda, hampir polos, tanpa tulisan,
+dan tanpa kode QR** (`skipPlain` → `layakDilewatiLengkap`). OCR & QR hanya dijalankan untuk gambar yang sudah lolos
+syarat "tanpa benda & hampir polos", jadi gambar biasa tidak menunggu OCR.
+
+**Pengaturan** (halaman Pengaturan → Otomatis, semua bawaan aktif):
+
+| Sakelar | Kunci `chrome.storage.sync` | Bila dimatikan |
+|---|---|---|
+| Deskripsi kilat tanpa AI | `quickLocal` | seluruh lapis lokal mati (tanpa kilat, tanpa cadangan) |
+| Sebutkan warna | `sebutWarna` | "Warna dominan: …" tidak disebut di mana pun |
+| Baca tulisan di gambar (offline) | `bacaTulisan` | Tesseract tidak dijalankan |
+| Baca kode QR | `bacaQr` | pembaca QR tidak dijalankan, tidak ada tombol tautan |
+
+Tes: `e2e/unit/lapis-lokal.test.mjs` (urutan, sakelar, aturan tambahan, cadangan, penyaring) dan bagian e2e
+"Gabungan lapis lokal (PF-06..PF-08)" dengan detektor tiruan: urutan bacaan, tanpa duplikasi tulisan, cadangan saat
+server mati & AI gagal (kuota & riwayat tetap), QR berbahaya dan konfirmasi "Buka", pengaturan dimatikan, Baca
+berurutan tidak melewati gambar bertulisan.

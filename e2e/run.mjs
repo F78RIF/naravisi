@@ -7,7 +7,7 @@
 // Jalankan: cd e2e && npm install && npm test
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -49,7 +49,8 @@ backend.ai.caption = async ({ lang, imageBase64, context }) => {
   const mime = Buffer.from(imageBase64, 'base64')[0] === 0xff ? 'JPEG' : 'PNG';
   const fallback = backend.ai.nextFallback === true; // meniru Gemini 429 → jawaban dari cadangan BLIP
   backend.ai.nextFallback = false;
-  return { text: `Deskripsi uji untuk gambar ${mime}.`, textEn: null, lang, model: 'fake', latencyMs: 1, jenis: 'foto', provider: fallback ? 'blip' : 'fake', fallback };
+  // PF-06: backend.ai.teks meniru Gemini yang mengisi teks_dalam_gambar (tulisan OCR lokal tidak dibacakan ulang)
+  return { text: `Deskripsi uji untuk gambar ${mime}.`, textEn: null, lang, model: 'fake', latencyMs: 1, jenis: 'foto', provider: fallback ? 'blip' : 'fake', fallback, teksDalamGambar: backend.ai.teks || '' };
 };
 const API = `${backend.base}/api/v1`;
 backend.services.config.publicUrl = backend.base; // halaman bayar simulasi di server uji
@@ -203,7 +204,9 @@ const SITE = `http://127.0.0.1:${site.address().port}`;
 // ---------------------------------------------------------------------------
 // Chromium + extension
 // ---------------------------------------------------------------------------
-const context = await chromium.launchPersistentContext(mkdtempSync(path.join(tmpdir(), 'nv-')), {
+// Profil sementara dihapus di akhir (tanpa ini ±10–20 MB per run menumpuk di %TEMP%).
+const profileDir = mkdtempSync(path.join(tmpdir(), 'nv-'));
+const context = await chromium.launchPersistentContext(profileDir, {
   channel: 'chromium',
   headless: true,
   viewport: { width: 1100, height: 820 },
@@ -1913,6 +1916,192 @@ try {
     assert.equal(await sisaKuota(), sisa - 1);
   });
 
+  // =========================================================================
+  // [PF-06] Teks di gambar (OCR) — [PF-07] Kode QR & barcode — [PF-08] Warna dominan: gabungan lapis lokal
+  // Detektor tiruan: fakeDetector = { hasil (benda+warna), ocr: { hasil, delayMs }, qr: { hasil, delayMs } }
+  // =========================================================================
+  section('Gabungan lapis lokal (PF-06..PF-08)');
+  const WARNA_DUA = { ...DUA, warna: [{ nama: 'biru', porsi: 0.7 }] };
+  const BENDA_WARNA = 'Kemungkinan berisi: 2 orang, 1 sepeda. Warna dominan: biru.';
+  const TULISAN = 'Tulisan: "Diskon akhir tahun".';
+  const QR_KAL = 'Ada kode QR menuju 127.0.0.1.';
+  const OCR = { hasil: { teks: 'Diskon akhir tahun', terpotong: false, kalimat: TULISAN, kata: 3 }, delayMs: 150 };
+  const QRF = { hasil: { kode: [{ jenis: 'tautan', domain: '127.0.0.1', url: `${SITE}/kosong.html`, format: 'qr_code' }], kalimat: QR_KAL }, delayMs: 50 };
+  const QR_JAHAT = { hasil: { kode: [{ jenis: 'berbahaya', format: 'qr_code' }], kalimat: 'Ada kode QR berisi teks.' }, delayMs: 0 };
+  const lengkapLokal = () => ({ hasil: WARNA_DUA, delayMs: 0, ocr: { ...OCR }, qr: { ...QRF } });
+  const pfSetUsed = (n) => backend.db.run('UPDATE kuota_harian SET jumlah_permintaan = ? WHERE user_id = ? AND tanggal = ?', [n, pfUserId, backend.services.subscriptions.today()]);
+  const lapisCalls = (lapis) => sw.evaluate((l) => globalThis.naraVisi.fakeDetector?.[l]?.calls ?? 0, lapis);
+  /** Halaman PF-05 segar (cache panel kosong), panel terbuka, catatan bacaan kosong. */
+  async function segar() {
+    await pf.bringToFront();
+    await pf.goto(`${SITE}/pf05.html`);
+    await toggleOn(`${SITE}/pf05.html`);
+    await pfHost.waitFor({ state: 'attached' });
+    await resetLog();
+  }
+  const tungguBacaan = (teks, timeout = 25000) => pf.waitForFunction(
+    (t) => JSON.parse(document.getElementById('naravisi-host')?.dataset.spokenLog || '[]').includes(t), teks, { timeout });
+  await pfSetUsed(0);
+
+  await step('Lapis lokal: urutan bacaan benda → warna → tulisan → kode QR, lalu deskripsi AI (satu antrean)', async () => {
+    await segar();
+    await setFake(lengkapLokal());
+    backend.ai.delayMs = 9000; // ketiga bagian lokal tiba < 200 ms, jauh sebelum AI
+    try {
+      await pilih(1);
+      await tungguBacaan(LENGKAP);
+      assert.deepEqual((await pfLog()).slice(-4), [BENDA_WARNA, TULISAN, QR_KAL, LENGKAP]);
+      assert.equal(await pfText.innerText(), LENGKAP);
+      assert.equal(await pf.locator('#nv-tambahan').isHidden(), true, 'semua bagian lokal sudah terdengar, tidak diulang');
+      assert.equal(await pf.locator('#nv-qr').isVisible(), true, 'tombol tautan QR tersedia');
+      assert.equal(await pf.locator('#pf1').getAttribute('alt'), LENGKAP, 'alt hanya berisi deskripsi AI');
+    } finally {
+      backend.ai.delayMs = 0;
+    }
+  });
+
+  await step('Lapis lokal: deskripsi AI memuat teks_dalam_gambar → tulisan OCR tidak dibacakan lagi; info QR tetap', async () => {
+    await segar();
+    await setFake({ ...lengkapLokal(), ocr: { ...OCR, delayMs: 0 } });
+    backend.ai.delayMs = 400; // AI < 1 detik → kilat dilewati, tambahan menyusul deskripsi AI
+    backend.ai.teks = 'Diskon akhir tahun';
+    try {
+      await pilih(1);
+      await tungguBacaan(`${LENGKAP} ${QR_KAL}`, 10000);
+      await new Promise((r) => setTimeout(r, 1300)); // lewat batas 1 detik: kilat tidak boleh menyusul
+      assert.deepEqual(await pfLog(), [`${LENGKAP} ${QR_KAL}`]);
+      assert.equal(await pf.locator('#nv-tambahan').innerText(), QR_KAL);
+      assert.doesNotMatch(JSON.stringify(await pfLog()), /Tulisan:/);
+
+      // Provider tanpa teks gambar (mis. cadangan BLIP) → tulisan lokal dibacakan setelah deskripsi.
+      backend.ai.teks = '';
+      await resetLog();
+      await pilih(2);
+      await tungguBacaan(`${LENGKAP} ${TULISAN} ${QR_KAL}`, 10000);
+      assert.deepEqual(await pfLog(), [`${LENGKAP} ${TULISAN} ${QR_KAL}`]);
+    } finally {
+      backend.ai.delayMs = 0;
+      backend.ai.teks = '';
+    }
+  });
+
+  await step('Lapis lokal: server mati → "Deskripsi sederhana (tanpa AI)" gabungan semua lapis; kuota & riwayat tidak berubah', async () => {
+    await segar();
+    await setFake(lengkapLokal());
+    const sisa = await sisaKuota();
+    const riwayat = await jumlahRiwayat();
+    const GABUNGAN = `Deskripsi sederhana (tanpa AI): kemungkinan berisi 2 orang, 1 sepeda. Warna dominan: biru. ${TULISAN} ${QR_KAL}`;
+    await sw.evaluate(() => chrome.storage.sync.set({ apiBase: 'http://127.0.0.1:9/api/v1' }));
+    try {
+      await pilih(3);
+      await pfText.filter({ hasText: GABUNGAN }).waitFor({ timeout: 15000 });
+      const spokenText = await pfHost.getAttribute('data-last-spoken');
+      assert.ok(spokenText.startsWith(`${GABUNGAN} Tidak dapat terhubung ke server NaraVisi`), spokenText);
+      assert.equal(await pf.locator('#pf3').getAttribute('alt'), null, 'cadangan tidak disuntik ke alt');
+    } finally {
+      await sw.evaluate((api) => chrome.storage.sync.set({ apiBase: api }), API);
+    }
+    assert.equal(await sisaKuota(), sisa, 'kuota tidak boleh berkurang');
+    assert.equal(await jumlahRiwayat(), riwayat, 'cadangan tidak boleh tersimpan sebagai riwayat AI');
+
+    // AI gagal (mis. Gemini gagal & BLIP belum siap) → cadangan yang sama, kuota dikembalikan server.
+    const sisa2 = await sisaKuota();
+    const calls2 = backend.ai.calls;
+    backend.ai.fail = Errors.aiUnavailable();
+    await resetLog(); // teks cadangan gambar 3 masih tampil → tunggu bacaan BARU untuk gambar 4
+    try {
+      await pilih(4);
+      await pf.waitForFunction((g) => JSON.parse(document.getElementById('naravisi-host').dataset.spokenLog || '[]')
+        .some((t) => t.startsWith(g)), GABUNGAN, { timeout: 15000 });
+    } finally {
+      backend.ai.fail = null;
+    }
+    const info = `sisa awal ${sisa}, sebelum AI gagal ${sisa2}, panggilan AI ${backend.ai.calls - calls2}`;
+    assert.equal(backend.ai.calls - calls2, 1, info);
+    assert.equal(await sisaKuota(), sisa2, info);
+    assert.equal(await jumlahRiwayat(), riwayat, info);
+  });
+
+  await step('Lapis lokal: QR berbahaya bukan tautan; "Buka" hanya setelah konfirmasi yang dibacakan, "Salin" lewat token', async () => {
+    await segar();
+    await setFake({ ...lengkapLokal(), qr: QR_JAHAT });
+    backend.ai.delayMs = 300;
+    try {
+      await pilih(1);
+      await tungguBacaan(`${LENGKAP} ${TULISAN} Ada kode QR berisi teks.`, 10000);
+      assert.equal(await pf.locator('#nv-qr').isHidden(), true, 'QR berbahaya tidak boleh punya tombol tautan');
+      assert.doesNotMatch(await pf.content(), /javascript:/);
+
+      await setFake(lengkapLokal());
+      await pilih(2);
+      await tungguBacaan(`${LENGKAP} ${TULISAN} ${QR_KAL}`, 10000);
+      const buka = pf.locator('#nv-qr [data-act="qr-buka"]');
+      assert.equal(await buka.innerText(), 'Buka 127.0.0.1…');
+      assert.doesNotMatch(await pf.content(), /kosong\.html/, 'URL lengkap tidak boleh ada di halaman');
+      const halaman = context.pages().length;
+      await buka.click();
+      await pfStatus.filter({ hasText: 'sekali lagi dalam 10 detik' }).waitFor();
+      assert.match(await pfHost.getAttribute('data-last-spoken'), /^Buka 127\.0\.0\.1 di tab baru\?/);
+      await new Promise((r) => setTimeout(r, 500));
+      assert.equal(context.pages().length, halaman, 'tab tidak boleh terbuka sebelum konfirmasi');
+      const [tab] = await Promise.all([context.waitForEvent('page'), buka.click()]);
+      await tab.waitForLoadState();
+      assert.equal(tab.url(), `${SITE}/kosong.html`);
+      await tab.close();
+      await pfStatus.filter({ hasText: '127.0.0.1 dibuka di tab baru.' }).waitFor();
+
+      await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: SITE });
+      await pf.locator('#nv-qr [data-act="qr-salin"]').click();
+      await pfStatus.filter({ hasText: 'Tautan ke 127.0.0.1 disalin.' }).waitFor();
+      assert.equal(await pf.evaluate(() => navigator.clipboard.readText()), `${SITE}/kosong.html`);
+    } finally {
+      backend.ai.delayMs = 0;
+    }
+  });
+
+  await step('Lapis lokal: "Sebutkan warna", "Baca tulisan di gambar (offline)", "Baca kode QR" (bawaan aktif) dimatikan → tidak dibacakan', async () => {
+    const set = await context.newPage();
+    await set.goto(extPage('pages/pengaturan.html'));
+    for (const [label, pesan] of [['Sebutkan warna', 'Sebutkan warna dimatikan.'], ['Baca tulisan di gambar (offline)', 'Baca tulisan di gambar dimatikan.'], ['Baca kode QR', 'Baca kode QR dimatikan.']]) {
+      const box = set.getByLabel(label, { exact: true });
+      await box.waitFor();
+      assert.equal(await box.isChecked(), true, `${label} harus aktif secara bawaan`);
+      await box.uncheck();
+      await set.locator(`text=${pesan}`).first().waitFor();
+    }
+    assert.deepEqual(await sw.evaluate(async () => chrome.storage.sync.get(['sebutWarna', 'bacaTulisan', 'bacaQr'])),
+      { sebutWarna: false, bacaTulisan: false, bacaQr: false });
+    await set.close();
+    try {
+      await segar();
+      await setFake(lengkapLokal());
+      backend.ai.fail = Errors.aiUnavailable();
+      await pilih(1);
+      await pfText.filter({ hasText: SEDERHANA }).waitFor({ timeout: 15000 });
+      assert.equal(await pfText.innerText(), SEDERHANA, 'tanpa warna, tulisan, dan QR');
+      assert.equal(await lapisCalls('ocr'), 0, 'pembaca teks tidak boleh dipanggil');
+      assert.equal(await lapisCalls('qr'), 0, 'pembaca QR tidak boleh dipanggil');
+    } finally {
+      backend.ai.fail = null;
+      await sw.evaluate(() => chrome.storage.sync.set({ sebutWarna: true, bacaTulisan: true, bacaQr: true }));
+    }
+  });
+
+  await step('Lapis lokal: Baca berurutan tidak melewati gambar hampir polos yang bertulisan', async () => {
+    await setFake({ hasil: { objek: [], kalimat: '', polos: true }, delayMs: 0, ocr: { ...OCR, delayMs: 0 } });
+    await sw.evaluate(() => chrome.storage.sync.set({ autoDescribe: true, autoMax: 3 }));
+    const calls = backend.ai.calls;
+    try {
+      const hit = await visitAndWaitAuto(pf, `${SITE}/pf05-polos.html`);
+      assert.equal(hit.result, 'done');
+      assert.equal(hit.polos ?? 0, 0, 'gambar bertulisan tidak boleh dilewati');
+      assert.equal(backend.ai.calls - calls, hit.described);
+      assert.ok(hit.described > 0);
+    } finally {
+      await sw.evaluate(() => chrome.storage.sync.set({ autoDescribe: false }));
+    }
+  });
+
   await setFake(null);
   backend.ai.delayMs = 0;
   backend.ai.fail = null;
@@ -2103,6 +2292,7 @@ try {
   await step('tidak ada error JavaScript di semua halaman', async () => assert.deepEqual(pageErrors, []));
 } finally {
   await context.close();
+  rmSync(profileDir, { recursive: true, force: true, maxRetries: 3 });
   site.close();
   await backend.close();
 }

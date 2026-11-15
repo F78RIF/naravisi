@@ -1,6 +1,6 @@
 // NaraVisi · extension/pages/pengaturan.js
 // Fungsi   : Halaman Pengaturan: bahasa, pintasan, suara, mode otomatis, server, privasi.
-// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, RNF-13
+// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, PF-06, PF-07, PF-08, RNF-13
 // Terkait  : pengaturan.html, common.js, backend settingsService.js
 import { apiFetch, apiHost, AUTO_MAX_PER_PAGE, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage, SHORTCUTS_URL, speakGuide } from '../shared/guide.js';
@@ -162,7 +162,16 @@ async function autoSection() {
     `Gambar diproses satu per satu dari atas ke bawah, yang terlihat lebih dulu, lalu lanjut saat Anda menggulir atau membaca. Deskripsi dimasukkan ke teks alternatif gambar, jadi NVDA atau JAWS membacanya saat menelusuri halaman (mis. tombol G). Mengirim gambar ke server dan Google Gemini serta memakai kuota; berhenti saat sisa kuota ${AUTO_RESERVE}.`);
   // [PF-05] Deteksi objek lokal — sakelar "Deskripsi kilat tanpa AI" (bawaan aktif; tidak mengirim apa pun ke server)
   const kilat = check('kilat', 'quickLocal', 'Deskripsi kilat tanpa AI',
-    'Sambil menunggu AI, NaraVisi membacakan perkiraan isi gambar dari pendeteksi di komputer Anda, mis. "Kemungkinan berisi: 2 orang, 1 sepeda." Bila server atau AI gagal, kuota habis, atau sedang offline, dibacakan "Deskripsi sederhana (tanpa AI)". Gratis, tidak memakai kuota, dan gambar tidak dikirim ke mana pun untuk ini.');
+    'Sambil menunggu AI, NaraVisi membacakan perkiraan isi gambar dari pendeteksi di komputer Anda, mis. "Kemungkinan berisi: 2 orang, 1 sepeda.", ditambah warna, tulisan, dan kode QR sesuai tiga pilihan di bawah. Bila server atau AI gagal, kuota habis, atau sedang offline, dibacakan "Deskripsi sederhana (tanpa AI)". Gratis, tidak memakai kuota, dan gambar tidak dikirim ke mana pun untuk ini.');
+  // [PF-08] Warna dominan — sakelar "Sebutkan warna" (bagian lapis lokal; bawaan aktif)
+  const warna = check('sebut-warna', 'sebutWarna', 'Sebutkan warna',
+    'Menambahkan warna utama gambar, mis. "Warna dominan: biru dan putih." Dihitung di komputer Anda.');
+  // [PF-06] Teks di gambar (OCR) — sakelar "Baca tulisan di gambar (offline)" (bawaan aktif)
+  const tulisan = check('baca-tulisan', 'bacaTulisan', 'Baca tulisan di gambar (offline)',
+    `Membaca tulisan pada poster atau tangkapan layar dengan pembaca teks di komputer Anda, mis. 'Tulisan: "Diskon akhir tahun".' Tidak dibacakan ulang bila deskripsi AI sudah memuat tulisannya.`);
+  // [PF-07] Kode QR & barcode — sakelar "Baca kode QR" (bawaan aktif; tautan tidak pernah dibuka otomatis)
+  const qr = check('baca-qr', 'bacaQr', 'Baca kode QR',
+    'Menyebut ke mana kode QR mengarah, mis. "Ada kode QR menuju rri.co.id." Hanya nama situsnya yang dibacakan; tautan tidak pernah dibuka otomatis. Kode berisi skrip atau berkas dibacakan sebagai "kode QR berisi teks".');
   const fokus = check('fokus', 'describeOnFocus', 'Deskripsikan saat gambar mendapat fokus keyboard',
     'Saat Tab berhenti di gambar, atau tautan yang isinya hanya gambar, tanpa teks alternatif.');
 
@@ -184,6 +193,9 @@ async function autoSection() {
     save({ announceImages: umumkan.input.checked }, umumkan.input.checked ? 'Pengumuman jumlah gambar diaktifkan.' : 'Pengumuman jumlah gambar dimatikan.'));
   kilat.input.addEventListener('change', () =>
     save({ quickLocal: kilat.input.checked }, kilat.input.checked ? 'Deskripsi kilat tanpa AI diaktifkan.' : 'Deskripsi kilat tanpa AI dimatikan.'));
+  for (const [{ input }, key, name] of [[warna, 'sebutWarna', 'Sebutkan warna'], [tulisan, 'bacaTulisan', 'Baca tulisan di gambar'], [qr, 'bacaQr', 'Baca kode QR']]) {
+    input.addEventListener('change', () => save({ [key]: input.checked }, `${name} ${input.checked ? 'diaktifkan' : 'dimatikan'}.`));
+  }
 
   // Mengirim gambar ke server → hanya aktif setelah persetujuan.
   for (const [{ input }, key, name] of [[otomatis, 'autoDescribe', 'Baca berurutan'], [fokus, 'describeOnFocus', 'Deskripsi saat fokus']]) {
@@ -219,6 +231,7 @@ async function autoSection() {
     sapa.node,
     umumkan.node,
     kilat.node,
+    el('div', { class: 'stack', role: 'group', 'aria-label': 'Lapis lokal (gratis, offline, tanpa kuota)' }, warna.node, tulisan.node, qr.node),
     otomatis.node,
     field('otomatis-jumlah', 'Jumlah gambar per halaman (baca berurutan)', jumlah, `1 sampai ${AUTO_MAX_PER_PAGE} gambar. Diproses satu per satu setelah halaman tenang.`),
     fokus.node,

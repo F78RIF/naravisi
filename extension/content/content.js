@@ -2,7 +2,7 @@
 // Fungsi   : Content script: memindai gambar, panel aksesibel (Shadow DOM), membacakan deskripsi (Web Speech API).
 // Disuntik sesuai permintaan (Alt+Shift+K / popup) atau mode Baca berurutan; aman bila disuntik berulang.
 // Di halaman hanya alt / aria-label, data-naravisi, dan live region #naravisi-live yang disentuh.
-// Kebutuhan: RF-06, RF-07, RF-08, RF-09, RF-11, RF-12, RF-19, RF-20, PF-02, PF-03, PF-05, RNF-02, RNF-03, RNF-06
+// Kebutuhan: RF-06, RF-07, RF-08, RF-09, RF-11, RF-12, RF-19, RF-20, PF-02, PF-03, PF-05, PF-06, PF-07, PF-08, RNF-02, RNF-03, RNF-06
 // Terkait  : background.js (pesan NV_*), shared/tokens.css (warna panel)
 
 (() => {
@@ -40,7 +40,11 @@
     focusOn: false,
     focusBusy: false,
     pending: null, // PF-05: permintaan manual yang sedang menunggu AI { reqId, startedAt }
-    quickSpeech: null, // PF-05: Promise selesai dibacakannya deskripsi kilat
+    antrean: null, // PF-05: Promise selesai dibacakannya antrean suara (lapis lokal → deskripsi AI)
+    suaraGen: 0, // naik setiap suara dihentikan → kalimat yang masih mengantre dibatalkan
+    lokal: null, // PF-05..PF-08: bagian lapis lokal untuk permintaan manual terakhir
+    qrKode: null, // PF-07: { token, domain } tautan QR gambar terpilih (URL lengkap tetap di service worker)
+    qrKonfirmasi: null, // PF-07: { token, sampai } menunggu tekan kedua "Buka …"
     reqSeq: 0,
   };
 
@@ -497,6 +501,11 @@
         <section class="result" id="nv-result" aria-labelledby="nv-result-title" hidden>
           <h3 id="nv-result-title">Deskripsi gambar<span id="nv-kind"></span></h3>
           <p class="text" id="nv-text" tabindex="-1"></p>
+          <p class="text" id="nv-tambahan" hidden></p>
+          <div class="controls" id="nv-qr" role="group" aria-label="Tautan kode QR" hidden>
+            <button type="button" data-act="qr-salin">Salin tautan</button>
+            <button type="button" data-act="qr-buka">Buka tautan…</button>
+          </div>
           <div class="controls" role="group" aria-label="Kontrol suara">
             <button type="button" data-act="play">Putar</button>
             <button type="button" data-act="pause">Jeda</button>
@@ -715,11 +724,21 @@
   };
 
   // [RF-11] Menampilkan deskripsi teks — menampilkan teks deskripsi di panel
-  function showResult(text, jenis) {
+  function showResult(text, jenis, tambahan = '') {
     $('#nv-result').hidden = false;
     $('#nv-text').textContent = text;
     $('#nv-kind').textContent = JENIS_LABEL[jenis] ? ` · ${JENIS_LABEL[jenis]}` : '';
     state.host.dataset.jenis = jenis || '';
+    tampilkanTambahan(tambahan);
+    renderQr();
+  }
+
+  // [PF-07] Kode QR & barcode — info lapis lokal setelah deskripsi AI (mis. "Ada kode QR menuju rri.co.id.")
+  function tampilkanTambahan(tambahan) {
+    if (!state.root) return;
+    const el = $('#nv-tambahan');
+    el.textContent = tambahan || '';
+    el.hidden = !tambahan;
   }
 
   // [RF-09] Mengirim gambar ke AI — meminta deskripsi ke service worker (pesan NV_DESCRIBE)
@@ -763,11 +782,13 @@
 
     const cached = state.cache.get(item.src);
     if (cached) {
+      stopSpeech();
       state.current = cached;
+      state.qrKode = cached.qrKode ?? null;
       applyAlt(item, cached.text);
-      showResult(cached.text, cached.jenis);
+      showResult(cached.text, cached.jenis, cached.tambahan);
       setStatus(`Deskripsi gambar ${number}.`);
-      speak(cached.text);
+      state.antrean = speak(cached.tambahan ? `${cached.text} ${cached.tambahan}` : cached.text);
       return;
     }
 
@@ -778,27 +799,39 @@
     state.reqSeq += 1;
     const reqId = `${Date.now().toString(36)}-${state.reqSeq}-${Math.random().toString(36).slice(2, 8)}`;
     state.pending = { reqId, startedAt: performance.now() };
-    state.quickSpeech = null;
+    // [PF-05] Deteksi objek lokal — lapis lokal permintaan ini: bagian yang tiba, yang sudah diantrekan, status AI
+    state.lokal = { reqId, bagian: new Map(), sudah: new Set(), menunggu: [], mulai: false, ai: null };
+    state.qrKode = null;
+    state.qrKonfirmasi = null;
+    const lokal = state.lokal;
+    setTimeout(() => mulaiKilat(lokal), QUICK_MIN_WAIT_MS);
 
     try {
-      const { text, riwayat_id: riwayatId, kuota, jenis, fallback } = await fetchDescription(item, undefined, reqId);
+      const data = await fetchDescription(item, undefined, reqId);
+      const { text, riwayat_id: riwayatId, kuota, jenis, fallback } = data;
       state.pending = null;
-      await waitQuick(); // deskripsi kilat yang sedang dibacakan diselesaikan dulu (tanpa tumpang tindih)
+      await waitQuick(); // bagian lokal yang sudah diantrekan dibacakan dulu (tanpa tumpang tindih)
       if (!state.open) return; // panel ditutup saat menunggu
 
-      state.current = { text, riwayatId, jenis };
-      // Deskripsi juga masuk ke gambar asli → terbaca NVDA saat menelusuri halaman (tombol G).
+      // [PF-06] Teks di gambar (OCR) — Gemini sudah memuat teks_dalam_gambar → tulisan OCR tidak dibacakan lagi
+      lokal.ai = { adaTeks: typeof data.teks_dalam_gambar === 'string' && data.teks_dalam_gambar.trim() !== '' };
+      const tambahan = tambahanSetelahAi(lokal);
+      state.current = { text, riwayatId, jenis, tambahan };
+      const entri = state.cache.get(item.src);
+      if (entri) Object.assign(entri, { tambahan, qrKode: state.qrKode });
+      // Deskripsi juga masuk ke gambar asli → terbaca NVDA saat menelusuri halaman (tombol G). Hanya teks AI.
       applyAlt(item, text);
-      showResult(text, jenis);
+      showResult(text, jenis, tambahan);
       state.host.dataset.state = 'done';
       setAction(null);
       const sisa = kuota && kuota.batas != null ? ` Sisa kuota hari ini: ${kuota.sisa}.` : '';
       setStatus(`Deskripsi gambar ${number} siap.${fallback ? FALLBACK_NOTE : ''}${sisa}`);
-      speak(text);
+      state.antrean = speak(tambahan ? `${text} ${tambahan}` : text);
     } catch (err) {
       state.pending = null;
       await waitQuick();
       if (!state.open) return;
+      lokal.ai = { gagal: true };
       const message = friendlyError(err);
       state.host.dataset.state = 'error';
       setStatus(message, 'error');
@@ -808,7 +841,7 @@
         // [PF-05] Deteksi objek lokal — cadangan: tidak di-cache, tidak masuk alt/riwayat; Enter lagi mencoba AI lagi
         state.current = { text: err.sederhana, riwayatId: null, jenis: null, lokal: true };
         showResult(err.sederhana, null);
-        speak(`${err.sederhana} ${message}`);
+        state.antrean = speak(`${err.sederhana} ${message}`);
       } else if (!err.spoken) speak(message); // sudah dibacakan service worker → jangan dobel
     } finally {
       state.pending = null;
@@ -816,27 +849,145 @@
     }
   }
 
-  // [PF-05] Deteksi objek lokal — deskripsi kilat: dibacakan hanya bila AI belum menjawab setelah 1 detik
-  function onQuick({ reqId, text: quickText }) {
-    const pending = state.pending;
-    if (!pending || pending.reqId !== reqId || typeof quickText !== 'string' || !quickText.trim()) return;
-    const wait = Math.max(0, QUICK_MIN_WAIT_MS - (performance.now() - pending.startedAt));
-    setTimeout(() => {
-      if (state.pending?.reqId !== reqId || !state.open) return; // AI sudah menjawab / panel ditutup
-      const text = clip(quickText, 240); // "Kemungkinan berisi: …" disusun service worker (shared/deteksi.js)
-      setStatus(`${text} Deskripsi lengkap sedang dibuat…`);
-      state.quickSpeech = speak(text);
-    }, wait);
+  const URUTAN_BAGIAN = ['benda', 'tulisan', 'kode'];
+
+  // [PF-05] Deteksi objek lokal — satu antrean suara: kalimat berikutnya baru dimulai setelah yang sebelumnya selesai
+  function antre(text) {
+    const gen = state.suaraGen;
+    state.antrean = (state.antrean ?? Promise.resolve()).then(() => {
+      if (gen !== state.suaraGen || !state.open) return undefined; // dihentikan (S, Esc, gambar lain)
+      return speak(text);
+    });
+    return state.antrean;
   }
 
-  // [PF-05] Deteksi objek lokal — menunggu deskripsi kilat selesai dibacakan (dibatasi 10 detik)
+  // [PF-05] Deteksi objek lokal — bagian lokal (benda+warna → tulisan → kode QR) tiba dari service worker
+  function onQuick({ reqId, bagian, text: quickText, kode }) {
+    const lokal = state.lokal;
+    if (!lokal || lokal.reqId !== reqId || typeof quickText !== 'string' || !quickText.trim()) return;
+    const nama = URUTAN_BAGIAN.includes(bagian) ? bagian : 'benda';
+    const text = clip(quickText, 400); // kalimat disusun service worker (shared/lapis-lokal.js)
+    lokal.bagian.set(nama, text);
+    if (nama === 'kode') simpanKode(kode);
+    if (state.pending?.reqId === reqId) {
+      // Menunggu AI: dibacakan bila AI belum menjawab setelah 1 detik (AI < 1 dtk → kilat dilewati).
+      if (lokal.mulai) antreKilat(lokal, nama);
+      else lokal.menunggu.push(nama);
+    } else if (lokal.ai && !lokal.ai.gagal) {
+      // Tiba setelah deskripsi AI: tambahkan di belakangnya bila masih perlu (QR; tulisan bila AI tanpa teks).
+      const extra = tambahanSetelahAi(lokal);
+      if (extra) {
+        if (state.current) state.current.tambahan = [state.current.tambahan, extra].filter(Boolean).join(' ');
+        tampilkanTambahan(state.current?.tambahan);
+        antre(extra);
+      }
+    }
+  }
+
+  // [PF-05] Deteksi objek lokal — detik ke-1: AI belum menjawab → bacakan bagian lokal yang sudah tiba, berurutan
+  function mulaiKilat(lokal) {
+    if (state.lokal !== lokal || state.pending?.reqId !== lokal.reqId || !state.open) return;
+    lokal.mulai = true;
+    for (const nama of URUTAN_BAGIAN) if (lokal.menunggu.includes(nama)) antreKilat(lokal, nama);
+    lokal.menunggu = [];
+  }
+
+  function antreKilat(lokal, nama) {
+    if (lokal.sudah.has(nama)) return;
+    lokal.sudah.add(nama);
+    const text = lokal.bagian.get(nama);
+    if (nama === 'benda') setStatus(`${text} Deskripsi lengkap sedang dibuat…`);
+    antre(text);
+  }
+
+  // [PF-06] Teks di gambar (OCR) — tambahan setelah deskripsi AI. Aturannya sama dengan perluSetelahAi di
+  // shared/lapis-lokal.js (content script tidak bisa mengimpor modul): kode QR selalu, tulisan hanya bila AI tidak
+  // memuat teks gambar, benda tidak; bagian yang sudah terdengar tidak diulang.
+  function tambahanSetelahAi(lokal) {
+    const out = [];
+    for (const nama of URUTAN_BAGIAN) {
+      const text = lokal.bagian.get(nama);
+      if (!text || lokal.sudah.has(nama)) continue;
+      if (nama === 'kode' || (nama === 'tulisan' && !lokal.ai?.adaTeks)) {
+        lokal.sudah.add(nama);
+        out.push(text);
+      }
+    }
+    return out.join(' ');
+  }
+
+  // [PF-05] Deteksi objek lokal — menunggu antrean suara lokal selesai dibacakan (dibatasi 10 detik)
   async function waitQuick() {
-    const quick = state.quickSpeech;
-    state.quickSpeech = null;
+    const quick = state.antrean;
     if (!quick) return;
     let timer;
     await Promise.race([quick, new Promise((resolve) => { timer = setTimeout(resolve, QUICK_MAX_WAIT_MS); })]);
     clearTimeout(timer);
+  }
+
+  // [PF-07] Kode QR & barcode — panel hanya menyimpan domain + token; URL lengkap tetap di service worker
+  function simpanKode(kode) {
+    const tautan = (Array.isArray(kode) ? kode : []).find((k) => k?.jenis === 'tautan' && typeof k.token === 'string');
+    state.qrKode = tautan ? { token: tautan.token, domain: String(tautan.domain || '').slice(0, 253) } : null;
+    state.qrKonfirmasi = null;
+    renderQr();
+  }
+
+  function renderQr() {
+    if (!state.root) return;
+    const box = $('#nv-qr');
+    const k = state.qrKode;
+    box.hidden = !k;
+    if (!k) return;
+    $('[data-act="qr-salin"]').textContent = `Salin tautan ${k.domain}`;
+    $('[data-act="qr-buka"]').textContent = `Buka ${k.domain}…`;
+  }
+
+  // [PF-07] Kode QR & barcode — "Salin tautan": URL diminta dari service worker lewat token, lalu disalin
+  async function qrSalin() {
+    const k = state.qrKode;
+    if (!k) return;
+    const res = await chrome.runtime.sendMessage({ type: 'NV_QR_LINK', token: k.token, aksi: 'salin' }).catch(() => null);
+    let ok = false;
+    if (res?.ok && typeof res.data?.url === 'string') {
+      try {
+        await navigator.clipboard.writeText(res.data.url);
+        ok = true;
+      } catch {
+        const area = document.createElement('textarea');
+        area.value = res.data.url;
+        state.root.append(area);
+        area.select();
+        ok = document.execCommand('copy');
+        area.remove();
+      }
+    }
+    const pesan = ok ? `Tautan ke ${k.domain} disalin.` : res?.message || 'Tautan tidak dapat disalin.';
+    setStatus(pesan, ok ? 'info' : 'error');
+    stopSpeech();
+    speak(pesan);
+  }
+
+  // [PF-07] Kode QR & barcode — tab baru dibuka HANYA setelah konfirmasi yang dibacakan (tekan dua kali dalam 10 dtk)
+  async function qrBuka() {
+    const k = state.qrKode;
+    if (!k) return;
+    const now = Date.now();
+    const konfirmasi = state.qrKonfirmasi;
+    if (!konfirmasi || konfirmasi.token !== k.token || now > konfirmasi.sampai) {
+      state.qrKonfirmasi = { token: k.token, sampai: now + 10000 };
+      const tanya = `Buka ${k.domain} di tab baru? Tekan tombol Buka ${k.domain} sekali lagi dalam 10 detik untuk membuka.`;
+      setStatus(tanya);
+      stopSpeech();
+      speak(tanya);
+      return;
+    }
+    state.qrKonfirmasi = null;
+    const res = await chrome.runtime.sendMessage({ type: 'NV_QR_LINK', token: k.token, aksi: 'buka' }).catch(() => null);
+    const pesan = res?.ok ? `${k.domain} dibuka di tab baru.` : res?.message || 'Tautan tidak dapat dibuka.';
+    setStatus(pesan, res?.ok ? 'info' : 'error');
+    stopSpeech();
+    speak(pesan);
   }
 
   // -------------------------------------------------------------------------
@@ -1121,6 +1272,8 @@
 
   // [RF-12] Membacakan deskripsi — tombol/tombol S: berhenti
   function stopSpeech() {
+    state.suaraGen += 1; // kalimat yang masih mengantre (lapis lokal) tidak dibacakan lagi
+    state.antrean = null;
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     state.paused = false;
     setTts('idle');
@@ -1211,6 +1364,8 @@
       case 'stop': return stopSpeech();
       case 'report': return openReport();
       case 'report-cancel': return closeReport();
+      case 'qr-salin': return qrSalin();
+      case 'qr-buka': return qrBuka();
       default: return undefined;
     }
   }
