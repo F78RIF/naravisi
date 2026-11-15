@@ -1301,6 +1301,7 @@ tanpa kuota**, dan gambarnya **tidak pernah dikirim ke server** untuk keperluan 
 |---|---|---|---|
 | Benda | PF-05 | MediaPipe EfficientDet-Lite0 | "Kemungkinan berisi: 2 orang." |
 | Warna dominan | PF-08 | kode sendiri (median-cut) | "Warna dominan: biru dan putih." |
+| Kode QR & barcode | PF-07 | `BarcodeDetector` bawaan, atau jsQR lokal | "Ada kode QR menuju rri.co.id." |
 
 Semua lapis berjalan di **dokumen offscreen** yang sama dengan MediaPipe.
 
@@ -1339,4 +1340,36 @@ punya kalimat kilat ("Warna dominan: biru.").
 Tes: `e2e/unit/warna.test.mjs` (warna polos, dua warna, hitam-putih, ambang 15%, maks. 2 warna, gradasi, transparan,
 kamus 12 nama, kalimat gabungan) dan e2e "PF-05: MediaPipe lokal berjalan di offscreen…" yang kini juga memeriksa warna
 dari detektor asli (gambar polos biru → `biru`; 60% biru + 40% putih → `biru, putih`).
+
+### Kode QR & barcode (PF-07) — Langkah 2
+
+```
+service worker                                   dokumen offscreen (kode-qr.js)
+readCodes({base64,type}) ── NV_READ_CODES ────▶  muatPembaca()  ← sekali saja
+                                                   'BarcodeDetector' ada & mendukung qr_code?
+                                                     ya   → BarcodeDetector (QR + barcode 1D/2D)
+                                                     tidak→ jsQR (vendor/jsqr, hanya QR) — Chrome di Windows/Linux
+                                                   coba di ≤ 800 px; tidak ketemu & gambar besar → coba ≤ 1280 px
+                                                   ringkasKode()  (shared/qr.js)
+  { kode: [...], kalimat, mesin, ms }  ◀────────
+```
+
+`golongkanKode()` menentukan apa yang boleh dibacakan:
+
+| Isi kode | Golongan | Yang dibacakan |
+|---|---|---|
+| `https://rri.co.id/berita/123?utm=…` | tautan | "Ada kode QR menuju **rri.co.id**." (hanya nama host, tanpa jalur/parameter) |
+| `https://bank.co.id@jahat.example/` | tautan | "… menuju **jahat.example**." (host asli yang disebut, bukan bagian yang menyamar) |
+| `Ruang baca lantai 2`, `mailto:…`, `tel:…`, `www.contoh.id` | teks | "Ada kode QR berisi teks: …" (maks. 100 karakter, sisanya "…") |
+| `javascript:`, `data:`, `file:`, `intent:`, `vbscript:`, `chrome:`, `blob:`, skema tak dikenal, URL http rusak | berbahaya | "Ada kode QR berisi teks." (isinya **tidak** dibacakan) |
+| barcode EAN/UPC (hanya lewat `BarcodeDetector`) | teks | "Ada kode batang berisi teks: 8991234567890." |
+
+Skema diperiksa **setelah** karakter tak terlihat dibuang, jadi `java⇥script:`, spasi lebar nol, atau huruf besar-kecil
+acak tetap dikenali sebagai berbahaya.
+
+**Tautan tidak pernah dibuka otomatis.** URL lengkap tidak dikirim ke panel di halaman web. Service worker menyimpannya
+di peta `qrTautan` dan panel hanya menerima **token acak** (`crypto.randomUUID()`). Pesan `NV_QR_LINK {token, aksi}`
+baru dilayani bila tokennya dikenal, belum kedaluwarsa (10 menit), berasal dari **tab yang sama**, dan URL-nya lolos
+`tautanAman()` (hanya http/https). `aksi: 'salin'` mengembalikan URL untuk disalin; `aksi: 'buka'` membuka tab baru di
+samping tab itu. Panel baru mengirim `buka` setelah pengguna mengonfirmasi (Langkah 4).
 

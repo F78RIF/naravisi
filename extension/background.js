@@ -1,6 +1,6 @@
 // NaraVisi · extension/background.js
 // Fungsi   : Service worker (Manifest V3): menyuntik panel, mengambil & mengecilkan gambar, memanggil REST API, pemandu suara chrome.tts.
-// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, RNF-09, RNF-12
+// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-07, RNF-09, RNF-12
 // Terkait  : content/content.js, offscreen/offscreen.js, offscreen/deteksi-objek.js, shared/config.js, shared/guide.js, backend/src/http/routes.js
 
 import {
@@ -8,6 +8,7 @@ import {
 } from './shared/config.js';
 import { kalimatKilat, kalimatSederhana, layakDilewati } from './shared/deteksi.js';
 import { imageCountText, spokenShortcut, welcomeText } from './shared/guide.js';
+import { tautanAman } from './shared/qr.js';
 
 const CONTENT_FILE = 'content/content.js';
 const DIRECT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -425,6 +426,55 @@ async function detectImage({ src, dataUrl }) {
   return detectObjects(await normalizedImage({ src, dataUrl }));
 }
 
+// [PF-07] Kode QR & barcode — membaca kode QR di dokumen offscreen (BarcodeDetector bawaan atau jsQR lokal)
+/** @returns {Promise<{kode: Array<{jenis, domain?, url?, teks?, format}>, kalimat: string, mesin: string, ms: number}>} */
+export async function readCodes({ base64, type }) {
+  await ensureOffscreen();
+  const res = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'NV_READ_CODES', dataUrl: `data:${type};base64,${base64}` });
+  if (!res?.ok) throw new NvError('QR_FAILED', res?.message || 'Pembacaan kode QR gagal.');
+  return res.data;
+}
+
+// [PF-07] Kode QR & barcode — ambil + normalisasi gambar lalu baca kode (dipakai uji otomatis & pengukuran)
+async function readCodesImage({ src, dataUrl }) {
+  return readCodes(await normalizedImage({ src, dataUrl }));
+}
+
+// [PF-07] Kode QR & barcode — tautan hasil pindaian disimpan di sini; panel hanya memegang token acak.
+// Halaman web tidak bisa menyuruh NaraVisi membuka alamat sembarang: hanya tautan yang benar-benar terbaca dari QR,
+// untuk tab yang sama, ≤ 10 menit, dan hanya http/https. Membuka tab baru hanya setelah konfirmasi di panel.
+const QR_TOKEN_TTL_MS = 10 * 60 * 1000;
+const qrTautan = new Map(); // token → { url, domain, tabId, kedaluwarsa }
+
+export function simpanTautanQr(kode, tabId) {
+  const now = Date.now();
+  for (const [t, v] of qrTautan) if (v.kedaluwarsa < now) qrTautan.delete(t);
+  return (kode ?? []).map((k) => {
+    if (k?.jenis !== 'tautan' || !tautanAman(k.url) || tabId == null) {
+      const { url: _buang, ...tanpaUrl } = k ?? {};
+      return tanpaUrl;
+    }
+    const token = crypto.randomUUID();
+    qrTautan.set(token, { url: tautanAman(k.url), domain: k.domain, tabId, kedaluwarsa: now + QR_TOKEN_TTL_MS });
+    const { url: _buang, ...tanpaUrl } = k;
+    return { ...tanpaUrl, token };
+  });
+}
+
+// [PF-07] Kode QR & barcode — NV_QR_LINK: salin (kembalikan URL) atau buka tab baru (setelah konfirmasi di panel)
+async function qrLink({ token, aksi }, sender) {
+  const entri = typeof token === 'string' ? qrTautan.get(token) : null;
+  if (!entri || entri.kedaluwarsa < Date.now() || entri.tabId !== sender?.tab?.id) {
+    throw new NvError('QR_LINK_UNKNOWN', 'Tautan kode QR sudah tidak berlaku. Pilih gambarnya lagi.');
+  }
+  const url = tautanAman(entri.url);
+  if (!url) throw new NvError('QR_LINK_UNSAFE', 'Tautan ini tidak aman dibuka.');
+  if (aksi === 'salin') return { ok: true, data: { url, domain: entri.domain } };
+  if (aksi !== 'buka') throw new NvError('MESSAGE_REJECTED', 'Pesan tidak dikenal.');
+  await chrome.tabs.create({ url, openerTabId: sender.tab.id, index: (sender.tab.index ?? 0) + 1 });
+  return { ok: true, data: { domain: entri.domain } };
+}
+
 const LOCAL_TIMEOUT_MS = 8000; // detektor macet (mis. perangkat sangat lambat) → anggap tidak ada hasil
 // Galat yang boleh diganti deskripsi sederhana: server/AI gagal, kuota habis, offline. Bukan: belum masuk, gambar
 // ditolak, atau AI_BLOCKED (filter keamanan; gambar sengaja tidak dideskripsikan).
@@ -587,7 +637,7 @@ async function openPage(name) {
 // ---------------------------------------------------------------------------
 // Tipe pesan yang diterima, per jenis pengirim. Content script berjalan di dalam halaman web
 // (kurang tepercaya), jadi hanya boleh memakai yang dibutuhkan panel; token tidak pernah dikirim balik.
-const CONTENT_SCRIPT_TYPES = new Set(['NV_DESCRIBE', 'NV_REPORT', 'NV_GET_TTS', 'NV_OPEN_PAGE', 'NV_FONTS']);
+const CONTENT_SCRIPT_TYPES = new Set(['NV_DESCRIBE', 'NV_REPORT', 'NV_GET_TTS', 'NV_OPEN_PAGE', 'NV_FONTS', 'NV_QR_LINK']);
 const EXTENSION_PAGE_TYPES = new Set([
   ...CONTENT_SCRIPT_TYPES,
   'NV_TOGGLE_ACTIVE',
@@ -631,6 +681,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { ok: true, data: await getTts(), loggedIn: Boolean((await getSession())?.token) };
       case 'NV_OPEN_PAGE':
         return openPage(message.page);
+      case 'NV_QR_LINK':
+        return qrLink(message, sender);
       case 'NV_FONTS':
         return { ok: true, data: await fontPayload() };
       case 'NV_REFRESH_PROFILE':
@@ -663,4 +715,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 globalThis.naraVisi = {
   togglePanel, toggleActiveTab, openPage, handleScanCommand, onCommand, announceImageCount, spokenLog, rejectReason,
   autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog, autoBlockedReason, detectObjects, detectImage,
+  readCodes, readCodesImage, simpanTautanQr, qrLink,
 };

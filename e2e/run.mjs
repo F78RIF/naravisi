@@ -2035,6 +2035,36 @@ try {
     assert.ok(kedua.ms < 5000, `deteksi terlalu lama: ${kedua.ms} ms`);
   });
 
+  // [PF-07] Kode QR & barcode — pembaca asli (BarcodeDetector bila ada, jsQR lokal bila tidak) + token tautan
+  await step('PF-07: kode QR dibaca lokal; tautan hanya disebut domainnya, skema berbahaya tidak; token tautan per tab', async () => {
+    const QRCode = require('qrcode');
+    const qrData = async (t) => `data:image/png;base64,${(await QRCode.toBuffer(t, { width: 320, margin: 4 })).toString('base64')}`;
+    const baca = async (d) => sw.evaluate((x) => globalThis.naraVisi.readCodesImage({ dataUrl: x }), d);
+    const url = await baca(await qrData('https://rri.co.id/berita?id=1'));
+    assert.equal(url.kalimat, 'Ada kode QR menuju rri.co.id.', JSON.stringify(url));
+    assert.equal(url.kode[0].url, 'https://rri.co.id/berita?id=1');
+    assert.ok(['jsQR', 'BarcodeDetector'].includes(url.mesin));
+    const teks = await baca(await qrData('Ruang baca lantai 2'));
+    assert.equal(teks.kalimat, 'Ada kode QR berisi teks: Ruang baca lantai 2.');
+    const jahat = await baca(await qrData('javascript:alert(1)'));
+    assert.equal(jahat.kalimat, 'Ada kode QR berisi teks.');
+    assert.equal(jahat.kode[0].url, undefined);
+    const tanpa = await baca(`data:image/png;base64,${(await solid(320, 240, '#3060c0').png().toBuffer()).toString('base64')}`);
+    assert.deepEqual(tanpa.kode, []);
+    assert.equal(tanpa.kalimat, '');
+
+    // Panel hanya memegang token; URL tetap di service worker, hanya untuk tab yang sama, hanya http/https.
+    const [k] = await sw.evaluate((kode) => globalThis.naraVisi.simpanTautanQr(kode, 4242), url.kode);
+    assert.ok(k.token);
+    assert.equal(k.url, undefined);
+    const [j] = await sw.evaluate((kode) => globalThis.naraVisi.simpanTautanQr(kode, 4242), jahat.kode);
+    assert.equal(j.token, undefined);
+    const tautan = (arg) => sw.evaluate((a) => globalThis.naraVisi.qrLink(a.m, a.s).then((r) => r, (e) => ({ ok: false, code: e.code })), arg);
+    assert.equal((await tautan({ m: { token: k.token, aksi: 'salin' }, s: { tab: { id: 1 } } })).code, 'QR_LINK_UNKNOWN');
+    assert.equal((await tautan({ m: { token: 'palsu', aksi: 'salin' }, s: { tab: { id: 4242 } } })).code, 'QR_LINK_UNKNOWN');
+    assert.equal((await tautan({ m: { token: k.token, aksi: 'salin' }, s: { tab: { id: 4242 } } })).data.url, 'https://rri.co.id/berita?id=1');
+  });
+
   await step('tidak ada error JavaScript di semua halaman', async () => assert.deepEqual(pageErrors, []));
 } finally {
   await context.close();

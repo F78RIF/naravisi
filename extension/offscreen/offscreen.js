@@ -1,11 +1,13 @@
 // NaraVisi · extension/offscreen/offscreen.js
 // Fungsi   : Dokumen offscreen: mengubah SVG menjadi JPEG (service worker tidak punya DOM).
 // SVG dimuat sebagai <img>: skrip di dalamnya tidak berjalan, sumber eksternal tidak diunduh.
-//            Juga menjalankan deteksi objek lokal MediaPipe (PF-05) atas permintaan service worker.
-// Kebutuhan: RF-09, PF-05
-// Terkait  : background.js (rasterizeSvg, detectObjects), offscreen.html, deteksi-objek.js
+//            Juga menjalankan lapis lokal atas permintaan service worker: deteksi objek MediaPipe + warna dominan
+//            (PF-05, PF-08) dan pembaca kode QR (PF-07).
+// Kebutuhan: RF-09, PF-05, PF-07, PF-08
+// Terkait  : background.js (rasterizeSvg, detectObjects, readCodes), offscreen.html, deteksi-objek.js, kode-qr.js
 
 import { deteksiObjek } from './deteksi-objek.js';
+import { bacaKode } from './kode-qr.js';
 
 const MAX_SIDE = 1280;
 const FALLBACK_SIDE = 512; // SVG tanpa width/height/viewBox
@@ -43,6 +45,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // [PF-05] Deteksi objek lokal — permintaan deteksi dari service worker (data URL gambar yang sudah dinormalisasi)
   if (message.type === 'NV_DETECT_OBJECTS' && typeof message.dataUrl === 'string' && message.dataUrl.startsWith('data:image/')) {
     deteksiObjek(message.dataUrl)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
+    return true;
+  }
+  // [PF-07] Kode QR & barcode — permintaan baca kode dari service worker (hasil: domain/teks, tautan tidak dibuka)
+  if (message.type === 'NV_READ_CODES' && typeof message.dataUrl === 'string' && message.dataUrl.startsWith('data:image/')) {
+    bacaKode(message.dataUrl)
       .then((data) => sendResponse({ ok: true, data }))
       .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
     return true;
