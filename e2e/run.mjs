@@ -2025,6 +2025,12 @@ try {
     assert.deepEqual(pertama.objek, []); // gambar polos: tidak ada objek
     assert.equal(pertama.kalimat, '');
     assert.equal(pertama.polos, true, `variansi ${pertama.variansi}`);
+    // [PF-08] Warna dominan — dihitung di offscreen yang sama dari gambar 64×64
+    assert.deepEqual(pertama.warna.map((w) => w.nama), ['biru'], JSON.stringify(pertama.warna));
+    const duaWarna = `data:image/png;base64,${(await sharp({ create: { width: 300, height: 200, channels: 3, background: '#ffffff' } })
+      .composite([{ input: await polos(180, 200, '#2050e0').png().toBuffer(), left: 0, top: 0 }]).png().toBuffer()).toString('base64')}`;
+    const hasilDua = await sw.evaluate((d) => globalThis.naraVisi.detectImage({ dataUrl: d }), duaWarna);
+    assert.deepEqual(hasilDua.warna.map((w) => w.nama), ['biru', 'putih'], JSON.stringify(hasilDua.warna));
     assert.equal(kedua.muatMs, pertama.muatMs, 'model tidak boleh dimuat ulang');
     assert.ok(kedua.ms < 5000, `deteksi terlalu lama: ${kedua.ms} ms`);
   });

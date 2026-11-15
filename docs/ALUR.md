@@ -22,6 +22,7 @@ bisa langsung tampil di GitHub atau disalin ke slide.
 | [Tahap 11](#tahap-11--online-langkah-2-dari-laptop-lewat-cloudflare-tunnel) | Online Langkah 2: Cloudflare Tunnel | RNF-07 |
 | [Tahap 12](#tahap-12--online-langkah-3-server-oracle-cloud-always-free) | Online Langkah 3: Oracle Always Free | RNF-07, RNF-09 |
 | [Tahap 13](#tahap-13--pf-05-deteksi-objek-lokal-mediapipe) | PF-05: deteksi objek lokal (MediaPipe) | PF-05 |
+| [Tahap 14](#tahap-14--lapis-lokal-warna-pf-08-kode-qr-pf-07-teks-di-gambar-pf-06) | Lapis lokal: warna, kode QR, teks di gambar | PF-06..PF-08 |
 
 ---
 
@@ -1284,3 +1285,58 @@ di seperempat kiri (titik tengah tetap berwarna utama), dan `polos()` dipakai un
   asli (15 Nov 2026): rambu STOP → "1 rambu berhenti" (skor 0,97), jam → "1 jam" (0,87), lampu → "1 lampu lalu lintas"
   (0,57), sepeda → "1 sepeda" (0,72), parkir → "2 sepeda, 1 rambu berhenti", bidang krem → tanpa objek & polos
   (variansi 0) sehingga dilewati Baca Berurutan, tetapi Enter manual tetap ke AI.
+
+---
+
+## Tahap 14 — Lapis lokal: warna (PF-08), kode QR (PF-07), teks di gambar (PF-06)
+
+Penanda di kode: cari `[PF-06]`, `[PF-07]`, `[PF-08]`. Lokasi lengkap ada di `docs/PETA_KODE.md` (tabel PF).
+
+### Ide besarnya
+
+PF-05 memberi extension "mata kecil" untuk benda. Tahap ini menambah tiga lapis lagi yang juga **gratis, offline,
+tanpa kuota**, dan gambarnya **tidak pernah dikirim ke server** untuk keperluan ini:
+
+| Lapis | Kode | Mesin | Contoh kalimat |
+|---|---|---|---|
+| Benda | PF-05 | MediaPipe EfficientDet-Lite0 | "Kemungkinan berisi: 2 orang." |
+| Warna dominan | PF-08 | kode sendiri (median-cut) | "Warna dominan: biru dan putih." |
+
+Semua lapis berjalan di **dokumen offscreen** yang sama dengan MediaPipe.
+
+### Warna dominan (PF-08) — Langkah 1
+
+```
+deteksiObjek(dataUrl)                      (offscreen/deteksi-objek.js)
+  createImageBitmap
+  ├─ detector.detect()           → objek          (PF-05)
+  └─ pikselKecil(): gambar 64×64 → RGBA
+       ├─ variansiWarna()        → polos?         (PF-05, penyaring)
+       └─ warnaDominan()         → warna          (PF-08, shared/warna.js)
+  { objek, kalimat, polos, warna, warnaMs, ... }
+```
+
+Langkah `warnaDominan()` (logika murni, bisa diuji di Node):
+
+1. **Kumpulkan piksel** dari gambar 64×64 (4.096 piksel). Piksel hampir transparan (alfa < 128) diabaikan, supaya latar
+   PNG transparan tidak terhitung "hitam".
+2. **Median-cut** (`kuantisasi`, kode sendiri tanpa pustaka): mulai dari satu "kotak" berisi semua piksel. Berulang kali
+   pilih kotak dengan *rentang warna × jumlah piksel* terbesar, urutkan pikselnya pada kanal (R/G/B) yang paling lebar,
+   lalu belah di median. Berhenti di 8 kotak atau bila semua kotak sudah polos. Warna kotak = rata-rata pikselnya.
+3. **Beri nama** (`namaWarna`): tiap warna kotak dicocokkan ke contoh terdekat di `shared/warna-id.json`. Jaraknya
+   diukur di ruang **CIELAB**, bukan RGB, karena jarak CIELAB lebih mirip cara mata membedakan warna (biru tua dan biru
+   muda tetap "biru", bukan "ungu"). Kamus berisi 12 nama: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat,
+   hitam, putih, abu-abu, krem; tiap nama punya beberapa contoh (mis. biru tua, biru langit, biru toska).
+4. **Gabungkan** kotak yang bernamanya sama (gradasi biru = satu "biru"), jumlahkan porsinya.
+5. **Saring**: hanya warna dengan porsi **≥ 15%**, paling banyak **2** warna, porsi terbesar dulu.
+6. **Kalimat** (`kalimatWarna`): "Warna dominan: biru." atau "Warna dominan: biru dan putih.". Tanpa warna → tidak ada
+   kalimat.
+
+Kalimat warna disambung ke kalimat kilat PF-05 ("Kemungkinan berisi: 2 orang. Warna dominan: biru.") dan ke kalimat
+cadangan ("Deskripsi sederhana (tanpa AI): … Warna dominan: biru."). Gambar tanpa benda tetapi berwarna jelas kini tetap
+punya kalimat kilat ("Warna dominan: biru.").
+
+Tes: `e2e/unit/warna.test.mjs` (warna polos, dua warna, hitam-putih, ambang 15%, maks. 2 warna, gradasi, transparan,
+kamus 12 nama, kalimat gabungan) dan e2e "PF-05: MediaPipe lokal berjalan di offscreen…" yang kini juga memeriksa warna
+dari detektor asli (gambar polos biru → `biru`; 60% biru + 40% putih → `biru, putih`).
+

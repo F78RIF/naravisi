@@ -2,10 +2,13 @@
 // Fungsi   : Deteksi objek lokal dengan MediaPipe Tasks Vision (ObjectDetector, EfficientDet-Lite0 int8).
 //            Berjalan di dokumen offscreen (bukan di halaman web). Semua berkas (.mjs, .wasm, .tflite) ada di
 //            extension/vendor/, tidak ada yang diunduh dari internet: gratis, offline, tidak memakai kuota.
-// Kebutuhan: PF-05
-// Terkait  : offscreen.js (penerima pesan), shared/deteksi.js, shared/label-id.json, background.js (detectObjects)
+//            Gambar kecil 64×64 yang sama dipakai untuk penyaring gambar polos (PF-05) dan warna dominan (PF-08).
+// Kebutuhan: PF-05, PF-08
+// Terkait  : offscreen.js (penerima pesan), shared/deteksi.js, shared/label-id.json, shared/warna.js,
+//            shared/warna-id.json, background.js (detectObjects)
 
 import { AMBANG_POLOS, gabungkanObjek, kalimatObjek, SKOR_MIN, variansiWarna } from '../shared/deteksi.js';
+import { warnaDominan } from '../shared/warna.js';
 
 const VENDOR = '../vendor/mediapipe';
 const MODEL_URL = new URL('../vendor/models/efficientdet_lite0_int8.tflite', import.meta.url).href;
@@ -13,6 +16,7 @@ const MAKS_HASIL = 20; // kotak terbanyak yang diminta dari model per gambar
 const SISI_POLOS = 64; // gambar diperkecil ke 64×64 px sebelum keragaman warnanya diukur
 
 let siap = null; // Promise<{ detector, kamus }> — dibuat sekali, dipakai ulang
+let kamusWarna = null; // Promise isi shared/warna-id.json (PF-08)
 
 // [PF-05] Deteksi objek lokal — memuat model sekali (lazy) saat pertama dibutuhkan, lalu dipakai ulang
 function muatDetektor() {
@@ -43,18 +47,33 @@ function muatDetektor() {
   return siap;
 }
 
-// [PF-05] Deteksi objek lokal — keragaman warna gambar kecil 64×64 (untuk penyaring gambar hampir polos)
-function ukurVariansi(bitmap) {
+// [PF-05] Deteksi objek lokal — piksel gambar kecil 64×64 (untuk penyaring gambar hampir polos)
+// [PF-08] Warna dominan — piksel yang sama dipakai untuk kuantisasi warna (tidak menggambar ulang)
+function pikselKecil(bitmap) {
   const canvas = new OffscreenCanvas(SISI_POLOS, SISI_POLOS);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(bitmap, 0, 0, SISI_POLOS, SISI_POLOS);
-  return variansiWarna(ctx.getImageData(0, 0, SISI_POLOS, SISI_POLOS).data);
+  return ctx.getImageData(0, 0, SISI_POLOS, SISI_POLOS).data;
+}
+
+// [PF-08] Warna dominan — maks. 2 warna dengan porsi ≥ 15% dari gambar 64×64 (gagal → tanpa warna)
+async function ukurWarna(rgba) {
+  kamusWarna ??= fetch(new URL('../shared/warna-id.json', import.meta.url)).then((r) => r.json());
+  try {
+    const t0 = performance.now();
+    const warna = warnaDominan(rgba, await kamusWarna);
+    return { warna, warnaMs: Math.round((performance.now() - t0) * 10) / 10 };
+  } catch {
+    kamusWarna = null;
+    return { warna: [], warnaMs: 0 };
+  }
 }
 
 // [PF-05] Deteksi objek lokal — mendeteksi objek pada gambar yang sudah dinormalisasi service worker
 /**
  * @param {string} dataUrl  gambar (JPEG/PNG/WebP/GIF) dari service worker, sudah ≤ 1280 px
- * @returns {Promise<{objek: Array<{nama, jumlah, skor}>, kalimat: string, polos: boolean, variansi: number, ms: number, muatMs: number}>}
+ * @returns {Promise<{objek: Array<{nama, jumlah, skor}>, kalimat: string, polos: boolean, variansi: number,
+ *   warna: Array<{nama, porsi}>, warnaMs: number, ms: number, muatMs: number}>}
  */
 export async function deteksiObjek(dataUrl) {
   const { detector, kamus, muatMs } = await muatDetektor();
@@ -68,8 +87,10 @@ export async function deteksiObjek(dataUrl) {
       score: d.categories?.[0]?.score ?? 0,
     }));
     const objek = gabungkanObjek(mentah, kamus);
-    const variansi = Math.round(ukurVariansi(bitmap) * 10) / 10;
-    return { objek, kalimat: kalimatObjek(objek), polos: variansi < AMBANG_POLOS, variansi, ms, muatMs };
+    const rgba = pikselKecil(bitmap);
+    const variansi = Math.round(variansiWarna(rgba) * 10) / 10;
+    const { warna, warnaMs } = await ukurWarna(rgba);
+    return { objek, kalimat: kalimatObjek(objek), polos: variansi < AMBANG_POLOS, variansi, warna, warnaMs, ms, muatMs };
   } finally {
     bitmap.close();
   }

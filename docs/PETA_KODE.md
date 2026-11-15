@@ -130,7 +130,7 @@ Singkatan: **bg** = `extension/background.js`, **ct** = `extension/content/conte
 | RF-29 | Ubah pengguna | `admin.js:242` `openUserDialog`, `:261` submit | rt `:115` → `adminService.js:66` `updateUser`, `:109` `assertNotLastAdmin` | – | `users` | P "RF-29" (admin terakhir 409), E |
 | RF-30 | Hapus pengguna | `admin.js:285` `confirmDelete`, `:301` submit | rt `:120` → `adminService.js:121` `deleteUser` (satu transaksi DB) | – | `users`, `riwayat_deskripsi`, `laporan_deskripsi`, `transaksi` | P "RF-30" (8 tes), E email salah ditolak |
 
-### Fitur tambahan (PF-01..PF-05)
+### Fitur tambahan (PF-01..PF-08)
 
 Tidak tercantum di SRS v1.1; dicatat di `docs/PERUBAHAN_SRS_SDD.md` bagian 1.
 
@@ -141,6 +141,7 @@ Tidak tercantum di SRS v1.1; dicatat di `docs/PERUBAHAN_SRS_SDD.md` bagian 1.
 | PF-03 | Deskripsi ke `alt` gambar asli | ct `:814` `applyAlt` | – | – | – | E "setelah dideskripsikan: alt asli bermakna tidak ditimpa…" |
 | PF-04 | Cadangan AI Gemini → BLIP | – | – | `main.py:69` `build_service`; `service.py:195` `CaptionRouter`, `:211` `describe`; `gemini.py:167` `_call`; `providers.py:92` `BlipCaptioner`, `:126` `MarianTranslator` | – | G "429 model busy otomatis ke cadangan…", "json rusak memakai cadangan" |
 | PF-05 | Deteksi objek lokal (MediaPipe, offline) — [PF-05] | bg `:416` `detectObjects`, `:424` `detectImage`, `:397` `normalizedImage`, `:436` `localDetect`, `:449` `sendQuick` (pesan `NV_QUICK`), `:431` `SIMPLE_FALLBACK_CODES`, `:475` `requestDescription` (kilat paralel, penyaring `AUTO_SKIPPED_PLAIN`, cadangan `sederhana`); `offscreen/offscreen.js:43` pesan `NV_DETECT_OBJECTS`; `offscreen/deteksi-objek.js:17` `muatDetektor` (lazy, sekali), `:47` `ukurVariansi`, `:59` `deteksiObjek`; `shared/deteksi.js:15` `terjemahkanLabel`, `:26` `gabungkanObjek`, `:45` `kalimatObjek`, `:54` `variansiWarna`, `:73` `layakDilewati`, `:79` `kalimatKilat`, `:85` `kalimatSederhana`; ct `:819` `onQuick`, `:832` `waitQuick`, `:758` `describeCurrent` (cadangan), `:938` `pump` (lewati gambar polos), `:1070` `speak` (Promise), `:1144` `openReport`; `pages/pengaturan.js:163` sakelar "Deskripsi kilat tanpa AI"; `shared/config.js:21` `quickLocal`; `shared/label-id.json`; `manifest.json` CSP `wasm-unsafe-eval`; `scripts/salin-mediapipe.mjs` | – | – | – | U `e2e/unit/deteksi.test.mjs` (10); E bagian "Deteksi objek lokal (PF-05)" (6, detektor tiruan `naraVisi.fakeDetector`) + "PF-05: MediaPipe lokal berjalan di offscreen…" (detektor asli); ukur: `scripts/ukur-deteksi-lokal.mjs`; manual: `examples/halaman-uji-pf05.html` (gambar dari `examples/buat_gambar_pf05.py` → `examples/gambar/pf05/`) |
+| PF-08 | Warna dominan (lokal, offline) — [PF-08] | `shared/warna.js:16` `keLab`, `:35` `kuantisasi` (median-cut), `:84` `namaWarna` (CIELAB), `:101` `warnaDominan` (≥ 15%, maks. 2), `:116` `kalimatWarna`; `shared/warna-id.json` (12 nama); `offscreen/deteksi-objek.js:52` `pikselKecil` (64×64, dipakai bersama penyaring polos), `:60` `ukurWarna`; `shared/deteksi.js:82` `kalimatKilat`, `:89` `kalimatSederhana` (warna ikut disebut) | – | – | – | U `e2e/unit/warna.test.mjs` (9); E "PF-05: MediaPipe lokal berjalan di offscreen…" (warna dari detektor asli) |
 
 ### Kebutuhan non-fungsional yang diberi penanda
 

@@ -2,8 +2,10 @@
 // Fungsi   : Logika murni deteksi objek lokal: saring skor, terjemahkan label COCO, gabungkan jumlah per jenis,
 //            penyaring gambar hampir polos, kalimat kilat & kalimat cadangan (tanpa AI).
 //            Tanpa API browser, jadi bisa diuji langsung dengan Node.
-// Kebutuhan: PF-05
-// Terkait  : offscreen/deteksi-objek.js (pemanggil), shared/label-id.json (kamus label), background.js
+// Kebutuhan: PF-05, PF-08 (warna dominan ikut disebut di kalimat kilat & cadangan)
+// Terkait  : offscreen/deteksi-objek.js (pemanggil), shared/label-id.json (kamus label), shared/warna.js, background.js
+
+import { kalimatWarna } from './warna.js';
 
 /** Skor minimum agar sebuah objek disebut. */
 export const SKOR_MIN = 0.5;
@@ -75,9 +77,11 @@ export function layakDilewati(hasil) {
 }
 
 // [PF-05] Deteksi objek lokal — kalimat deskripsi kilat yang dibacakan sambil menunggu AI
-/** Tanpa objek → null (tidak ada yang dibacakan). */
+// [PF-08] Warna dominan — "Kemungkinan berisi: 2 orang. Warna dominan: biru."
+/** Tanpa objek dan tanpa warna → null (tidak ada yang dibacakan). */
 export function kalimatKilat(hasil) {
-  return hasil?.kalimat ? `Kemungkinan berisi: ${hasil.kalimat}.` : null;
+  const bagian = [hasil?.kalimat ? `Kemungkinan berisi: ${hasil.kalimat}.` : null, kalimatWarna(hasil?.warna)];
+  return bagian.filter(Boolean).join(' ') || null;
 }
 
 // [PF-05] Deteksi objek lokal — kalimat cadangan saat server/AI gagal, kuota habis, atau offline
@@ -88,5 +92,6 @@ export function kalimatSederhana(hasil) {
   if (hasil.kalimat) isi = `kemungkinan berisi ${hasil.kalimat}.`;
   else if (hasil.polos) isi = 'gambar hampir polos, tidak ada benda yang dikenali.';
   else isi = 'tidak ada benda yang dikenali.';
-  return `Deskripsi sederhana (tanpa AI): ${isi}`;
+  const warna = kalimatWarna(hasil.warna); // [PF-08] Warna dominan — ikut dibacakan di cadangan
+  return `Deskripsi sederhana (tanpa AI): ${isi}${warna ? ` ${warna}` : ''}`;
 }
