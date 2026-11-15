@@ -236,6 +236,62 @@ Deteksi per gambar p50 100 ms, p95 105 ms (n = 11 setelah pemanasan; laptop seda
 Hampir seluruhnya `vision_wasm_internal.wasm` (9,1 MB) dan model `.tflite` (4,4 MB). Varian `nosimd` (9 MB) sengaja tidak
 disertakan. Masih jauh di bawah batas paket Chrome Web Store.
 
+### 3e. Lapis lokal: warna (PF-08), kode QR (PF-07), teks di gambar (PF-06) — 15 November 2026
+
+**Tes otomatis**
+
+| Jenis | Skenario | Yang dibuktikan |
+|---|---|---|
+| Unit `e2e/unit/warna.test.mjs` (9) | warna polos, dua warna, hitam-putih, ambang 15%, maks. 2, gradasi, transparan, kamus 12 nama, kalimat gabungan | biru polos → "Warna dominan: biru."; 60/40 → "biru dan putih"; papan catur → hitam & putih; 10% merah tidak disebut |
+| Unit `e2e/unit/qr.test.mjs` (6) | QR URL, QR teks, QR berbahaya, tanpa QR, barcode/duplikat, `tautanAman` | hanya domain dibacakan (`bank.co.id@jahat.example` → `jahat.example`); `javascript:`/`data:`/`file:`/`intent:`/disamarkan (`java⇥script:`, spasi lebar nol) → "Ada kode QR berisi teks."; teks > 100 karakter dipotong |
+| Unit `e2e/unit/ocr.test.mjs` (9) | logika murni + **Tesseract.js asli di Node** (data lokal yang sama) | keyakinan < 60 dibuang; < 3 kata bermakna → diam; urutan atas→bawah/kiri→kanan; 300 karakter + "dan teks lainnya"; gambar teks buatan kode: satu baris & tiga baris terbaca persis, bidang/bentuk tanpa teks → diam |
+| Unit `e2e/unit/lapis-lokal.test.mjs` (5) | urutan, sakelar, tambahan setelah AI, cadangan, penyaring | aturan tanpa duplikasi tulisan; QR tetap; cadangan menggabungkan semua lapis |
+| e2e, mesin **asli** | "PF-05: MediaPipe lokal…" (+warna), "PF-07: kode QR dibaca lokal…", "PF-06: teks di gambar dibaca lokal…" | warna dari offscreen; jsQR: URL → domain, teks, `javascript:` berbahaya, tanpa QR; token tautan per tab (tab lain / token palsu ditolak); Tesseract di offscreen tanpa permintaan CDN, tidak dimuat ulang, < 4 dtk |
+| e2e, detektor **tiruan** (6) | bagian "Gabungan lapis lokal (PF-06..PF-08)" | urutan `benda+warna → tulisan → QR → deskripsi AI`; AI memuat `teks_dalam_gambar` → tulisan tidak diulang, QR tetap; provider tanpa teks → tulisan ditambahkan; server mati & AI gagal → cadangan gabungan, **kuota & riwayat sama**, `alt` tidak diubah; QR berbahaya tanpa tombol; "Buka" baru membuka tab pada tekan kedua; "Salin" menyalin URL lewat token; tiga sakelar dimatikan → bagian itu diam & pembacanya tidak dipanggil; Baca berurutan tidak melewati gambar polos bertulisan |
+
+Hasil seluruh tes pada commit Langkah 4: backend 141/141, ai-service 99/99, unit extension 39/39, e2e **128/128**.
+
+**Waktu tiap lapis** (`node scripts/ukur-lapis-lokal.mjs`, detektor asli, Chromium 156 headless, CPU i5-11400H;
+10 gambar buatan `examples/gambar/lapis-lokal/` × 3 putaran; panggilan pertama tiap lapis tidak dihitung di median).
+Saat pengukuran laptop kehabisan ruang disk C: dan memori, jadi angka ini cenderung lebih lambat daripada kondisi normal:
+
+| Lapis | Muat pertama | Median per gambar (di offscreen) | Maks. | Median total dari service worker |
+|---|---|---|---|---|
+| Benda (MediaPipe) | 299 ms (+ deteksi pertama 232 ms) | **106 ms** | 119 ms | 112 ms |
+| Warna dominan (64×64, median-cut) | – | **1 ms** | 11 ms | (di dalam lapis benda) |
+| Tulisan (Tesseract ind+eng fast) | 264 ms | **61 ms** | 221 ms | 65 ms |
+| Kode QR (jsQR; `BarcodeDetector` tidak ada di Windows) | – | **21 ms** | 140 ms | 27 ms |
+| **Keempatnya paralel** (seperti setelah Enter) | – | – | – | **145 ms** |
+
+Hasil detektor asli per gambar (dipakai sebagai "hasil yang diharapkan" di `examples/halaman-uji-lapis-lokal.html`):
+
+| Gambar | Benda | Warna | Tulisan | Kode |
+|---|---|---|---|---|
+| poster-diskon | – | kuning 91% | "DISKON AKHIR TAHUN Semua buku 30 persen Sampai 31 Desember" | – |
+| poster-acara (tulisan putih) | – | biru 95% | "Lomba Baca Puisi Sabtu, 6 Desember 2026 Aula Perpustakaan Kota" | – |
+| qr-example-com | – | putih 69%, hitam 28% | – | menuju example.com |
+| qr-javascript | – | putih 70%, hitam 27% | – | berisi teks (berbahaya) |
+| qr-teks | – | putih 69%, hitam 28% | – | berisi teks: Ruang baca lantai 2 |
+| dua-warna | – | biru 59%, putih 41% | – | – |
+| merah-hijau | – | hijau 50%, merah 50% | – | – |
+| rambu-stop | 1 rambu berhenti | biru 50% (langit) | – ("STOP" hanya 1 kata) | – |
+| polos-krem | – (polos) | krem 100% | – | – |
+| tangkapan-layar | – | putih 78%, hitam 16% | "Pengaturan Akun Nama pengguna: Rina Lestari Bahasa: Indonesia Notifikasi email aktif" | – |
+
+Catatan apa adanya: tulisan putih "Simpan" di tombol biru pada tangkapan layar **tidak terbaca**. Warna merah rambu
+STOP tidak masuk dua warna teratas karena porsinya di bawah langit biru.
+
+**Tambahan ukuran extension** (berkas `extension/` di git, `e3e273a` → Langkah 4):
+
+| | Terurai | Terkompres (deflate per berkas, mirip ZIP) |
+|---|---|---|
+| Sebelum PF-06..PF-08 | 14,09 MB | 6,24 MB |
+| Sesudah | 19,84 MB | 9,85 MB |
+| **Tambahan** | **+5,75 MB** | **+3,61 MB** |
+
+Rinciannya: `vendor/tesseract/` 3,00 MB (inti wasm 2,9 MB), `vendor/tessdata/` 2,45 MB (ind 0,6 + eng 1,9 MB gzip),
+`vendor/jsqr/` 0,26 MB, kode NaraVisi (warna, QR, OCR, penggabung) < 0,05 MB.
+
 ## 4. Uji manual (wajib dijalankan di laptop)
 
 Kolom hasil di bagian ini **sengaja dikosongkan** dan diisi oleh penguji manusia setelah benar-benar menjalankan langkahnya. Catatan uji yang pernah dijalankan otomatis oleh agen (bukan pengganti uji manusia) dipindah ke Lampiran A.
@@ -422,6 +478,23 @@ Persiapan: MySQL 8.x (mis. Laragon). Di `backend/.env` isi `DB_DRIVER=mysql` dan
 | 9 | Matikan MySQL, buka Riwayat | pesan galat jelas, tidak crash; nyalakan lagi → normal | |
 
 Versi MySQL: ________ · Penguji: ________ · Tanggal: ________
+
+### M-07 — Lapis lokal (PF-05..PF-08) di Chrome
+Persiapan: `powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1 -Contoh`, muat ulang NaraVisi di
+`chrome://extensions`, buka `http://127.0.0.1:8080/halaman-uji-lapis-lokal.html`. Kalimat yang diharapkan per gambar
+tertulis di halaman itu.
+
+| # | Langkah | Yang harus terdengar / terjadi | Hasil (Y/T) |
+|---|---|---|---|
+| 1 | Alt+Shift+K, pilih tiap gambar, Enter (AI menyala) | kolom 2 halaman uji dulu (bila AI > 1 dtk), lalu deskripsi AI; tidak ada suara tumpang tindih | |
+| 2 | Gambar 1 (poster) dengan Gemini | tulisan tidak dibacakan dua kali bila Gemini sudah menyalinnya | |
+| 3 | Gambar 3 (QR example.com) → tombol "Buka example.com…" sekali | hanya pertanyaan konfirmasi dibacakan, **tidak** ada tab baru; tekan lagi ≤ 10 dtk → tab example.com terbuka | |
+| 4 | Gambar 4 (QR `javascript:`) | "Ada kode QR berisi teks."; tidak ada tombol tautan; kata "javascript" tidak terdengar | |
+| 5 | Matikan ai-service (atau backend), Enter di gambar lain | "Deskripsi sederhana (tanpa AI): …" (kolom 3) + alasan; sisa kuota & Riwayat tidak berubah | |
+| 6 | Pengaturan → matikan "Sebutkan warna", "Baca tulisan di gambar (offline)", "Baca kode QR" satu per satu | bagian itu tidak lagi dibacakan | |
+| 7 | Alur manual Alt+Shift+K → panah → Enter → dibacakan → Esc | tetap sama seperti sebelumnya | |
+
+Penguji: ________ · Tanggal: ________
 
 ## 5. Cacat yang ditemukan & diperbaiki selama Fase 6
 

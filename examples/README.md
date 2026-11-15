@@ -7,6 +7,7 @@ Panduan untuk penguji/dosen. Semua gambar di folder ini dibuat sendiri dengan ko
 |---|---|
 | `halaman-uji.html` | Halaman statis berisi foto, grafik, infografis, diagram SVG inline, gambar dengan dan tanpa alt, hiasan `alt=""`, dan simbol kecil |
 | `halaman-uji-pf05.html` | [PF-05] Uji manual deteksi objek lokal: rambu, jam, lampu lalu lintas, sepeda, dua sepeda, dan bidang polos (hasil yang diharapkan tertulis di halaman) |
+| `halaman-uji-lapis-lokal.html` | [PF-06..PF-08] Uji manual lapis lokal: poster bertulisan, tangkapan layar, QR ke `https://example.com`, QR berbahaya `javascript:alert(1)`, QR teks, gambar dua warna, rambu (benda), bidang polos. Gambar dibuat oleh `buat_gambar_lapis_lokal.mjs`; kalimat yang diharapkan (diukur dengan detektor asli) tertulis di halaman |
 | `buat_gambar_pf05.py` | [PF-05] Menggambar gambar `gambar/pf05/` dengan Pillow: `python -I examples/buat_gambar_pf05.py` |
 | `gambar/` | Gambar untuk halaman uji (SVG ditulis tangan, PNG dari `buat_gambar_contoh.py`) |
 | `buat_gambar_contoh.py` | Menggambar ulang PNG contoh dengan Pillow: `python -I examples/buat_gambar_contoh.py` |

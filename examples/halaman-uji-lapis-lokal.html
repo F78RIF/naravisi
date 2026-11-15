@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halaman Uji Lapis Lokal NaraVisi</title>
+  <!-- [PF-06] Teks di gambar (OCR) — halaman uji manual lapis lokal; gambar dibuat sendiri oleh examples/buat_gambar_lapis_lokal.mjs -->
+  <!-- [PF-07] Kode QR & barcode — berisi QR ke https://example.com dan QR berbahaya "javascript:alert(1)" -->
+  <!-- [PF-08] Warna dominan — berisi gambar dua warna dan bidang polos -->
+  <style>
+    :root { color-scheme: light; --ink: #0b0b0b; --muted: #52514e; --paper: #fcfcfb; --line: #e2e1dc; }
+    body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); background: var(--paper); line-height: 1.6; }
+    main { max-width: 820px; margin: 0 auto; padding: 16px; }
+    img { max-width: 100%; height: auto; display: block; }
+    figure { margin: 28px 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    figcaption, .catatan { color: var(--muted); font-size: 0.95rem; }
+    code { background: #f0efec; padding: 0 4px; border-radius: 4px; }
+    .tabel { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+    th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Halaman Uji Lapis Lokal — Benda, Warna, Tulisan, Kode QR</h1>
+  <p class="catatan">Semua gambar di halaman ini digambar dengan kode (<code>examples/buat_gambar_lapis_lokal.mjs</code>),
+    bukan unduhan. Tidak ada gambar yang memakai <code>alt</code>, supaya semuanya muncul di panel NaraVisi.</p>
+
+  <p>Tekan <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>. Panel seharusnya menampilkan <strong>10 gambar</strong>.
+    Pilih dengan panah, tekan <kbd>Enter</kbd>. Bila AI butuh lebih dari 1 detik, NaraVisi lebih dulu membacakan
+    lapis lokal (kolom 2), lalu deskripsi AI menyusul. Bila layanan AI atau backend dimatikan, yang terdengar adalah
+    kolom 3, diikuti alasan galatnya.</p>
+
+  <div class="tabel">
+  <table>
+    <thead><tr><th>No.</th><th>Gambar</th><th>Lapis lokal sambil menunggu AI (diukur dengan detektor asli)</th><th>Saat AI/server mati</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Poster diskon</td><td>Warna dominan: kuning. Tulisan: "DISKON AKHIR TAHUN Semua buku 30 persen Sampai 31 Desember".</td>
+        <td>Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali. Warna dominan: kuning. Tulisan: "DISKON AKHIR TAHUN Semua buku 30 persen Sampai 31 Desember".</td></tr>
+      <tr><td>2</td><td>Poster acara (tulisan putih)</td><td>Warna dominan: biru. Tulisan: "Lomba Baca Puisi Sabtu, 6 Desember 2026 Aula Perpustakaan Kota".</td>
+        <td>Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali. Warna dominan: biru. Tulisan: "…" (sama seperti kolom 2).</td></tr>
+      <tr><td>3</td><td>QR ke https://example.com</td><td>Warna dominan: putih dan hitam. Ada kode QR menuju example.com.
+        <br>Tombol <em>Salin tautan example.com</em> dan <em>Buka example.com…</em> muncul.</td>
+        <td>Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali. Warna dominan: putih dan hitam. Ada kode QR menuju example.com.</td></tr>
+      <tr><td>4</td><td>QR berbahaya <code>javascript:alert(1)</code></td><td>Warna dominan: putih dan hitam. Ada kode QR berisi teks.
+        <br><strong>Tidak</strong> ada tombol tautan; kata "javascript" tidak pernah dibacakan.</td>
+        <td>Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali. Warna dominan: putih dan hitam. Ada kode QR berisi teks.</td></tr>
+      <tr><td>5</td><td>QR berisi teks</td><td>Warna dominan: putih dan hitam. Ada kode QR berisi teks: Ruang baca lantai 2.</td>
+        <td>Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali. Warna dominan: putih dan hitam. Ada kode QR berisi teks: Ruang baca lantai 2.</td></tr>
+      <tr><td>6</td><td>Dua warna (biru 60%, putih 40%)</td><td>Warna dominan: biru dan putih.</td>
+        <td>Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali. Warna dominan: biru dan putih.</td></tr>
+      <tr><td>7</td><td>Garis merah-hijau</td><td>Warna dominan: hijau dan merah.</td>
+        <td>Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali. Warna dominan: hijau dan merah.</td></tr>
+      <tr><td>8</td><td>"Foto" benda: rambu STOP</td><td>Kemungkinan berisi: 1 rambu berhenti. Warna dominan: biru.</td>
+        <td>Deskripsi sederhana (tanpa AI): kemungkinan berisi 1 rambu berhenti. Warna dominan: biru.</td></tr>
+      <tr><td>9</td><td>Bidang krem polos</td><td>Warna dominan: krem. <br>Dilewati oleh Mode Baca Berurutan (tanpa AI, tanpa kuota).</td>
+        <td>Deskripsi sederhana (tanpa AI): gambar hampir polos, tidak ada benda yang dikenali. Warna dominan: krem.</td></tr>
+      <tr><td>10</td><td>Tangkapan layar aplikasi</td><td>Warna dominan: putih dan hitam. Tulisan: "Pengaturan Akun Nama pengguna: Rina Lestari Bahasa: Indonesia Notifikasi email aktif".</td>
+        <td>Deskripsi sederhana (tanpa AI): tidak ada benda yang dikenali. Warna dominan: putih dan hitam. Tulisan: "…" (sama seperti kolom 2).</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="catatan">Setelah deskripsi Gemini, tulisan <strong>tidak</strong> dibacakan ulang bila Gemini sudah
+    menyalinnya; info kode QR selalu ditambahkan bila belum terdengar. Pada nomor 8, kata "STOP" pada rambu hanya 1 kata,
+    jadi sengaja tidak dibacakan sebagai tulisan (minimal 3 kata bermakna). Pada nomor 10, tulisan putih "Simpan" di tombol
+    biru tidak terbaca oleh pembaca teks lokal (dicatat apa adanya). Gambar buatan bisa dikenali sedikit berbeda di
+    perangkat lain; catat perbedaannya di <code>docs/PENGUJIAN.md</code>.</p>
+
+  <figure><img src="gambar/lapis-lokal/poster-diskon.png" width="900" height="520"><figcaption>[1] Poster kuning bertulisan.</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/poster-acara.png" width="900" height="480"><figcaption>[2] Poster acara biru bertulisan putih.</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/qr-example-com.png" width="360" height="360"><figcaption>[3] Kode QR menuju situs contoh.</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/qr-javascript.png" width="360" height="360"><figcaption>[4] Kode QR berisi skrip (berbahaya).</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/qr-teks.png" width="360" height="360"><figcaption>[5] Kode QR berisi teks.</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/dua-warna.png" width="600" height="400"><figcaption>[6] Bidang biru dan putih.</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/merah-hijau.png" width="600" height="400"><figcaption>[7] Garis merah dan hijau.</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/rambu-stop.png" width="480" height="480"><figcaption>[8] Rambu berhenti di tiang.</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/polos-krem.png" width="600" height="400"><figcaption>[9] Bidang krem polos.</figcaption></figure>
+  <figure><img src="gambar/lapis-lokal/tangkapan-layar.png" width="900" height="560"><figcaption>[10] Tangkapan layar halaman pengaturan akun.</figcaption></figure>
+</main>
+</body>
+</html>

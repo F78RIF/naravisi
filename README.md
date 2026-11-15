@@ -162,6 +162,9 @@ Rencana uji manual lengkap: `docs/PENGUJIAN.md`. Alur sistem bergambar: `docs/AL
   halaman dengan kolom kata sandi, atau domain pengecualian (bank, dompet digital, email; daftarnya bisa diedit di Pengaturan).
 - Deskripsi manual hanya dikirim untuk gambar yang **dipilih** pengguna. File gambar tidak disimpan di server; riwayat
   hanya menyimpan teks deskripsinya.
+- **Lapis lokal** (benda, warna dominan, tulisan/OCR, kode QR) diproses **di perangkat pengguna**, di dokumen offscreen
+  extension. Gambar **tidak dikirim** ke server mana pun untuk fitur ini, pustaka & data bahasanya tidak diunduh saat
+  berjalan, dan hasilnya tidak disimpan di Riwayat. Lengkapnya di [`docs/KEBIJAKAN_PRIVASI.md`](docs/KEBIJAKAN_PRIVASI.md).
 - **Gemini tingkat gratis**: data yang dikirim dapat dipakai Google untuk meningkatkan produknya. Pakai
   `CAPTION_PROVIDER=blip` bila gambar tidak boleh keluar dari server.
 - **Dataset evaluasi**: gambar (`eval/data/images/`) dan keluaran model (`eval/data/predictions/`) tidak pernah di-commit
@@ -270,6 +273,31 @@ Kontrol panel: **↑/↓** pilih · **Enter** deskripsikan · **Spasi** jeda/lan
 
 **Baca berurutan** (Pengaturan → Otomatis, bawaan **mati**, wajib persetujuan yang dibacakan karena memakai kuota & mengirim gambar ke server/Google Gemini): gambar tanpa alt bermakna diproses **satu per satu dari atas ke bawah** (bukan paralel), maks. N per halaman (bawaan 3, bisa 1–10). Gambar yang terlihat/hampir terlihat didahulukan (IntersectionObserver), lalu lanjut saat pengguna menggulir atau membaca ke bawah. Progres diumumkan dengan sopan lewat `aria-live="polite"` (tidak menyela NVDA): *"Gambar 1 dari 3 sudah dideskripsikan."* Berhenti bila sisa kuota ≤ 2 dan mengumumkan alasannya; maks. 30 deskripsi otomatis per hari. Tidak pernah jalan di `chrome://`, halaman extension, Incognito, halaman dengan `<input type="password">`, atau situs dalam daftar pengecualian (bank, dompet digital, email, WhatsApp — bisa diedit). Semua syarat diperiksa ulang di service worker. Opsi terpisah: deskripsikan saat gambar mendapat fokus Tab.
 
+**Lapis lokal** (gratis, offline, tanpa kuota; gambar tidak dikirim ke mana pun untuk fitur ini): setelah **Enter**,
+sambil menunggu AI, extension menjalankan empat pembaca di komputer pengguna secara paralel, lalu membacakannya dalam satu
+antrean suara (tanpa tumpang tindih) sebelum deskripsi AI:
+
+> Kemungkinan berisi: 2 orang. Warna dominan: biru. Tulisan: "Diskon akhir tahun". Ada kode QR menuju rri.co.id.
+
+| Lapis | Mesin (disimpan di `extension/vendor/`) | Aturan singkat |
+|---|---|---|
+| Benda (PF-05) | MediaPipe EfficientDet-Lite0 | 80 kelas COCO, skor ≥ 0,5, maks. 5 jenis |
+| Warna dominan (PF-08) | kode sendiri (median-cut 64×64 px) | maks. 2 warna dengan porsi ≥ 15%, 12 nama warna |
+| Tulisan di gambar (PF-06) | Tesseract.js 7 + data ind & eng "fast" | keyakinan ≥ 60, ≥ 3 kata bermakna, maks. 300 karakter; tidak diulang bila Gemini sudah menyalin tulisannya |
+| Kode QR (PF-07) | `BarcodeDetector` bawaan, atau jsQR (Windows) | hanya **nama domain** yang dibacakan; `javascript:`/`data:`/`file:`/`intent:` → "kode QR berisi teks"; tautan **tidak pernah dibuka otomatis** |
+
+Lapis lokal hanya dibacakan bila AI belum menjawab setelah 1 detik. Info QR (dan tulisan, bila AI tidak memuatnya)
+ditambahkan di belakang deskripsi AI. Untuk QR bertautan, panel menampilkan **Salin tautan …** dan **Buka …**. "Buka"
+pertama hanya membacakan konfirmasi; tab baru dibuka pada tekan kedua dalam 10 detik. Bila server/AI mati, kuota habis,
+atau offline, yang dibacakan adalah gabungan lapis lokal berawalan **"Deskripsi sederhana (tanpa AI): …"**. Cadangan ini
+tidak memotong kuota dan tidak masuk Riwayat. **Baca berurutan** melewati gambar yang hampir polos tanpa benda, tulisan,
+maupun QR.
+
+Pengaturan (Pengaturan → Otomatis, semua **bawaan aktif**): **Deskripsi kilat tanpa AI** (sakelar utama lapis lokal),
+**Sebutkan warna**, **Baca tulisan di gambar (offline)**, **Baca kode QR**. Uji manual:
+`examples/halaman-uji-lapis-lokal.html`. Alur lengkap: `docs/ALUR.md` Tahap 13–14. Pustaka disalin ulang dengan
+`node scripts/salin-lapis-lokal.mjs`.
+
 **Izin extension (manifest):**
 
 | Izin | Alasan |
@@ -277,7 +305,7 @@ Kontrol panel: **↑/↓** pilih · **Enter** deskripsikan · **Spasi** jeda/lan
 | `activeTab`, `scripting` | menyuntik panel dan penghitung gambar ke halaman |
 | `storage` | sesi login (`chrome.storage.local`, tidak bisa dibaca situs web) dan pengaturan |
 | `tts` | pemandu suara dari service worker (`chrome.tts`): tetap berbicara walau popup tertutup atau belum ada halaman yang terbuka, misalnya sambutan saat dipasang dan pengumuman jumlah gambar |
-| `offscreen` | mengubah gambar SVG menjadi JPEG di dokumen offscreen (service worker tidak punya DOM untuk menggambar SVG) |
+| `offscreen` | mengubah gambar SVG menjadi JPEG di dokumen offscreen (service worker tidak punya DOM untuk menggambar SVG), dan menjalankan lapis lokal (benda, warna, tulisan, kode QR) |
 | `<all_urls>` (host) | mengambil byte gambar dari halaman mana pun untuk dideskripsikan |
 
 **Tampilan (v2):** warna & ukuran di `extension/shared/tokens.css`, komponen di `shared/components.css`. Huruf [Atkinson Hyperlegible](https://www.brailleinstitute.org/freefont/) (Braille Institute, SIL OFL 1.1) disimpan lokal di `extension/fonts/` beserta `OFL.txt`; panel di halaman web menerima font lewat service worker, jadi tidak ada `web_accessible_resources` yang bisa dipakai situs untuk mendeteksi NaraVisi. Ikon PNG dibuat ulang dari SVG dengan `cd e2e && npm run icons`.
