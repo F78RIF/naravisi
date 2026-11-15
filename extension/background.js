@@ -1,6 +1,6 @@
 // NaraVisi · extension/background.js
 // Fungsi   : Service worker (Manifest V3): menyuntik panel, mengambil & mengecilkan gambar, memanggil REST API, pemandu suara chrome.tts.
-// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-06, PF-07, PF-08, PF-09, RNF-09, RNF-12
+// Kebutuhan: RF-06, RF-09, RF-10, RF-20, PF-01, PF-02, PF-05, PF-06, PF-07, PF-08, PF-09, PF-11, RNF-09, RNF-12
 // Terkait  : content/content.js, offscreen/offscreen.js, offscreen/deteksi-objek.js, shared/config.js, shared/guide.js, backend/src/http/routes.js
 
 import {
@@ -465,6 +465,52 @@ async function warmOcr() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Cadangan AI di perangkat (PF-11 Chrome Built-in AI, PF-10 Florence-2) — dipakai setelah semua AI server gagal
+// ---------------------------------------------------------------------------
+async function offscreenKirim(pesan) {
+  await ensureOffscreen();
+  return chrome.runtime.sendMessage({ target: 'offscreen', ...pesan });
+}
+
+// [PF-11] Chrome Built-in AI — status untuk Pengaturan ("AI bawaan Chrome: tersedia/tidak tersedia")
+export async function statusAiBawaan() {
+  const fake = globalThis.naraVisi?.fakeDeviceAi?.aiBawaan;
+  if (fake) return fake.status ?? { tersedia: Boolean(fake.hasil), alasan: fake.hasil ? 'siap' : 'tiruan' };
+  try {
+    return (await offscreenKirim({ type: 'NV_AI_BAWAAN_STATUS' }))?.data ?? { tersedia: false, alasan: 'galat' };
+  } catch {
+    return { tersedia: false, alasan: 'galat' };
+  }
+}
+
+// [PF-11] Chrome Built-in AI — deskripsi offline; tidak tersedia / gagal / > batas waktu → null (lewati diam-diam)
+async function deskripsiAiBawaan(image, konteks) {
+  const fake = globalThis.naraVisi?.fakeDeviceAi?.aiBawaan;
+  if (fake) {
+    fake.calls = (fake.calls ?? 0) + 1;
+    return new Promise((resolve) => setTimeout(resolve, fake.delayMs ?? 0, fake.hasil ?? null));
+  }
+  const res = await tanpaGalatLama(offscreenKirim({ type: 'NV_AI_BAWAAN_DESKRIPSI', dataUrl: `data:${image.type};base64,${image.base64}`, konteks }), 25000);
+  return res?.ok && res.data?.teks ? res.data : null;
+}
+
+/** Seperti tanpaGalat, dengan batas waktu sendiri (model di perangkat bisa butuh belasan detik). */
+function tanpaGalatLama(promise, ms) {
+  let timer;
+  const habis = new Promise((resolve) => { timer = setTimeout(resolve, ms, null); });
+  return Promise.race([promise.catch(() => null), habis]).finally(() => clearTimeout(timer));
+}
+
+// [PF-11] Chrome Built-in AI — urutan cadangan di perangkat setelah AI server gagal (sebelum lapis lokal)
+/** @returns {Promise<{sumber: string, teks: string} | null>} */
+async function cadanganPerangkat(image, konteks, lang) {
+  if (lang !== 'id') return null; // instruksi & penerjemah di perangkat hanya untuk bahasa Indonesia
+  const ai = await deskripsiAiBawaan(image, konteks);
+  if (ai?.teks) return { sumber: 'Deskripsi dari AI bawaan Chrome (offline)', teks: ai.teks };
+  return null;
+}
+
 // [PF-07] Kode QR & barcode — tautan hasil pindaian disimpan di sini; panel hanya memegang token acak.
 // Halaman web tidak bisa menyuruh NaraVisi membuka alamat sembarang: hanya tautan yang benar-benar terbaca dari QR,
 // untuk tab yang sama, ≤ 10 menit, dan hanya http/https. Membuka tab baru hanya setelah konfirmasi di panel.
@@ -644,7 +690,14 @@ async function requestDescription({ src, dataUrl, pageUrl, auto, context, reqId 
     }
     const code = err.code || 'SERVER_ERROR';
     // Cadangan PF-05: tidak memanggil server, jadi tidak memotong kuota dan tidak masuk riwayat.
-    const sederhana = local && SIMPLE_FALLBACK_CODES.has(code) ? kalimatSederhanaLengkap(await local, opsi) : null;
+    let sederhana = null;
+    if (SIMPLE_FALLBACK_CODES.has(code) && !auto) {
+      // Urutan cadangan: AI di perangkat (PF-11, PF-10) → lapis lokal. Info kode QR lokal tetap ditambahkan.
+      const perangkat = await cadanganPerangkat(image, pageContext(context), tts.bahasa_deskripsi);
+      const lokal = local ? await local : null;
+      if (perangkat) sederhana = [`${perangkat.sumber}: ${perangkat.teks}`, opsi?.bacaQr !== false ? lokal?.kode?.kalimat : null].filter(Boolean).join(' ');
+      else if (lokal) sederhana = kalimatSederhanaLengkap(lokal, opsi);
+    }
     throw new NvError(code, err.message, { sederhana });
   }
   if (auto) await countAutoUse();
@@ -721,6 +774,7 @@ async function openPage(name) {
 const CONTENT_SCRIPT_TYPES = new Set(['NV_DESCRIBE', 'NV_REPORT', 'NV_GET_TTS', 'NV_OPEN_PAGE', 'NV_FONTS', 'NV_QR_LINK']);
 const EXTENSION_PAGE_TYPES = new Set([
   ...CONTENT_SCRIPT_TYPES,
+  'NV_STATUS_AI_PERANGKAT',
   'NV_TOGGLE_ACTIVE',
   'NV_HEALTH',
   'NV_REFRESH_PROFILE',
@@ -764,6 +818,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return openPage(message.page);
       case 'NV_QR_LINK':
         return qrLink(message, sender);
+      case 'NV_STATUS_AI_PERANGKAT':
+        return { ok: true, data: { aiBawaan: await statusAiBawaan() } };
       case 'NV_FONTS':
         return { ok: true, data: await fontPayload() };
       case 'NV_REFRESH_PROFILE':
@@ -796,5 +852,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 globalThis.naraVisi = {
   togglePanel, toggleActiveTab, openPage, handleScanCommand, onCommand, announceImageCount, spokenLog, rejectReason,
   autoDescribePage, enableFocusDescribe, startupGreeting, isExcluded, autoLog, autoBlockedReason, detectObjects, detectImage,
-  readCodes, readCodesImage, simpanTautanQr, qrLink, readText, readTextImage, warmOcr,
+  readCodes, readCodesImage, simpanTautanQr, qrLink, readText, readTextImage, warmOcr, statusAiBawaan,
 };

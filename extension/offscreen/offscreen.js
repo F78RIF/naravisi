@@ -3,13 +3,14 @@
 // SVG dimuat sebagai <img>: skrip di dalamnya tidak berjalan, sumber eksternal tidak diunduh.
 //            Juga menjalankan lapis lokal atas permintaan service worker: deteksi objek MediaPipe + warna dominan
 //            (PF-05, PF-08), pembaca kode QR (PF-07), dan pembaca teks di gambar Tesseract.js (PF-06).
-// Kebutuhan: RF-09, PF-05, PF-06, PF-07, PF-08
+// Kebutuhan: RF-09, PF-05, PF-06, PF-07, PF-08, PF-11
 // Terkait  : background.js (rasterizeSvg, detectObjects, readCodes, readText), offscreen.html, deteksi-objek.js,
 //            kode-qr.js, baca-teks.js
 
 import { deteksiObjek } from './deteksi-objek.js';
 import { bacaKode } from './kode-qr.js';
 import { bacaTeks, panaskanOcr } from './baca-teks.js';
+import { deskripsiAiBawaan, statusAiBawaan } from './ai-bawaan.js';
 
 const MAX_SIDE = 1280;
 const FALLBACK_SIDE = 512; // SVG tanpa width/height/viewBox
@@ -67,6 +68,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === 'NV_WARM_OCR') {
     panaskanOcr().then((ok) => sendResponse({ ok }));
+    return true;
+  }
+  // [PF-11] Chrome Built-in AI — status (untuk Pengaturan) & deskripsi cadangan offline pertama
+  if (message.type === 'NV_AI_BAWAAN_STATUS') {
+    statusAiBawaan().then((data) => sendResponse({ ok: true, data }), () => sendResponse({ ok: true, data: { tersedia: false, alasan: 'galat' } }));
+    return true;
+  }
+  if (message.type === 'NV_AI_BAWAAN_DESKRIPSI' && typeof message.dataUrl === 'string' && message.dataUrl.startsWith('data:image/')) {
+    deskripsiAiBawaan(message.dataUrl, message.konteks)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, message: String(err?.message || err) }));
     return true;
   }
   if (message.type !== 'NV_RASTERIZE_SVG' || typeof message.svg !== 'string') return false;

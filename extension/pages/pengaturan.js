@@ -1,6 +1,6 @@
 // NaraVisi · extension/pages/pengaturan.js
 // Fungsi   : Halaman Pengaturan: bahasa, pintasan, suara, mode otomatis, server, privasi.
-// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, PF-06, PF-07, PF-08, PF-09, RNF-13
+// Kebutuhan: RF-17, RF-18, RF-19, PF-02, PF-05, PF-06, PF-07, PF-08, PF-09, PF-11, RNF-13
 // Terkait  : pengaturan.html, common.js, backend settingsService.js
 import { apiFetch, apiHost, AUTO_MAX_PER_PAGE, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage, SHORTCUTS_URL, speakGuide } from '../shared/guide.js';
@@ -248,6 +248,23 @@ async function autoSection() {
   );
 }
 
+// [PF-11] Chrome Built-in AI — kartu "AI di perangkat": status AI bawaan Chrome (diperiksa, tidak pernah diunduh NaraVisi)
+async function perangkatSection() {
+  const status = el('p', { id: 'status-ai-bawaan', role: 'status' }, 'AI bawaan Chrome: memeriksa…');
+  const card = el(
+    'section',
+    { class: 'card stack', id: 'perangkat-section', 'aria-labelledby': 'sec-perangkat' },
+    el('h2', { id: 'sec-perangkat' }, 'AI di perangkat (cadangan offline)'),
+    el('p', { class: 'hint' }, 'Dipakai hanya bila semua AI server gagal, sebelum deskripsi sederhana. Gambar tidak dikirim ke mana pun.'),
+    status,
+  );
+  chrome.runtime.sendMessage({ type: 'NV_STATUS_AI_PERANGKAT' }).then((res) => {
+    const a = res?.data?.aiBawaan;
+    status.textContent = a?.tersedia ? 'AI bawaan Chrome: tersedia' : `AI bawaan Chrome: tidak tersedia${a?.alasan ? ` (${a.alasan})` : ''}`;
+  }, () => { status.textContent = 'AI bawaan Chrome: tidak tersedia'; });
+  return card;
+}
+
 function field(id, label, control, hint) {
   return el('div', { class: 'stack' }, el('label', { for: id }, label), control, hint ? el('p', { class: 'hint', id: `${id}-hint` }, hint) : null);
 }
@@ -393,7 +410,7 @@ async function render(settings) {
     suara.value = [...suara.options].some((o) => o.value === keep) ? keep : '';
   });
 
-  $('content').replaceChildren(form, await autoSection());
+  $('content').replaceChildren(form, await autoSection(), await perangkatSection());
   if (noShortcut && location.hash !== '#pintasan') speakGuide(`Pintasan belum diatur. Atur di halaman pintasan Chrome, ${SHORTCUTS_URL}.`);
   if (location.hash === '#pintasan') {
     // Dibuka saat Chrome dimulai dan pintasan belum diatur.

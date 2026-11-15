@@ -30,6 +30,7 @@ pengujian.
 | 15 | **PF-05 Deteksi objek lokal** (MediaPipe di extension): deskripsi kilat, cadangan tanpa AI, penyaring gambar polos; pengaturan "Deskripsi kilat tanpa AI"; CSP `wasm-unsafe-eval` | SRS 2.5, 3.1, RF-09/RF-11/RF-12, RNF-04/RNF-12/RNF-13, fitur tambahan; SDD 2.4, 3.x arsitektur & sequence UC-GBR-04 | – | 12 Nov |
 | 16 | **Lapis lokal PF-06 Teks di gambar (OCR, Tesseract.js), PF-07 Kode QR & barcode (BarcodeDetector/jsQR), PF-08 Warna dominan** — dijalankan paralel bersama PF-05 setelah Enter; satu antrean suara; tombol tautan QR dengan konfirmasi; tiga pengaturan baru (bawaan aktif) | SRS 2.5, 3.1, RF-11/RF-12, RNF-06/RNF-12/RNF-13, fitur tambahan; SDD 2.4, 3.x sequence UC-GBR-04 | – | 15 Nov |
 | 17 | **PF-09 Orientasi** (mendatar/tegak/persegi di lapis lokal; pengaturan "Sebutkan orientasi" bawaan nonaktif) | SRS 3.1 fitur tambahan, RF-12 | – | 15 Nov |
+| 18 | **PF-11 Chrome Built-in AI** sebagai cadangan offline pertama setelah AI server (Prompt API + Translator bawaan Chrome, instruksi sama dengan Gemini; status di Pengaturan) | SRS 2.4, 3.1, RNF-12; SDD 2.4, sequence UC-GBR-04 | – | 15 Nov |
 
 ## 2. Rincian per bagian SRS
 

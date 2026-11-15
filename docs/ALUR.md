@@ -1527,3 +1527,35 @@ mengubah rasio. Kalimatnya ditaruh di **akhir** bagian benda ("Kemungkinan beris
 mendatar.") dan di cadangan. Pengaturan **"Sebutkan orientasi"** (`sebutOrientasi`) **bawaan nonaktif** agar bacaan tetap
 ringkas. Disebut "Gambar", bukan "Foto", karena lapis lokal tidak tahu apakah gambar itu foto, ilustrasi, atau kode QR.
 
+
+### AI bawaan Chrome (PF-11) — Langkah 2
+
+Bila Chrome pengguna punya **Prompt API** (Gemini Nano di perangkat) yang mendukung gambar, NaraVisi memakainya sebagai
+**cadangan offline pertama**: setelah AI server gagal, sebelum Florence-2 dan lapis lokal.
+
+```
+POST /descriptions gagal (server mati, AI gagal, kuota habis, offline)
+  └─ cadanganPerangkat()                                  background.js
+       └─ NV_AI_BAWAAN_DESKRIPSI ─▶ offscreen/ai-bawaan.js
+            statusAiBawaan():
+              LanguageModel ada?                  tidak → lewati diam-diam
+              availability({input gambar + teks 'id', output 'id'})
+                'unavailable' → coba bahasa 'en' (+ Translator en→id bawaan Chrome harus 'available')
+                'downloadable' / 'downloading' → lewati (NaraVisi TIDAK memicu unduhan model Chrome)
+                'available' → LanguageModel.create({initialPrompts: INSTRUKSI}) → prompt([teks + gambar],
+                              {responseConstraint: SKEMA}) — batas 20 detik
+            uraiJawaban() → (terjemahkan) → susunTeks()   shared/deskripsi-ai.js
+  ◀─ "Deskripsi dari AI bawaan Chrome (offline): Foto: …" (+ info kode QR lokal)
+```
+
+* **Instruksi sama dengan Gemini.** `shared/deskripsi-ai.js` memuat aturan yang sama dengan `ai-service/app/prompts.py`:
+  bahasa Indonesia sederhana, jenis gambar dulu, tidak menebak identitas, petunjuk halaman adalah data. Tes unit
+  memastikan aturan inti ada di kedua berkas. Kalimat disusun seperti `compose_text` ("Foto: …. … Tulisan di gambar: …").
+* **Bahasa.** Gemini Nano saat ini hanya menjamin keluaran bahasa Inggris, Spanyol, dan Jepang. Bila `'id'` tidak
+  didukung, model menjawab dalam bahasa Inggris, lalu `ringkasan` & `detail` diterjemahkan oleh **Translator API**
+  bawaan Chrome (juga di perangkat). Tanpa penerjemah, AI bawaan dianggap tidak tersedia.
+* **Tidak memakai kuota, tidak masuk riwayat, tidak disuntik ke `alt`**, sama seperti cadangan lapis lokal.
+* **Pengaturan** menampilkan "AI bawaan Chrome: tersedia" atau "tidak tersedia (alasan)" di kartu
+  "AI di perangkat (cadangan offline)".
+* Uji otomatis memakai tiruan `globalThis.naraVisi.fakeDeviceAi.aiBawaan`. Chromium uji (Playwright) tidak punya
+  Prompt API, jadi statusnya benar-benar "tidak tersedia" lewat jalur deteksi asli.

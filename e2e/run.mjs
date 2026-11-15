@@ -2022,6 +2022,42 @@ try {
     assert.equal(await jumlahRiwayat(), riwayat, info);
   });
 
+  // [PF-11] Chrome Built-in AI — status asli di Pengaturan; cadangan offline pertama dengan Prompt API tiruan
+  await step('PF-11: AI bawaan Chrome — status di Pengaturan; tersedia → cadangan pertama setelah server gagal; tidak tersedia → lapis lokal', async () => {
+    const set = await context.newPage();
+    await set.goto(extPage('pages/pengaturan.html'));
+    await set.locator('#status-ai-bawaan', { hasText: /AI bawaan Chrome: (tersedia|tidak tersedia)/ }).waitFor();
+    assert.match(await set.locator('#status-ai-bawaan').innerText(), /^AI bawaan Chrome: tidak tersedia/, 'Chromium uji tidak punya Prompt API');
+    await set.close();
+
+    const AI = 'Foto: Dua orang bersepeda di taman.';
+    await segar();
+    await setFake(lengkapLokal());
+    await sw.evaluate((t) => { globalThis.naraVisi.fakeDeviceAi = { aiBawaan: { hasil: { teks: t }, delayMs: 300 } }; }, AI);
+    const sisa = await sisaKuota();
+    const riwayat = await jumlahRiwayat();
+    await sw.evaluate(() => chrome.storage.sync.set({ apiBase: 'http://127.0.0.1:9/api/v1' }));
+    try {
+      await pilih(1);
+      await pfText.filter({ hasText: AI }).waitFor({ timeout: 15000 });
+      const ucap = await pfHost.getAttribute('data-last-spoken');
+      assert.ok(ucap.startsWith(`Deskripsi dari AI bawaan Chrome (offline): ${AI} ${QR_KAL} Tidak dapat terhubung ke server NaraVisi`), ucap);
+      assert.equal(await sw.evaluate(() => globalThis.naraVisi.fakeDeviceAi.aiBawaan.calls), 1);
+      assert.equal(await pf.locator('#pf1').getAttribute('alt'), null, 'cadangan tidak disuntik ke alt');
+
+      // Tidak tersedia → dilewati diam-diam, lanjut ke lapis lokal.
+      await sw.evaluate(() => { globalThis.naraVisi.fakeDeviceAi = { aiBawaan: { hasil: null } }; });
+      await resetLog();
+      await pilih(2);
+      await pf.waitForFunction(() => JSON.parse(document.getElementById('naravisi-host').dataset.spokenLog || '[]')
+        .some((t) => t.startsWith('Deskripsi sederhana (tanpa AI):')), null, { timeout: 15000 });
+    } finally {
+      await sw.evaluate((api) => { delete globalThis.naraVisi.fakeDeviceAi; return chrome.storage.sync.set({ apiBase: api }); }, API);
+    }
+    assert.equal(await sisaKuota(), sisa, 'kuota tidak boleh berkurang');
+    assert.equal(await jumlahRiwayat(), riwayat);
+  });
+
   await step('Lapis lokal: QR berbahaya bukan tautan; "Buka" hanya setelah konfirmasi yang dibacakan, "Salin" lewat token', async () => {
     await segar();
     await setFake({ ...lengkapLokal(), qr: QR_JAHAT });
