@@ -1,0 +1,11 @@
+{
+  "name": "naravisi",
+  "private": true,
+  "description": "Perintah tingkat repo: memasang dependensi e2e, menyalin pustaka extension/vendor, membuat paket extension.",
+  "scripts": {
+    "postinstall": "npm --prefix e2e install",
+    "vendor": "node scripts/salin-vendor.mjs",
+    "build:extension": "npm run vendor && python -I scripts/paket_extension.py",
+    "test:e2e": "npm --prefix e2e test"
+  }
+}

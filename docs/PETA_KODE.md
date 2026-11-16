@@ -56,7 +56,8 @@ naravisi/
 ├── docs/                 dokumentasi: ALUR, API, PENGUJIAN, KEPUTUSAN, SRS/SDD, peta kode ini
 ├── deploy/               online: CLOUDFLARE_TUNNEL.md (laptop), ORACLE_FREE.md + docker-compose.prod.yml (server), nginx/, docker/, oracle/
 ├── scripts/              run-all-tests.ps1, start-demo.ps1, start-online.ps1, cek-penanda.js, paket_extension.py, pindai_rahasia.py,
-│                         salin-mediapipe.mjs (salin MediaPipe + unduh & periksa model, PF-05)
+│                         salin-vendor.mjs (`npm run vendor`: isi extension/vendor dari e2e/node_modules, ADR-28) →
+│                         salin-mediapipe.mjs (MediaPipe + periksa model, PF-05) + salin-lapis-lokal.mjs (jsQR, Tesseract, Transformers.js)
 ├── examples/, notebooks/, plotting/   contoh pemakaian, eksplorasi & grafik hasil evaluasi
 └── dist/                 ZIP extension hasil paket (tidak masuk git)
 ```

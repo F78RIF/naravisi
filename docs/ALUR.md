@@ -1584,7 +1584,7 @@ POST /descriptions gagal
 ```
 
 * **Tanpa kode jarak jauh (kebijakan Chrome Web Store).** `transformers.min.js` dan wasm ONNX Runtime dibundel di
-  `extension/vendor/transformers/` (disalin `scripts/salin-lapis-lokal.mjs`). Yang diunduh hanya **data bobot**, dengan
+  `extension/vendor/transformers/` (disalin `npm run vendor`, tidak masuk git — ADR-28). Yang diunduh hanya **data bobot**, dengan
   **revisi yang dipatok** (`shared/paket-model.js`).
 * **Tidak pernah mengunduh diam-diam.** `offscreen/model-offline.js` membungkus `fetch`: permintaan ke `huggingface.co`
   ditolak (`MODEL_BELUM_DIUNDUH`) kecuali saat unduhan yang sudah disetujui. Berkas yang sudah ada di Cache API tetap

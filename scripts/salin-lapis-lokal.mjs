@@ -5,7 +5,7 @@
 // Kebutuhan: PF-06, PF-07, PF-10, PF-12
 // Terkait  : e2e/package.json (jsqr, tesseract.js, tesseract.js-core), offscreen/kode-qr.js, offscreen/baca-teks.js,
 //            THIRD_PARTY_NOTICES.md
-// Pemakaian: cd e2e && npm install && cd .. && node scripts/salin-lapis-lokal.mjs
+// Pemakaian: npm install && npm run vendor   (menjalankan skrip ini; langsung: node scripts/salin-lapis-lokal.mjs)
 //
 // Bila unduhan data bahasa gagal, unduh manual dari URL_DATA di bawah (eng.traineddata dan ind.traineddata), simpan di
 // folder mana saja, lalu jalankan:  node scripts/salin-lapis-lokal.mjs --dari <folder>

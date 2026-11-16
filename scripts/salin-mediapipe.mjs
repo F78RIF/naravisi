@@ -4,7 +4,7 @@
 //            Extension MV3 tidak boleh memuat skrip/model dari internet, jadi semuanya disimpan lokal.
 // Kebutuhan: PF-05
 // Terkait  : e2e/package.json (@mediapipe/tasks-vision), extension/offscreen/deteksi-objek.js, THIRD_PARTY_NOTICES.md
-// Pemakaian: cd e2e && npm install && cd .. && node scripts/salin-mediapipe.mjs
+// Pemakaian: npm install && npm run vendor   (menjalankan skrip ini; langsung: node scripts/salin-mediapipe.mjs)
 //
 // Bila unduhan model gagal, unduh manual dari MODEL_URL di bawah dan simpan sebagai
 // extension/vendor/models/efficientdet_lite0_int8.tflite, lalu jalankan skrip ini lagi untuk memeriksanya.

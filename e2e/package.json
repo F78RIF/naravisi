@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "vendor": "node ../scripts/salin-vendor.mjs",
+    "pretest": "npm run vendor",
     "test": "node run.mjs",
     "test:unit": "node --test unit/",
     "demo": "node demo.mjs",

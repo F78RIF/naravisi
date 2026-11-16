@@ -6,7 +6,8 @@ Hasil: dist/naravisi-extension-<versi manifest>.zip
 - hanya berkas yang dipakai extension; berkas sumber ikon (*.svg di icons/ selain yang dirujuk) tetap ikut karena kecil.
 Setelah dibuat, isi ZIP diperiksa: setiap berkas yang dirujuk manifest harus ada.
 
-Pemakaian (dari folder repo):  python -I scripts/paket_extension.py
+Pemakaian (dari folder repo):  npm run build:extension   (= npm run vendor + skrip ini)
+                               python -I scripts/paket_extension.py   (bila extension/vendor sudah diisi)
 """
 import hashlib
 import json
@@ -19,6 +20,16 @@ EXT = ROOT / "extension"
 DIST = ROOT / "dist"
 SKIP_NAMES = {".DS_Store", "Thumbs.db"}
 SKIP_SUFFIXES = {".map", ".tmp"}
+# Pustaka yang tidak masuk git; disalin dari e2e/node_modules dengan `npm run vendor` (scripts/salin-vendor.mjs).
+VENDOR_WAJIB = [
+    "vendor/mediapipe/vision_bundle.mjs",
+    "vendor/mediapipe/wasm/vision_wasm_internal.wasm",
+    "vendor/jsqr/jsQR.js",
+    "vendor/tesseract/tesseract.esm.min.js",
+    "vendor/tesseract/tesseract-core-simd-lstm.wasm",
+    "vendor/transformers/transformers.min.js",
+    "vendor/transformers/ort-wasm-simd-threaded.asyncify.wasm",
+]
 
 
 def referenced_files(manifest):
@@ -32,6 +43,10 @@ def referenced_files(manifest):
 
 def main():
     manifest = json.loads((EXT / "manifest.json").read_text(encoding="utf-8"))
+    kurang = [v for v in VENDOR_WAJIB if not (EXT / v).is_file()]
+    if kurang:
+        print(f"GAGAL: pustaka vendor belum disalin ({', '.join(kurang)}). Jalankan: npm install && npm run vendor")
+        return 1
     version = manifest["version"]
     DIST.mkdir(exist_ok=True)
     out = DIST / f"naravisi-extension-{version}.zip"

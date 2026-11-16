@@ -18,13 +18,16 @@ lisensinya sendiri. Lisensi model dan pustaka diambil dari kartu model / metadat
 | Transformers.js 4.3.2 (`transformers.min.js`, PF-10) | `extension/vendor/transformers/` | Hugging Face, Inc. | Apache License 2.0 — teks lengkap di `extension/vendor/transformers/LICENSE`; sumber: https://github.com/huggingface/transformers.js |
 | ONNX Runtime Web 1.31.0-dev (`ort-wasm-simd-threaded.asyncify.mjs/.wasm`, PF-10) | `extension/vendor/transformers/` | Microsoft Corporation | MIT — teks lengkap di `extension/vendor/transformers/LICENSE-onnxruntime.txt`; sumber: https://github.com/microsoft/onnxruntime |
 
-MediaPipe dan modelnya disertakan tanpa diubah (PF-05). jsQR (PF-07), Tesseract.js, intinya, dan data bahasanya (PF-06) juga
-disertakan tanpa diubah (data bahasa hanya dikompres gzip). jsQR dipakai hanya bila
+MediaPipe dan modelnya disertakan tanpa diubah (PF-05). jsQR (PF-07), Tesseract.js, intinya, dan data bahasanya (PF-06),
+serta Transformers.js dan ONNX Runtime Web (PF-10) juga disertakan tanpa diubah (data bahasa hanya dikompres gzip).
+Pustaka hasil build (mediapipe, jsqr, tesseract, transformers) tidak disimpan di git: disalin dari paket npm resmi di
+`e2e/node_modules` dengan `npm run vendor`, lalu ikut di paket ZIP extension. Model EfficientDet dan data bahasa disimpan
+di git dan diperiksa SHA-256-nya. jsQR dipakai hanya bila
 `BarcodeDetector` bawaan Chrome tidak tersedia. Kamus nama warna (`extension/shared/warna-id.json`, PF-08) dan
 kuantisasi warnanya adalah karya NaraVisi (MIT). Terjemahan label COCO ke bahasa Indonesia
 (`extension/shared/label-id.json`) adalah karya NaraVisi (MIT). Teks lengkap Apache License 2.0:
-https://www.apache.org/licenses/LICENSE-2.0 . Salin ulang / periksa dengan `node scripts/salin-mediapipe.mjs` dan
-`node scripts/salin-lapis-lokal.mjs`.
+https://www.apache.org/licenses/LICENSE-2.0 . Salin ulang / periksa dengan `npm run vendor`
+(`scripts/salin-vendor.mjs` → `salin-mediapipe.mjs` + `salin-lapis-lokal.mjs`).
 
 ## Diunduh saat dijalankan (tidak ada di repo)
 

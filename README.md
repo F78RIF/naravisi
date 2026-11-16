@@ -253,9 +253,22 @@ Log menampilkan alamat API, dashboard Admin, dan mode pembayaran.
 
 ### 3. Extension
 
+0. **Isi pustaka `extension/vendor/` dulu** (sekali setelah clone, dan setiap kali versi pustaka di `e2e/package.json`
+   berubah). Dari folder repo:
+
+   ```bash
+   npm install && npm run vendor
+   ```
+
+   `npm install` memasang dependensi `e2e/` (MediaPipe, jsQR, Tesseract.js, Transformers.js, Playwright).
+   `npm run vendor` menyalin pustaka hasil build pihak ketiga itu ke `extension/vendor/` (`scripts/salin-vendor.mjs`).
+   Folder `vendor/mediapipe`, `vendor/jsqr`, `vendor/tesseract`, dan `vendor/transformers` **tidak masuk git**
+   (`.gitignore`); yang dilacak hanya data di luar npm: `vendor/models/` (EfficientDet-Lite0) dan `vendor/tessdata/`.
+   Tanpa langkah ini lapis lokal dan Florence-2 tidak bisa dimuat.
 1. Buka `chrome://extensions`, aktifkan **Developer mode**.
 2. **Load unpacked** → pilih folder `extension/`. Salin **ID** extension ke `backend/.env`: `ALLOWED_ORIGINS=chrome-extension://<ID>`, lalu restart backend.
-   Paket ZIP rilis (untuk dibagikan / Chrome Web Store) dibuat dengan `python -I scripts/paket_extension.py` →
+   Paket ZIP rilis (untuk dibagikan / Chrome Web Store) dibuat dengan `npm run build:extension` (= `npm run vendor` +
+   `python -I scripts/paket_extension.py`; skrip paket menolak bila pustaka vendor belum disalin) →
    `dist/naravisi-extension-1.1.0.zip` (manifest di akar ZIP; `dist/` tidak masuk git). Untuk memasangnya, ekstrak ZIP
    lalu **Load unpacked** folder hasil ekstrak.
 3. Tab **Selamat datang** terbuka otomatis dan sambutan dibacakan. Tekan **Tab** untuk masuk atau daftar (bisa juga lewat ikon NaraVisi di toolbar).
@@ -303,7 +316,7 @@ maupun QR.
 Pengaturan (Pengaturan → Otomatis, semua **bawaan aktif**): **Deskripsi kilat tanpa AI** (sakelar utama lapis lokal),
 **Sebutkan warna**, **Baca tulisan di gambar (offline)**, **Baca kode QR**. Uji manual:
 `examples/halaman-uji-lapis-lokal.html`. Alur lengkap: `docs/ALUR.md` Tahap 13–14. Pustaka disalin ulang dengan
-`node scripts/salin-lapis-lokal.mjs`.
+`npm run vendor` (lihat bagian 3 langkah 0).
 
 **Izin extension (manifest):**
 
@@ -375,13 +388,14 @@ Detail keputusan: `docs/KEPUTUSAN.md`.
 powershell -ExecutionPolicy Bypass -File scripts/run-all-tests.ps1   # ketiga bagian sekaligus + ringkasan
 cd backend && npm test                         # 121 tes unit + integrasi API (SQLite di memori)
 cd ai-service && python -m pytest              # (butuh requirements-dev.txt) 85 tes (Gemini dengan klien palsu, metrik & dataset evaluasi; tanpa internet)
-cd e2e && npm install && npm test              # 113 skenario + audit axe-core, termasuk alur manual Alt+Shift+K
+npm install && npm run vendor                  # sekali: dependensi e2e + salin pustaka ke extension/vendor
+cd e2e && npm test                             # 131 skenario + audit axe-core (pretest menjalankan npm run vendor)
 cd e2e && npm run demo                         # rekam video demo → e2e/demo/naravisi-demo.mp4
 cd backend && node --no-warnings scripts/bench.js   # ukur p50/p95 waktu respons (RNF-05)
 cd backend && npm run cek:penanda                   # setiap RF punya penanda [RF-xx] di kode & tes (docs/PETA_KODE.md)
 cd backend && npm audit && cd ../e2e && npm audit   # kerentanan dependensi Node
 python -I scripts/pindai_rahasia.py            # pindai kunci di berkas & riwayat git (keluar 1 bila ada temuan)
-python -I scripts/paket_extension.py           # buat dist/naravisi-extension-<versi>.zip
+npm run build:extension                        # npm run vendor + buat dist/naravisi-extension-<versi>.zip
 python -I plotting/buat_grafik.py              # grafik evaluasi → docs/gambar/evaluasi/ (venv ai-service)
 ```
 
