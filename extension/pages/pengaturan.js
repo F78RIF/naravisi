@@ -5,7 +5,7 @@
 import { apiFetch, apiHost, AUTO_MAX_PER_PAGE, AUTO_RESERVE, DEFAULT_AUTO_EXCLUDE, DEFAULTS, getSettings, setTts } from '../shared/config.js';
 import { currentShortcut, openShortcutsPage, SHORTCUTS_URL, speakGuide } from '../shared/guide.js';
 import { $, el, requireSession, say, sayError, shell, speak } from './common.js';
-import { ukuranPaketMb } from '../offscreen/model-offline.js';
+import { ukuranPaketMb } from '../shared/paket-model.js';
 
 shell('pengaturan', 'Pengaturan aksesibilitas');
 

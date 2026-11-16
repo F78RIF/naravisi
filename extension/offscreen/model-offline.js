@@ -4,27 +4,14 @@
 //            (bobot model) dari huggingface.co, hanya bila `izinUnduh` = true (pengguna sudah menyetujui), dengan revisi
 //            yang dipatok. Bobot disimpan di Cache API extension ("transformers-cache"), bisa dihapus.
 // Kebutuhan: PF-10, PF-12
-// Terkait  : offscreen/florence.js, offscreen/whisper.js, offscreen.js, background.js, pages/pengaturan.js
+// Terkait  : shared/paket-model.js, offscreen/florence.js, offscreen/whisper.js, offscreen.js, background.js, pages/pengaturan.js
+
+import { PAKET, ukuranPaketMb } from '../shared/paket-model.js';
+
+export { PAKET, ukuranPaketMb };
 
 const VENDOR = new URL('../vendor/transformers/', import.meta.url).href;
 export const NAMA_CACHE = 'transformers-cache';
-
-// [PF-10] Florence-2 offline — paket model: id Hugging Face, revisi dipatok, dtype, perkiraan ukuran unduhan
-export const PAKET = {
-  florence: {
-    judul: 'Deskripsi offline lengkap (Florence-2)',
-    model: [
-      { id: 'onnx-community/Florence-2-base-ft', revisi: 'e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f', dtype: 'q8', mb: 280 },
-      { id: 'Xenova/opus-mt-en-id', revisi: 'b3b41f654c2fb3286d007dee1da7b0f47fd27d82', dtype: 'q8', mb: 104 },
-    ],
-  },
-  // [PF-12] Perintah suara — Whisper tiny (pengenalan ucapan offline, bahasa Indonesia)
-  whisper: {
-    judul: 'Perintah suara offline (Whisper tiny)',
-    model: [{ id: 'onnx-community/whisper-tiny', revisi: 'ff4177021cc41f7db950912b73ea4fdf7d01d8e7', dtype: 'q8', mb: 41 }],
-  },
-};
-export const ukuranPaketMb = (nama) => PAKET[nama].model.reduce((n, m) => n + m.mb, 0);
 
 let pustaka = null;
 let izinAktif = false;

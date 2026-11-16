@@ -8,7 +8,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { INSTRUKSI, promptPengguna, susunTeks, uraiJawaban } from '../../extension/shared/deskripsi-ai.js';
+import {
+  bersihkanKeteranganEn, INSTRUKSI, promptPengguna, susunFlorence, susunTeks, uraiJawaban,
+} from '../../extension/shared/deskripsi-ai.js';
+import { kataBermakna } from '../../extension/shared/ocr.js';
+import { PAKET, ukuranPaketMb } from '../../extension/shared/paket-model.js';
 
 test('PF-11: instruksi memuat aturan Gemini yang sama (bahasa Indonesia, jenis dulu, tidak menebak identitas)', () => {
   const gemini = readFileSync(new URL('../../ai-service/app/prompts.py', import.meta.url), 'utf8');
@@ -43,4 +47,32 @@ test('PF-11: kalimat disusun seperti compose_text Gemini', () => {
   assert.equal(susunTeks({ jenis: 'lainnya', ringkasan: 'bentuk buram', keyakinan: 'rendah' }),
     'Gambar: Bentuk buram. Deskripsi ini mungkin kurang tepat karena gambar kurang jelas.');
   assert.equal(susunTeks(null), null);
+});
+
+test('PF-10: pembuka bahasa Inggris Florence-2 dibuang sebelum diterjemahkan', () => {
+  assert.equal(bersihkanKeteranganEn('The image shows a man riding a bicycle on a street.'), 'a man riding a bicycle on a street.');
+  assert.equal(bersihkanKeteranganEn('In this image, two cats sleep on a sofa.'), 'two cats sleep on a sofa.');
+  assert.equal(bersihkanKeteranganEn('<pad>A red car   parked</s>'), 'A red car parked');
+  assert.equal(bersihkanKeteranganEn('A dog in the park.'), 'A dog in the park.');
+  assert.equal(bersihkanKeteranganEn(null), '');
+});
+
+test('PF-10: kalimat Florence-2 — keterangan + tulisan hanya bila ≥ 3 kata bermakna', () => {
+  assert.equal(susunFlorence('seorang pria mengendarai sepeda', 'DISKON AKHIR TAHUN 50%.', kataBermakna),
+    'Seorang pria mengendarai sepeda. Tulisan di gambar: DISKON AKHIR TAHUN 50%.');
+  assert.equal(susunFlorence('Kucing tidur di sofa.', '| ~ a', kataBermakna), 'Kucing tidur di sofa.');
+  assert.equal(susunFlorence('kucing', 'satu dua', kataBermakna), 'Kucing.');
+  assert.equal(susunFlorence('  ', 'Ada tulisan panjang di sini', kataBermakna), null);
+  const panjang = susunFlorence('papan', 'kata '.repeat(100), kataBermakna);
+  assert.ok(panjang.length <= 'Papan. Tulisan di gambar: '.length + 301, panjang.length);
+});
+
+test('PF-10: paket model memakai revisi yang dipatok (bukan cabang main) dan ukuran unduhan disebut', () => {
+  for (const paket of Object.values(PAKET)) {
+    for (const m of paket.model) {
+      assert.match(m.revisi, /^[0-9a-f]{40}$/, m.id);
+      assert.ok(m.mb > 0, m.id);
+    }
+  }
+  assert.equal(ukuranPaketMb('florence'), 384);
 });

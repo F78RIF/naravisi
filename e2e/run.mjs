@@ -2058,6 +2058,80 @@ try {
     assert.equal(await jumlahRiwayat(), riwayat);
   });
 
+  // [PF-10] Florence-2 offline — pustaka lokal tanpa unduhan diam-diam; unduh hanya setelah konfirmasi; cadangan kedua
+  await step('PF-10: Florence-2 — tanpa izin tidak mengunduh; konfirmasi dibacakan sebelum unduh; cadangan setelah AI bawaan Chrome', async () => {
+    // Jalur asli: Transformers.js dimuat dari extension, permintaan bobot ke huggingface.co ditolak sebelum izin.
+    const awal = await sw.evaluate(() => globalThis.naraVisi.modelOffline({ aksi: 'status', paket: 'florence' }));
+    assert.equal(awal.data.status, 'mati');
+    assert.deepEqual(awal.data.cache, { berkas: 0, mb: 0 });
+    const tanpaIzin = await sw.evaluate(() => chrome.runtime.sendMessage({
+      target: 'offscreen', type: 'NV_FLORENCE_DESKRIPSI',
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    }));
+    assert.equal(tanpaIzin.ok, false);
+    assert.match(tanpaIzin.message, /MODEL_BELUM_DIUNDUH/, tanpaIzin.message);
+    assert.equal((await sw.evaluate(() => globalThis.naraVisi.modelOffline({ aksi: 'status', paket: 'florence' }))).data.cache.berkas, 0);
+
+    // Pengaturan: Batal → tidak diunduh; "Ya, unduh" → unduhan (tiruan) → siap; "Hapus model offline" → kembali mati.
+    await sw.evaluate(() => { globalThis.naraVisi.fakeModelUnduh = async () => ({ ok: true, data: { perangkat: 'wasm' } }); });
+    const set = await context.newPage();
+    try {
+      await set.goto(extPage('pages/pengaturan.html'));
+      const status = set.locator('#status-florence');
+      await status.filter({ hasText: 'Model offline: belum diunduh.' }).waitFor();
+      const kotak = set.getByLabel('Deskripsi offline lengkap (Florence-2)');
+      await kotak.click();
+      const dialog = set.getByRole('dialog');
+      await dialog.getByRole('heading', { name: 'Unduh model deskripsi offline?' }).waitFor();
+      assert.match(await dialog.innerText(), /sekitar 384 megabita/);
+      await dialog.getByRole('button', { name: 'Batal' }).click();
+      await set.locator('#msg', { hasText: 'Model offline tidak diunduh.' }).waitFor();
+      assert.equal(await kotak.isChecked(), false);
+      assert.equal((await sw.evaluate(() => globalThis.naraVisi.statusModel('florence'))).izin, false);
+
+      await kotak.click();
+      await dialog.getByRole('button', { name: 'Ya, unduh' }).click();
+      await status.filter({ hasText: 'Model offline: siap (WASM).' }).waitFor();
+      assert.equal(await kotak.isChecked(), true);
+      assert.equal((await sw.evaluate(() => globalThis.naraVisi.statusModel('florence'))).status, 'siap');
+
+      await set.getByRole('button', { name: 'Hapus model offline' }).click();
+      await set.locator('#msg', { hasText: 'Model offline dihapus dari komputer ini.' }).waitFor();
+      await status.filter({ hasText: 'Model offline: belum diunduh.' }).waitFor();
+      assert.equal(await kotak.isChecked(), false);
+    } finally {
+      await set.close();
+      await sw.evaluate(() => { delete globalThis.naraVisi.fakeModelUnduh; });
+    }
+
+    // Urutan cadangan: AI server gagal → AI bawaan Chrome (tidak tersedia) → Florence-2 → lapis lokal.
+    const FL = 'Seorang pria mengendarai sepeda di jalan. Tulisan di gambar: DISKON AKHIR TAHUN.';
+    await segar();
+    await setFake(lengkapLokal());
+    await sw.evaluate((t) => { globalThis.naraVisi.fakeDeviceAi = { aiBawaan: { hasil: null }, florence: { hasil: { teks: t }, delayMs: 300 } }; }, FL);
+    const sisa = await sisaKuota();
+    const riwayat = await jumlahRiwayat();
+    await sw.evaluate(() => chrome.storage.sync.set({ apiBase: 'http://127.0.0.1:9/api/v1' }));
+    try {
+      await pilih(1);
+      await pfText.filter({ hasText: FL }).waitFor({ timeout: 15000 });
+      const ucap = await pfHost.getAttribute('data-last-spoken');
+      assert.ok(ucap.startsWith(`Deskripsi offline (Florence-2): ${FL} ${QR_KAL} Tidak dapat terhubung ke server NaraVisi`), ucap);
+      assert.equal(await sw.evaluate(() => globalThis.naraVisi.fakeDeviceAi.florence.calls), 1);
+      assert.equal(await pf.locator('#pf1').getAttribute('alt'), null, 'cadangan tidak disuntik ke alt');
+
+      // AI bawaan Chrome berhasil → Florence-2 tidak dipanggil.
+      await sw.evaluate(() => { globalThis.naraVisi.fakeDeviceAi.aiBawaan = { hasil: { teks: 'Foto: Jalan raya.' } }; });
+      await pilih(2);
+      await pfText.filter({ hasText: 'Foto: Jalan raya.' }).waitFor({ timeout: 15000 });
+      assert.equal(await sw.evaluate(() => globalThis.naraVisi.fakeDeviceAi.florence.calls), 1);
+    } finally {
+      await sw.evaluate((api) => { delete globalThis.naraVisi.fakeDeviceAi; return chrome.storage.sync.set({ apiBase: api }); }, API);
+    }
+    assert.equal(await sisaKuota(), sisa, 'kuota tidak boleh berkurang');
+    assert.equal(await jumlahRiwayat(), riwayat);
+  });
+
   await step('Lapis lokal: QR berbahaya bukan tautan; "Buka" hanya setelah konfirmasi yang dibacakan, "Salin" lewat token', async () => {
     await segar();
     await setFake({ ...lengkapLokal(), qr: QR_JAHAT });

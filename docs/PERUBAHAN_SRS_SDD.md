@@ -32,6 +32,7 @@ pengujian.
 | 17 | **PF-09 Orientasi** (mendatar/tegak/persegi di lapis lokal; pengaturan "Sebutkan orientasi" bawaan nonaktif) | SRS 3.1 fitur tambahan, RF-12 | – | 15 Nov |
 | 18 | **PF-11 Chrome Built-in AI** sebagai cadangan offline pertama setelah AI server (Prompt API + Translator bawaan Chrome, instruksi sama dengan Gemini; status di Pengaturan) | SRS 2.4, 3.1, RNF-12; SDD 2.4, sequence UC-GBR-04 | – | 15 Nov |
 | 19 | **PF-13 Cadangan AI cloud gratis** di ai-service: rantai `CAPTION_CHAIN` (gemini → OpenRouter → Hugging Face → BLIP), provider tanpa kunci dilewati, keluaran disamakan ke format Gemini, `/health` per provider | SRS 2.4, RNF-04/RNF-12; SDD 2.4, sequence UC-GBR-04, antarmuka `/health` | – | 15 Nov |
+| 20 | **PF-10 Florence-2 offline** (Transformers.js dibundel, bobot ±384 MB diunduh hanya setelah konfirmasi yang dibacakan, revisi dipatok, bisa dihapus) sebagai cadangan offline kedua setelah AI bawaan Chrome | SRS 2.4, 3.1, RNF-12/RNF-13; SDD 2.4, sequence UC-GBR-04 | – | 16 Nov |
 
 ## 2. Rincian per bagian SRS
 

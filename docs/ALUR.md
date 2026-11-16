@@ -1560,6 +1560,40 @@ POST /descriptions gagal (server mati, AI gagal, kuota habis, offline)
 * Uji otomatis memakai tiruan `globalThis.naraVisi.fakeDeviceAi.aiBawaan`. Chromium uji (Playwright) tidak punya
   Prompt API, jadi statusnya benar-benar "tidak tersedia" lewat jalur deteksi asli.
 
+### Florence-2 offline (PF-10) — Langkah 3
+
+Cadangan offline **kedua**, setelah AI bawaan Chrome dan sebelum lapis lokal: deskripsi rinci + tulisan di gambar dengan
+**Florence-2 base** (Transformers.js) di dokumen offscreen, diterjemahkan ke bahasa Indonesia oleh **opus-mt-en-id**.
+
+```
+Pengaturan → kartu "AI di perangkat" → kotak "Deskripsi offline lengkap (Florence-2)"
+  └─ dialog dibacakan: "… sekitar 384 megabita, akan diunduh dari huggingface.co … Lanjutkan?"   (fokus awal: Batal)
+       Batal → tidak ada unduhan
+       Ya, unduh → NV_MODEL_OFFLINE {aksi:'unduh'} → background.modelOffline()
+                     → NV_MODEL_UNDUH ─▶ offscreen/florence.js unduhFlorence()  (izinUnduh = true)
+                     ← NV_MODEL_PROGRES (per 5%) → chrome.storage.local.modelOffline.florence → "mengunduh… n%"
+                     → status 'siap' (+ WebGPU / WASM) → "Model deskripsi offline siap dipakai."
+  "Hapus model offline" → lepas dari memori + hapus berkas dari Cache API "transformers-cache"
+
+POST /descriptions gagal
+  └─ cadanganPerangkat():  AI bawaan Chrome → (gagal/tidak ada) → deskripsiFlorence()   background.js
+       status ≠ 'siap' → lewati diam-diam
+       NV_FLORENCE_DESKRIPSI ─▶ <MORE_DETAILED_CAPTION> + <OCR> → bersihkanKeteranganEn → terjemah → susunFlorence
+       batas 60 detik
+  ◀─ "Deskripsi offline (Florence-2): <keterangan>. Tulisan di gambar: …" (+ info kode QR lokal)
+```
+
+* **Tanpa kode jarak jauh (kebijakan Chrome Web Store).** `transformers.min.js` dan wasm ONNX Runtime dibundel di
+  `extension/vendor/transformers/` (disalin `scripts/salin-lapis-lokal.mjs`). Yang diunduh hanya **data bobot**, dengan
+  **revisi yang dipatok** (`shared/paket-model.js`).
+* **Tidak pernah mengunduh diam-diam.** `offscreen/model-offline.js` membungkus `fetch`: permintaan ke `huggingface.co`
+  ditolak (`MODEL_BELUM_DIUNDUH`) kecuali saat unduhan yang sudah disetujui. Berkas yang sudah ada di Cache API tetap
+  terbaca tanpa jaringan.
+* **Tulisan** baru disebut bila ada ≥ 3 kata bermakna (sama dengan PF-06), maksimal 300 karakter.
+* Seperti cadangan lain: **tidak memakai kuota, tidak masuk riwayat, tidak disuntik ke `alt`**.
+* Uji otomatis: jalur asli (pustaka dimuat, unduhan ditolak tanpa izin) + tiruan `naraVisi.fakeModelUnduh` dan
+  `naraVisi.fakeDeviceAi.florence` (bobot ±384 MB tidak diunduh saat tes).
+
 ### Cadangan AI cloud gratis (PF-13) — Langkah 4 (di ai-service, bukan extension)
 
 Urutan provider di server diatur `CAPTION_CHAIN` di `ai-service/.env`, misalnya `gemini,openrouter,hf,blip`:

@@ -15,6 +15,8 @@ lisensinya sendiri. Lisensi model dan pustaka diambil dari kartu model / metadat
 | Tesseract.js 7.0.0 (`tesseract.esm.min.js`, `worker.min.js`, OCR PF-06) | `extension/vendor/tesseract/` | Jerome Wu dan kontributor Tesseract.js | Apache License 2.0 — teks lengkap di `extension/vendor/tesseract/LICENSE.md`; sumber: https://github.com/naptha/tesseract.js |
 | tesseract.js-core 7.0.0 (`tesseract-core-simd-lstm.js/.wasm`: mesin Tesseract OCR + Leptonica dalam WebAssembly) | `extension/vendor/tesseract/` | kontributor Tesseract.js; Tesseract OCR (Google LLC dkk.); Leptonica (Dan Bloomberg) | Apache License 2.0 (`extension/vendor/tesseract/LICENSE-tesseract.js-core`); Tesseract OCR: Apache-2.0 — https://github.com/tesseract-ocr/tesseract ; Leptonica: lisensi gaya BSD 2 klausul — http://leptonica.org/about-the-license.html |
 | Data bahasa `ind` & `eng` (tessdata_fast 4.1.0, dikompres gzip tanpa diubah isinya) | `extension/vendor/tessdata/` | Google LLC / proyek Tesseract OCR | Apache License 2.0 — https://github.com/tesseract-ocr/tessdata_fast |
+| Transformers.js 4.3.2 (`transformers.min.js`, PF-10) | `extension/vendor/transformers/` | Hugging Face, Inc. | Apache License 2.0 — teks lengkap di `extension/vendor/transformers/LICENSE`; sumber: https://github.com/huggingface/transformers.js |
+| ONNX Runtime Web 1.31.0-dev (`ort-wasm-simd-threaded.asyncify.mjs/.wasm`, PF-10) | `extension/vendor/transformers/` | Microsoft Corporation | MIT — teks lengkap di `extension/vendor/transformers/LICENSE-onnxruntime.txt`; sumber: https://github.com/microsoft/onnxruntime |
 
 MediaPipe dan modelnya disertakan tanpa diubah (PF-05). jsQR (PF-07), Tesseract.js, intinya, dan data bahasanya (PF-06) juga
 disertakan tanpa diubah (data bahasa hanya dikompres gzip). jsQR dipakai hanya bila
@@ -31,7 +33,12 @@ https://www.apache.org/licenses/LICENSE-2.0 . Salin ulang / periksa dengan `node
 | `Salesforce/blip-image-captioning-base` | caption cadangan (lokal) | BSD-3-Clause | https://huggingface.co/Salesforce/blip-image-captioning-base |
 | `Helsinki-NLP/opus-mt-en-id` (MarianMT) | terjemahan caption en → id | lisensi tercantum di kartu model (OPUS-MT dirilis dengan lisensi terbuka CC-BY 4.0 / Apache-2.0) | https://huggingface.co/Helsinki-NLP/opus-mt-en-id |
 
-Model diunduh dari Hugging Face ke cache pengguna saat layanan AI pertama kali start. Repo NaraVisi tidak
+| `onnx-community/Florence-2-base-ft` (ONNX q8, PF-10) | deskripsi offline di extension | MIT (Microsoft) | https://huggingface.co/onnx-community/Florence-2-base-ft |
+| `Xenova/opus-mt-en-id` (ONNX q8, PF-10) | terjemahan keterangan Florence-2 en → id di extension | sama dengan `Helsinki-NLP/opus-mt-en-id` | https://huggingface.co/Xenova/opus-mt-en-id |
+
+Model BLIP & MarianMT diunduh dari Hugging Face ke cache pengguna saat layanan AI pertama kali start. Dua model PF-10
+hanya diunduh oleh extension setelah pengguna menyetujuinya di Pengaturan (revisi dipatok, disimpan di Cache API
+extension, bisa dihapus). Repo NaraVisi tidak
 mendistribusikan bobot modelnya (`*.safetensors` ada di `.gitignore`).
 
 ## Layanan eksternal (bukan perangkat lunak yang didistribusikan)
